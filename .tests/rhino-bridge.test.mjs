@@ -16,7 +16,7 @@ const worker = require(path.join(plugin, 'node', 'worker.cjs'));
 
 test('manifest preserves the minimal Rhino bridge capability boundary', () => {
   assert.equal(manifest.schemaVersion, 3);
-  assert.equal(manifest.version, '0.2.5');
+  assert.equal(manifest.version, '0.2.6');
   assert.equal(manifest.author, 'Cindy');
   assert.deepEqual(manifest.setup, { requires: [] });
   assert.equal(manifest.node.lifecycle, 'on-demand');
@@ -62,6 +62,15 @@ test('plain text JSON is preserved unless it is a complete MCP CallToolResult', 
   assert.equal(result.ok, true);
   assert.equal(result.mcp.isError, false);
   assert.deepEqual(result.mcp.content, [{ type: 'text', text: plain }]);
+});
+
+test('nested MCP content requires complete resource and supports audio blocks', () => {
+  const invalid = JSON.stringify({ content: [{ type: 'resource', resource: {} }] });
+  const invalidResult = official.inspectResult({ content: [{ type: 'text', text: invalid }] });
+  assert.deepEqual(invalidResult.mcp.content, [{ type: 'text', text: invalid }]);
+  const audio = JSON.stringify({ content: [{ type: 'audio', data: 'AQI=', mimeType: 'audio/wav' }] });
+  const audioResult = official.inspectResult({ content: [{ type: 'text', text: audio }] });
+  assert.deepEqual(audioResult.mcp.content, [{ type: 'audio', data: 'AQI=', mimeType: 'audio/wav' }]);
 });
 
 test('official write requests report unknown outcome after invalid Router output', async () => {

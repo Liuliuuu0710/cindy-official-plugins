@@ -91,7 +91,7 @@ class Router {
     timer.unref?.();
   }
   async initialize() {
-    const init = await this.request('initialize', {protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'cindy-rhino-bridge',version:'0.2.5'}});
+    const init = await this.request('initialize', {protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'cindy-rhino-bridge',version:'0.2.6'}});
     if (!['2024-11-05','2025-03-26','2025-06-18'].includes(init?.protocolVersion) || !init?.capabilities?.tools) throw error('OFFICIAL_PROTOCOL', '官方 Router 的 MCP 版本或工具能力不受当前插件支持，请核对版本。');
     this.send({jsonrpc:'2.0',method:'notifications/initialized'});
     return init;
@@ -119,7 +119,13 @@ function inspectResult(mcp) {
     if (!block || typeof block !== 'object' || typeof block.type !== 'string') return false;
     if (block.type === 'text') return typeof block.text === 'string';
     if (block.type === 'image') return typeof block.data === 'string' && typeof block.mimeType === 'string';
-    if (block.type === 'resource') return !!block.resource && typeof block.resource === 'object';
+    if (block.type === 'audio') return typeof block.data === 'string' && typeof block.mimeType === 'string';
+    if (block.type === 'resource') {
+      const resource = block.resource;
+      return !!resource && typeof resource === 'object' && typeof resource.uri === 'string' &&
+        ((typeof resource.text === 'string') !== (typeof resource.blob === 'string'));
+    }
+    if (block.type === 'resource_link') return typeof block.uri === 'string' && typeof block.name === 'string';
     return false;
   }
   function validCallToolResult(value) {

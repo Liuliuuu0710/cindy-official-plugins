@@ -1,5 +1,5 @@
 const actions = { rhino_status: 'status', rhino_objects: 'objects', rhino_create: 'create', rhino_transform: 'transform', rhino_create_layer: 'create_layer', rhino_assign_layer: 'assign_layer', rhino_operation_result: 'operation_result' };
-const NOT_EXECUTED_CODES = new Set(['BRIDGE_ACTION','BRIDGE_ARGS','BRIDGE_DOCUMENT_CHANGED','BRIDGE_EXPIRED','BRIDGE_ID_CONFLICT','BRIDGE_LAYER_EXISTS','BRIDGE_MODE','BRIDGE_PAIRING','BRIDGE_PORT','BRIDGE_SIZE','OFFICIAL_BUSY','OFFICIAL_ARGS','OFFICIAL_PATH','OFFICIAL_SLOT','OFFICIAL_TOOL_UNAVAILABLE','OFFICIAL_VERSION']);
+const NOT_EXECUTED_CODES = new Set(['BRIDGE_ACTION','BRIDGE_ARGS','BRIDGE_AUTH','BRIDGE_BUSY','BRIDGE_DOCUMENT_CHANGED','BRIDGE_EXPIRED','BRIDGE_ID_CONFLICT','BRIDGE_LAYER_EXISTS','BRIDGE_MODE','BRIDGE_PAIRING','BRIDGE_PORT','BRIDGE_SIZE','OFFICIAL_BUSY','OFFICIAL_ARGS','OFFICIAL_PATH','OFFICIAL_SLOT','OFFICIAL_TOOL_UNAVAILABLE','OFFICIAL_VERSION']);
 function executionStateFor(result) {
   return result?.execution_state || (NOT_EXECUTED_CODES.has(result?.code) ? 'not_executed' : 'unknown');
 }
