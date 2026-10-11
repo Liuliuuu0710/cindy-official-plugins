@@ -1,4 +1,8 @@
 const actions = { rhino_status: 'status', rhino_objects: 'objects', rhino_create: 'create', rhino_transform: 'transform', rhino_create_layer: 'create_layer', rhino_assign_layer: 'assign_layer', rhino_operation_result: 'operation_result' };
+const NOT_EXECUTED_CODES = new Set(['BRIDGE_ACTION','BRIDGE_ARGS','BRIDGE_EXPIRED','BRIDGE_PAIRING','BRIDGE_PORT','BRIDGE_SIZE','OFFICIAL_BUSY','OFFICIAL_ARGS','OFFICIAL_PATH','OFFICIAL_SLOT','OFFICIAL_VERSION']);
+function executionStateFor(result) {
+  return result?.execution_state || (NOT_EXECUTED_CODES.has(result?.code) ? 'not_executed' : 'unknown');
+}
 function backendOf(cfg) {
   if (cfg.backend) return cfg.backend;
   // Preserve the previous version's configured port on upgrade.
@@ -21,10 +25,10 @@ async function invoke(action, args, callId) {
   if(callId){request.callId=callId;request.cancelWithCall=true;}
   dispatched=true;
   const result=await cindy.node.request(request);
-  if(!result.ok) return {ok:false,code:'BRIDGE_HOST',operation_id:args.operation_id,message:(result.message || '连接组件调用失败。')+' 若已提交修改，请核对 Rhino 模型，勿直接重试。'};
+  if(!result.ok) return {ok:false,code:result.code||'BRIDGE_HOST',execution_state:executionStateFor(result),operation_id:args.operation_id,message:result.message || '连接组件调用失败。'};
   return result.result;
   } catch(error) {
-    error.executionState=dispatched?'unknown':'not_executed';
+    error.execution_state=dispatched?'unknown':'not_executed';
     throw error;
   }
 }
@@ -52,16 +56,20 @@ cindy.onHostMessage(async msg=>{
   try{
     const action=msg.tool==='rhino_official_tools'?'official_list':msg.tool==='rhino_official_call'?'official_call':Object.prototype.hasOwnProperty.call(actions,msg.tool)?actions[msg.tool]:null;
     if(!action)throw new Error('工具不存在，请重新读取插件工具列表。');
-    const result=await renderOfficial(await invoke(action,msg.args||{},msg.callId),msg.callId);
+    let execution_state='not_executed';
+    const invoked=await invoke(action,msg.args||{},msg.callId);
+    execution_state=invoked.execution_state || (invoked.ok===false ? executionStateFor(invoked) : 'executed');
+    const result=await renderOfficial(invoked,msg.callId);
     if(!result.ok && !result.mcp){
-      const executionState=result.executionState||(result.code==='BRIDGE_MODE'?'not_executed':'unknown');
-      await cindy.send({type:'tool-result',callId:msg.callId,ok:false,errorCode:result.code||'BRIDGE_FAILED',executionState,message:result.message+(result.operation_id?' 操作编号：'+result.operation_id:'')});
+      execution_state=result.execution_state||executionStateFor(result);
+      const message=result.message+(result.operation_id?' 操作编号：'+result.operation_id:'');
+      await cindy.send({type:'tool-result',callId:msg.callId,ok:false,errorCode:result.code||'BRIDGE_FAILED',execution_state,message,structuredContent:{success:false,message,execution_state}});
       return;
     }else{
       // MCP business failures retain their exact structured details; result.ok remains false.
       await cindy.send({type:'tool-result',callId:msg.callId,ok:true,result});
     }
-  }catch(error){await cindy.send({type:'tool-result',callId:msg.callId,ok:false,errorCode:'BRIDGE_FAILED',message:'插件调用未完成。'+error.message+' 若已提交修改，请先核对 Rhino 模型。'});}
+  }catch(error){const execution_state=error.execution_state||'not_executed';const message=(execution_state==='not_executed'?'请求未派发。':'请求可能已派发，结果未知。')+error.message+(execution_state==='unknown'?' 请先核对 Rhino 模型，勿直接重试。':'');await cindy.send({type:'tool-result',callId:msg.callId,ok:false,errorCode:'BRIDGE_FAILED',execution_state,message,structuredContent:{success:false,message,execution_state}});}
 });
 const settingsChannel=new BroadcastChannel('rhino-bridge-settings');
 let checking=false;

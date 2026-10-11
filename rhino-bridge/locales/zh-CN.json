@@ -22,7 +22,7 @@
       "description": "仅基础连接器（legacy mode）可用。将明确对象分配到已有图层，返回修改对象 ID 与撤销记录。"
     },
     "rhino_operation_result": {
-      "description": "查询修改操作的执行回执。state=unknown 不代表未执行；连接脚本重启会清空回执。"
+      "description": "仅基础连接器（legacy mode）可用。查询修改操作的执行回执；官方模式的写操作不提供此基础回执。state=unknown 不代表未执行；连接脚本重启会清空回执。"
     },
     "rhino_official_tools": {
       "description": "分页获取 McNeel 官方 Router 的实时工具名称、描述和完整参数 schema。按 next_offset 继续，或按 name 查单个工具；目录存在不代表当前 Rhino 版本支持。"

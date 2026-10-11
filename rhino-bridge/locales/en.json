@@ -22,7 +22,7 @@
       "description": "Legacy/basic connector only. Assign explicit object IDs to an existing layer and return the changed IDs and undo record."
     },
     "rhino_operation_result": {
-      "description": "Query the receipt for a modifying operation. state=unknown does not mean the operation was not executed; restarting the connector clears receipts."
+      "description": "Legacy/basic connector only. Query the receipt for a modifying operation; official-mode writes do not provide this basic receipt. state=unknown does not mean the operation was not executed; restarting the connector clears receipts."
     },
     "rhino_official_tools": {
       "description": "Page through the McNeel Router live tool names, descriptions, and complete parameter schemas. Continue with next_offset or query one exact name. A listed tool may still be unsupported by the active Rhino version."

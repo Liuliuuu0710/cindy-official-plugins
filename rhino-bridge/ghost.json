@@ -361,7 +361,7 @@
     },
     {
       "name": "rhino_operation_result",
-      "description": "查询修改操作的执行回执。state=unknown 不代表未执行；脚本重启会清空回执。",
+      "description": "仅基础连接器（legacy mode）可用。查询修改操作的执行回执；官方模式的写操作不提供此基础回执。state=unknown 不代表未执行；脚本重启会清空回执。",
       "parameters": {
         "type": "object",
         "properties": {

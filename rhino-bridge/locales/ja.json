@@ -22,7 +22,7 @@
       "description": "基本コネクター（legacy mode）専用です。明示したオブジェクトを既存レイヤーへ割り当て、変更した ID と Undo 記録を返します。"
     },
     "rhino_operation_result": {
-      "description": "変更操作の実行記録を照会します。state=unknown は未実行を意味しません。コネクターを再起動すると記録は消去されます。"
+      "description": "基本コネクター（legacy mode）専用です。変更操作の実行記録を照会します。公式モードの書き込みにはこの基本記録はありません。state=unknown は未実行を意味しません。コネクターを再起動すると記録は消去されます。"
     },
     "rhino_official_tools": {
       "description": "McNeel Router の現在のツール名、説明、完全なパラメータ schema をページ単位で取得します。一覧にあっても使用中の Rhino バージョンで実行できるとは限りません。"
