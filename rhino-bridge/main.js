@@ -53,23 +53,24 @@ async function renderOfficial(result,callId){
 }
 cindy.onHostMessage(async msg=>{
   if(msg.type!=='tool-call')return;
+  let execution_state='not_executed';
   try{
     const action=msg.tool==='rhino_official_tools'?'official_list':msg.tool==='rhino_official_call'?'official_call':Object.prototype.hasOwnProperty.call(actions,msg.tool)?actions[msg.tool]:null;
     if(!action)throw new Error('工具不存在，请重新读取插件工具列表。');
-    let execution_state='not_executed';
     const invoked=await invoke(action,msg.args||{},msg.callId);
     execution_state=invoked.execution_state || (invoked.ok===false ? executionStateFor(invoked) : 'executed');
     const result=await renderOfficial(invoked,msg.callId);
     if(!result.ok && !result.mcp){
       execution_state=result.execution_state||executionStateFor(result);
-      const message=result.message+(result.operation_id?' 操作编号：'+result.operation_id:'');
+      const message=result.message+(result.operation_id?' 操作编号：'+result.operation_id:'')+(execution_state==='unknown'?' 请先核对 Rhino 模型或原操作结果，勿直接重试。':'');
       await cindy.send({type:'tool-result',callId:msg.callId,ok:false,errorCode:result.code||'BRIDGE_FAILED',execution_state,message,structuredContent:{success:false,message,execution_state}});
       return;
     }else{
+      if(result.mcp && result.ok===false) result.execution_state=execution_state;
       // MCP business failures retain their exact structured details; result.ok remains false.
       await cindy.send({type:'tool-result',callId:msg.callId,ok:true,result});
     }
-  }catch(error){const execution_state=error.execution_state||'not_executed';const message=(execution_state==='not_executed'?'请求未派发。':'请求可能已派发，结果未知。')+error.message+(execution_state==='unknown'?' 请先核对 Rhino 模型，勿直接重试。':'');await cindy.send({type:'tool-result',callId:msg.callId,ok:false,errorCode:'BRIDGE_FAILED',execution_state,message,structuredContent:{success:false,message,execution_state}});}
+  }catch(error){execution_state=error.execution_state||execution_state;const message=(execution_state==='not_executed'?'请求未派发。':execution_state==='executed'?'请求已完成，但回复未能传递。':'请求可能已派发，结果未知。')+error.message+(execution_state==='unknown'?' 请先核对 Rhino 模型，勿直接重试。':'');await cindy.send({type:'tool-result',callId:msg.callId,ok:false,errorCode:'BRIDGE_FAILED',execution_state,message,structuredContent:{success:false,message,execution_state}});}
 });
 const settingsChannel=new BroadcastChannel('rhino-bridge-settings');
 let checking=false;

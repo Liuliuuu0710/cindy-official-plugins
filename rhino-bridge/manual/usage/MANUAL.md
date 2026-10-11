@@ -31,5 +31,5 @@ rhino_status 返回 document.id / document.units / 容差 / 最多 500 个图层
 
 插件仅需随包 Node；官方 Router 由用户安装的 McNeel 官方插件提供，不执行 npm/uvx 或首次下载代码。基础密钥由 Cindy 保险库管理，官方模式不需要它。模型查询、脚本结果及截图会交给当前 Cindy 对话与用户选择的模型服务。
 
-Windows Rhino 8 官方模式已完成本机连接、建模与截图验证；Rhino 6/7 基础模式、Rhino 9/WIP、macOS 和 Grasshopper 本次未验证，不能宣称全版本功能相同。
+Windows Rhino 8 官方模式已完成本机连接、实例发现和设置页结果验证；建模写操作与截图流程、Rhino 6/7 基础模式、Rhino 9/WIP、macOS 和 Grasshopper 本次未验证，不能宣称全版本功能相同。
 
