@@ -1,6 +1,6 @@
 const $=id=>document.getElementById(id),channel=new BroadcastChannel('rhino-bridge-settings');
 const dictionaries=globalThis.RHINO_I18N||{},fallback=dictionaries.en||{};
-let locale='en',config={},pending=null,timer,loaded=false;
+let locale='en',config={},pending=null,timer,retryTimer,loaded=false;
 const t=key=>(dictionaries[locale]||fallback)[key]||fallback[key]||key;
 const show=text=>{$('status').textContent=text;};
 const mode=cfg=>cfg.backend||(Object.prototype.hasOwnProperty.call(cfg,'port')?'legacy':'official');
@@ -24,9 +24,9 @@ $('clear').addEventListener('click',async()=>{try{const r=await fetch('/secrets/
 $('check').addEventListener('click',()=>{
  if(!loaded||pending)return;
  const next=current();if(next.backend!==mode(config)||next.routerPath!==(config.routerPath||'')||next.rhinoVersion!==(config.rhinoVersion||'8')||next.port!==(config.port??19986)||$('token').value)return show(t('error.unsaved'));
- pending=String(Date.now());$('check').disabled=true;show(t('state.checking'));channel.postMessage({type:'check',id:pending});timer=setTimeout(()=>{pending=null;$('check').disabled=false;show(t('error.checkTimeout'));},115000);
+ pending=String(Date.now());$('check').disabled=true;show(t('state.checking'));const id=pending,post=()=>channel.postMessage({type:'check',id});fetch('/wake').then(()=>{post();retryTimer=setInterval(post,1000);},()=>{post();retryTimer=setInterval(post,1000);});timer=setTimeout(()=>{clearInterval(retryTimer);pending=null;$('check').disabled=false;show(t('error.checkTimeout'));},115000);
 });
-channel.onmessage=({data})=>{if(data?.type!=='checked'||data.id!==pending)return;clearTimeout(timer);pending=null;$('check').disabled=false;const r=data.result;if(!r.ok)return show(r.message);
+channel.onmessage=({data})=>{if(data?.type!=='checked'||data.id!==pending)return;clearTimeout(timer);clearInterval(retryTimer);pending=null;$('check').disabled=false;const r=data.result;if(!r.ok)return show(r.message);
  if(r.backend==='official'){let slots='';for(const b of r.mcp?.content||[])if(b.type==='text')slots+=b.text;show(t('state.official')+': '+(r.server?.version||t('state.unknownVersion'))+' | '+slots);}
  else show(t('state.legacy')+' '+r.rhino_version+(r.document?' · '+(r.document.name||t('state.unnamed'))+' · '+r.document.units:' · '+t('state.openModel')));
 };

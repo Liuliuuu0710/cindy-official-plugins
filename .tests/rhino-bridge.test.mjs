@@ -52,6 +52,8 @@ test('nested MCP business errors remain structured failures', () => {
   const plain = official.inspectResult({ content: [{ type: 'text', text: JSON.stringify({ content: ['a'] }) }] });
   assert.equal(plain.ok, true);
   assert.equal(plain.mcp.content[0].type, 'text');
+  const structured = official.inspectResult({ content: [{ type: 'text', text: JSON.stringify({ content: [{ type: 'text', text: 'nested' }], structuredContent: { object_id: 'obj-1' } }) }] });
+  assert.deepEqual(structured.mcp.structuredContent, { object_id: 'obj-1' });
 });
 
 test('official write requests report unknown outcome after invalid Router output', async () => {

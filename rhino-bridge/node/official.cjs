@@ -114,6 +114,7 @@ function inspectResult(mcp) {
   if (!mcp || !Array.isArray(mcp.content)) throw error('OFFICIAL_PROTOCOL', '官方工具结果格式无效；修改操作请先核对模型。');
   let failed=!!mcp.isError;
   const content=[];
+  let structuredContent=mcp.structuredContent;
   function collect(blocks,depth=0) {
     for (const block of blocks) {
       if (block.type === 'text') {
@@ -121,6 +122,7 @@ function inspectResult(mcp) {
         try { v=JSON.parse(block.text); } catch {}
         if (v && typeof v==='object') {
           if (v.error || v.Error || v.payload?.error || v.payload?.Error || v.isError) failed=true;
+          if (v.structuredContent !== undefined) structuredContent = v.structuredContent;
           // Router wrappers can return a serialized CallToolResult as a text block.
           if (depth<3 && Array.isArray(v.content) && v.content.every(block => block && typeof block === 'object' && typeof block.type === 'string')) { collect(v.content,depth+1); continue; }
         }
@@ -129,7 +131,7 @@ function inspectResult(mcp) {
     }
   }
   collect(mcp.content);
-  return {ok:!failed,backend:'official',mcp:{...mcp,content,isError:failed}, ...(failed ? {code:'OFFICIAL_TOOL',message:'官方工具报告执行失败，请读取返回详情并核对 Rhino 模型；不要自动重复修改。'} : {})};
+  return {ok:!failed,backend:'official',mcp:{...mcp,content,isError:failed,...(structuredContent === undefined ? {} : {structuredContent})}, ...(failed ? {code:'OFFICIAL_TOOL',message:'官方工具报告执行失败，请读取返回详情并核对 Rhino 模型；不要自动重复修改。'} : {})};
 }
 async function execute(router, operation, args={}) {
   const init = await router.initialize();
