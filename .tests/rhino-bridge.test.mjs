@@ -95,14 +95,20 @@ test('official Router answers MCP ping with an empty success result', async () =
   child.stdout = stdout;
   child.stderr = new EventEmitter();
   child.stdin = new EventEmitter();
+  const writes = [];
   child.stdin.write = payload => {
     const request = JSON.parse(payload);
-    stdout.emit('data', Buffer.from(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: {} }) + '\n'));
+    writes.push(request);
+    if (request.method === 'tools/list') {
+      stdout.emit('data', Buffer.from(JSON.stringify({ jsonrpc: '2.0', method: 'ping', id: 'router-ping-1' }) + '\n'));
+      stdout.emit('data', Buffer.from(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { tools: [] } }) + '\n'));
+    }
   };
   child.stdin.end = () => {};
   child.kill = () => {};
   const router = new official.Router(child);
-  assert.deepEqual(await router.request('ping', {}), {});
+  assert.deepEqual(await router.request('tools/list', {}), { tools: [] });
+  assert.deepEqual(writes[1], { jsonrpc: '2.0', id: 'router-ping-1', result: {} });
   router.close();
 });
 
