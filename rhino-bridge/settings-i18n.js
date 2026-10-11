@@ -1,6 +1,6 @@
 globalThis.RHINO_I18N = {
   en: {
-    title: 'Cindy Rhino Bridge · 0.2.4', intro: 'Connect through McNeel’s official plugin first, or use the Rhino 6/7 basic connector.',
+    title: 'Cindy Rhino Bridge · 0.2.5', intro: 'Connect through McNeel’s official plugin first, or use the Rhino 6/7 basic connector.',
     'backend.label': 'Connection mode', 'backend.official': 'McNeel official · Rhino 8 / 9 (recommended)', 'backend.legacy': 'Basic connector · Rhino 6+',
     'official.install': 'Install Rhino-MCP-Platform from Rhino PackageManager, run MCPConnect to get the Router path, then open Rhino and start MCP as instructed.',
     'official.router': 'Official Router executable path', 'official.routerPlaceholder': 'Full path ending in rhino-mcp-router or rhino-mcp-router.exe',
@@ -19,7 +19,7 @@ globalThis.RHINO_I18N = {
     'state.official': 'Official Router connected', 'state.legacy': 'Rhino connected', 'state.unknownVersion': 'unknown version', 'state.unnamed': 'Untitled model', 'state.openModel': 'Open a model.'
   },
   'zh-CN': {
-    title: 'Cindy Rhino Bridge · 0.2.4', intro: '优先连接 McNeel 官方插件，也可使用 Rhino 6/7 基础连接器。',
+    title: 'Cindy Rhino Bridge · 0.2.5', intro: '优先连接 McNeel 官方插件，也可使用 Rhino 6/7 基础连接器。',
     'backend.label': '连接模式', 'backend.official': 'McNeel 官方 · Rhino 8 / 9（推荐）', 'backend.legacy': '基础连接器 · Rhino 6+',
     'official.install': '先在 Rhino 的 PackageManager 安装 Rhino-MCP-Platform，运行 MCPConnect 获取 Router 路径。手动打开 Rhino 并按官方提示启动 MCP。',
     'official.router': '官方 Router 可执行文件路径', 'official.routerPlaceholder': '完整路径，末尾为 rhino-mcp-router 或 rhino-mcp-router.exe',
@@ -35,7 +35,7 @@ globalThis.RHINO_I18N = {
     'state.legacy': '已连接 Rhino', 'state.unknownVersion': '未知版本', 'state.unnamed': '未命名模型', 'state.openModel': '请打开模型。'
   },
   ja: {
-    title: 'Cindy Rhino Bridge · 0.2.4', intro: 'McNeel 公式プラグインを優先し、Rhino 6/7 用の基本コネクターも利用できます。',
+    title: 'Cindy Rhino Bridge · 0.2.5', intro: 'McNeel 公式プラグインを優先し、Rhino 6/7 用の基本コネクターも利用できます。',
     'backend.label': '接続モード', 'backend.official': 'McNeel 公式 · Rhino 8 / 9（推奨）', 'backend.legacy': '基本コネクター · Rhino 6+',
     'official.install': 'Rhino の PackageManager で Rhino-MCP-Platform をインストールし、MCPConnect で Router のパスを取得してから MCP を開始してください。',
     'official.router': '公式 Router 実行ファイルのパス', 'official.routerPlaceholder': 'rhino-mcp-router または rhino-mcp-router.exe で終わる絶対パス',
@@ -51,7 +51,7 @@ globalThis.RHINO_I18N = {
     'state.checking': '接続を確認中…', 'state.official': '公式 Router に接続しました', 'state.legacy': 'Rhino に接続しました', 'state.unknownVersion': '不明なバージョン', 'state.unnamed': '無題のモデル', 'state.openModel': 'モデルを開いてください。'
   },
   ko: {
-    title: 'Cindy Rhino Bridge · 0.2.4', intro: 'McNeel 공식 플러그인을 우선 사용하며 Rhino 6/7 기본 커넥터도 지원합니다.',
+    title: 'Cindy Rhino Bridge · 0.2.5', intro: 'McNeel 공식 플러그인을 우선 사용하며 Rhino 6/7 기본 커넥터도 지원합니다.',
     'backend.label': '연결 모드', 'backend.official': 'McNeel 공식 · Rhino 8 / 9(권장)', 'backend.legacy': '기본 커넥터 · Rhino 6+',
     'official.install': 'Rhino PackageManager에서 Rhino-MCP-Platform을 설치하고 MCPConnect로 Router 경로를 확인한 뒤 MCP를 시작하세요.',
     'official.router': '공식 Router 실행 파일 경로', 'official.routerPlaceholder': 'rhino-mcp-router 또는 rhino-mcp-router.exe로 끝나는 절대 경로',

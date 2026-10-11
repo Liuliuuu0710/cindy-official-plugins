@@ -91,7 +91,7 @@ class Router {
     timer.unref?.();
   }
   async initialize() {
-    const init = await this.request('initialize', {protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'cindy-rhino-bridge',version:'0.2.4'}});
+    const init = await this.request('initialize', {protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'cindy-rhino-bridge',version:'0.2.5'}});
     if (!['2024-11-05','2025-03-26','2025-06-18'].includes(init?.protocolVersion) || !init?.capabilities?.tools) throw error('OFFICIAL_PROTOCOL', '官方 Router 的 MCP 版本或工具能力不受当前插件支持，请核对版本。');
     this.send({jsonrpc:'2.0',method:'notifications/initialized'});
     return init;
@@ -115,16 +115,26 @@ function inspectResult(mcp) {
   let failed=!!mcp.isError;
   const content=[];
   let structuredContent=mcp.structuredContent;
+  function validBlock(block) {
+    if (!block || typeof block !== 'object' || typeof block.type !== 'string') return false;
+    if (block.type === 'text') return typeof block.text === 'string';
+    if (block.type === 'image') return typeof block.data === 'string' && typeof block.mimeType === 'string';
+    if (block.type === 'resource') return !!block.resource && typeof block.resource === 'object';
+    return false;
+  }
+  function validCallToolResult(value) {
+    return !!value && typeof value === 'object' && Array.isArray(value.content) && value.content.every(validBlock);
+  }
   function collect(blocks,depth=0) {
     for (const block of blocks) {
       if (block.type === 'text') {
         let v;
         try { v=JSON.parse(block.text); } catch {}
-        if (v && typeof v==='object') {
-          if (v.error || v.Error || v.payload?.error || v.payload?.Error || v.isError) failed=true;
+        if (depth<3 && validCallToolResult(v)) {
+          if (v.isError === true) failed=true;
           if (v.structuredContent !== undefined) structuredContent = v.structuredContent;
-          // Router wrappers can return a serialized CallToolResult as a text block.
-          if (depth<3 && Array.isArray(v.content) && v.content.every(block => block && typeof block === 'object' && typeof block.type === 'string')) { collect(v.content,depth+1); continue; }
+          // Only unwrap a complete MCP CallToolResult; otherwise preserve the original text block.
+          collect(v.content,depth+1); continue;
         }
       }
       content.push(block);

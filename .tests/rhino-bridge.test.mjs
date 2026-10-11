@@ -16,7 +16,7 @@ const worker = require(path.join(plugin, 'node', 'worker.cjs'));
 
 test('manifest preserves the minimal Rhino bridge capability boundary', () => {
   assert.equal(manifest.schemaVersion, 3);
-  assert.equal(manifest.version, '0.2.4');
+  assert.equal(manifest.version, '0.2.5');
   assert.equal(manifest.author, 'Cindy');
   assert.deepEqual(manifest.setup, { requires: [] });
   assert.equal(manifest.node.lifecycle, 'on-demand');
@@ -44,7 +44,7 @@ test('official tool filtering blocks slot lifecycle control and requires a slot 
 });
 
 test('nested MCP business errors remain structured failures', () => {
-  const nested = JSON.stringify({ content: [{ type: 'text', text: JSON.stringify({ error: 'failed' }) }] });
+  const nested = JSON.stringify({ isError: true, content: [{ type: 'text', text: 'failed' }] });
   const result = official.inspectResult({ content: [{ type: 'text', text: nested }] });
   assert.equal(result.ok, false);
   assert.equal(result.code, 'OFFICIAL_TOOL');
@@ -54,6 +54,14 @@ test('nested MCP business errors remain structured failures', () => {
   assert.equal(plain.mcp.content[0].type, 'text');
   const structured = official.inspectResult({ content: [{ type: 'text', text: JSON.stringify({ content: [{ type: 'text', text: 'nested' }], structuredContent: { object_id: 'obj-1' } }) }] });
   assert.deepEqual(structured.mcp.structuredContent, { object_id: 'obj-1' });
+});
+
+test('plain text JSON is preserved unless it is a complete MCP CallToolResult', () => {
+  const plain = JSON.stringify({ error: 'domain value', content: [{ type: 'wall' }] });
+  const result = official.inspectResult({ content: [{ type: 'text', text: plain }] });
+  assert.equal(result.ok, true);
+  assert.equal(result.mcp.isError, false);
+  assert.deepEqual(result.mcp.content, [{ type: 'text', text: plain }]);
 });
 
 test('official write requests report unknown outcome after invalid Router output', async () => {
