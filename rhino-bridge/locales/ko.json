@@ -10,7 +10,7 @@
       "description": "기본 커넥터(legacy mode) 전용입니다. 선택된 객체 또는 모든 객체를 페이지 단위로 조회하고 ID, 이름, 유형, 레이어, 경계 상자와 상태를 반환합니다. 기본값은 선택된 객체만 조회합니다."
     },
     "rhino_create": {
-      "description": "기본 커넥터(legacy mode) 전용입니다. 기본 형상 하나를 만들고 객체 ID와 실행 취소 기록을 반환합니다. 점, 선, 원, 구와 상자를 지원하며 월드 좌표계를 사용합니다."
+      "description": "기본 커넥터(legacy mode) 전용입니다. 기본 형상 하나를 만들고 객체 ID와 실행 취소 기록을 반환합니다. geometry에 point는 point, line은 start/end, circle/sphere는 center/radius, box는 origin/size를 지정합니다. 원은 월드 XY 평면에, 상자는 월드 XYZ 양의 방향으로 생성됩니다."
     },
     "rhino_transform": {
       "description": "기본 커넥터(legacy mode) 전용입니다. 명시한 객체 ID를 유지하면서 이동, 회전 또는 균일 배율 변환을 실행합니다. move에는 vector, rotate에는 center/axis/angle_degrees, scale에는 center/factor가 필요합니다. 변경된 ID와 실행 취소 기록을 반환합니다."

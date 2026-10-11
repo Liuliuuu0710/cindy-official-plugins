@@ -295,7 +295,7 @@ class RhinoBackend(object):
                     if not success: raise RuntimeError('modify failed')
                     changed.append(str(ident))
         except Exception:
-            return dict(ok=False, code='BRIDGE_PARTIAL', message=u'操作中断，可能部分完成。已修改对象：' + ', '.join(changed) + u'。请检查模型并在 Rhino 中撤销；不要直接重做。', object_ids=changed, undo_serial=int(undo))
+            return dict(ok=False, code='BRIDGE_PARTIAL', execution_state=('executed' if changed else 'unknown'), message=u'操作中断，可能部分完成。已修改对象：' + ', '.join(changed) + u'。请检查模型并在 Rhino 中撤销；不要直接重做。', object_ids=changed, undo_serial=int(undo))
         finally:
             doc.EndUndoRecord(undo)
             doc.Views.Redraw()
