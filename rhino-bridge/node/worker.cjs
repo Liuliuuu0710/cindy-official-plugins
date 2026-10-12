@@ -5,19 +5,20 @@ const readline = require('node:readline');
 const LF = String.fromCharCode(10);
 const ACTIONS = new Set(['status', 'objects', 'create', 'transform', 'create_layer', 'assign_layer', 'operation_result']);
 const WRITES = new Set(['create', 'transform', 'create_layer', 'assign_layer']);
-const failure = (code, message, extra = {}) => ({ ok: false, code, message, ...extra });
+const failure = (code, message, extra = {}) => ({ ok: false, code, message, execution_state:'unknown', ...extra });
 function requestRhino(params, secret, transport = net) {
   const { action, args = {}, port = 19986 } = params || {};
-  if (!ACTIONS.has(action)) return Promise.resolve(failure('BRIDGE_ACTION', '不支持此操作，请使用已声明的建模工具。'));
-  if (!Number.isInteger(port) || port < 1024 || port > 65535) return Promise.resolve(failure('BRIDGE_PORT', '端口无效，请填写 1024–65535 的整数。'));
-  if (!secret || !/^[a-f0-9]{64}$/.test(secret)) return Promise.resolve(failure('BRIDGE_PAIRING', '请把 Rhino 连接脚本显示的配对密钥填入插件设置。'));
-  if (!args || typeof args !== 'object' || Array.isArray(args)) return Promise.resolve(failure('BRIDGE_ARGS', '参数必须是对象，请按工具说明填写。'));
+  if (!ACTIONS.has(action)) return Promise.resolve(failure('BRIDGE_ACTION', '不支持此操作，请使用已声明的建模工具。', {execution_state:'not_executed'}));
+  if (!Number.isInteger(port) || port < 1024 || port > 65535) return Promise.resolve(failure('BRIDGE_PORT', '端口无效，请填写 1024–65535 的整数。', {execution_state:'not_executed'}));
+  if (!secret || !/^[a-f0-9]{64}$/.test(secret)) return Promise.resolve(failure('BRIDGE_PAIRING', '请把 Rhino 连接脚本显示的配对密钥填入插件设置。', {execution_state:'not_executed'}));
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return Promise.resolve(failure('BRIDGE_ARGS', '参数必须是对象，请按工具说明填写。', {execution_state:'not_executed'}));
   const id = crypto.randomUUID();
   const wire = JSON.stringify({ protocol: 1, id, token: secret, action, args }) + LF;
-  if (Buffer.byteLength(wire) > 262144) return Promise.resolve(failure('BRIDGE_SIZE', '请求过大，请减少对象数量。'));
+  if (Buffer.byteLength(wire) > 262144) return Promise.resolve(failure('BRIDGE_SIZE', '请求过大，请减少对象数量。', {execution_state:'not_executed'}));
   return new Promise((resolve) => {
     let socket, timer, done = false, sent = false, chunks = [], bytes = 0;
     const finish = (value) => {
+      if (!sent && value.ok === false) value = {...value, execution_state:'not_executed'};
       if (done) return;
       done = true; clearTimeout(timer);
       if (socket) socket.destroy();
@@ -49,7 +50,7 @@ function serve() {
   const reply = (value) => {
     const encoded = JSON.stringify(value);
     if (Buffer.byteLength(encoded) > 980000) {
-      process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:value.id,result:failure('BRIDGE_SIZE','响应超过当前容量。操作可能已完成，请先检查 Rhino；查询请缩小范围。')}) + LF);
+      process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:value.id,result:failure('BRIDGE_SIZE','响应超过当前容量。操作可能已完成，请先检查 Rhino；查询请缩小范围。', {execution_state:value.result?.execution_state || 'unknown'})}) + LF);
     } else process.stdout.write(encoded + LF);
   };
   readline.createInterface({ input: process.stdin }).on('line', async (line) => {
@@ -60,7 +61,7 @@ function serve() {
     }
     try {
       if (req.method === 'official/request') {
-        if (officialBusy) { reply({jsonrpc:'2.0',id:req.id,result:failure('OFFICIAL_BUSY','已有官方请求执行中，此请求未发送，请稍后再试。')}); return; }
+        if (officialBusy) { reply({jsonrpc:'2.0',id:req.id,result:failure('OFFICIAL_BUSY','已有官方请求执行中，此请求未发送，请稍后再试。', {execution_state:'not_executed'})}); return; }
         officialBusy = true;
         try { reply({jsonrpc:'2.0',id:req.id,result:await require('./official.cjs').officialRequest(req.params)}); }
         finally { officialBusy = false; }

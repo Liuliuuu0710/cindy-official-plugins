@@ -1,7 +1,6 @@
 const actions = { rhino_status: 'status', rhino_objects: 'objects', rhino_create: 'create', rhino_transform: 'transform', rhino_create_layer: 'create_layer', rhino_assign_layer: 'assign_layer', rhino_operation_result: 'operation_result' };
-const NOT_EXECUTED_CODES = new Set(['BRIDGE_ACTION','BRIDGE_ARGS','BRIDGE_AUTH','BRIDGE_BUSY','BRIDGE_DOCUMENT_CHANGED','BRIDGE_EXPIRED','BRIDGE_ID_CONFLICT','BRIDGE_LAYER_EXISTS','BRIDGE_MODE','BRIDGE_PAIRING','BRIDGE_PORT','BRIDGE_SIZE','OFFICIAL_BUSY','OFFICIAL_ARGS','OFFICIAL_PATH','OFFICIAL_SLOT','OFFICIAL_TOOL_UNAVAILABLE','OFFICIAL_VERSION']);
 function executionStateFor(result) {
-  return result?.execution_state || (NOT_EXECUTED_CODES.has(result?.code) ? 'not_executed' : 'unknown');
+  return ['not_executed','executed','unknown'].includes(result?.execution_state) ? result.execution_state : 'unknown';
 }
 function backendOf(cfg) {
   if (cfg.backend) return cfg.backend;
@@ -16,12 +15,12 @@ async function invoke(action, args, callId) {
   const cfg=await response.json(), backend=backendOf(cfg);
   let request;
   if (backend==='official') {
-    if (!['status','official_list','official_call'].includes(action)) return {ok:false,code:'BRIDGE_MODE',message:'当前为 McNeel 官方模式。请使用 rhino_official_tools 和 rhino_official_call；基础工具仅用于旧版连接器。'};
+    if (!['status','official_list','official_call'].includes(action)) return {ok:false,code:'BRIDGE_MODE',execution_state:'not_executed',message:'当前为 McNeel 官方模式。请使用 rhino_official_tools 和 rhino_official_call；基础工具仅用于旧版连接器。'};
     request={method:'official/request',params:{config:{routerPath:cfg.routerPath,version:cfg.rhinoVersion ?? '8'},operation:action==='status'?'status':action==='official_list'?'list':'call',args},timeoutMs:110000};
   } else if (backend==='legacy') {
-    if (action.startsWith('official_')) return {ok:false,code:'BRIDGE_MODE',message:'当前为基础连接模式。请在设置页切换到 McNeel 官方模式后再调用。'};
+    if (action.startsWith('official_')) return {ok:false,code:'BRIDGE_MODE',execution_state:'not_executed',message:'当前为基础连接模式。请在设置页切换到 McNeel 官方模式后再调用。'};
     request={method:'rhino/request',params:{action,args,port:cfg.port ?? 19986},timeoutMs:22000};
-  } else return {ok:false,code:'BRIDGE_MODE',message:'连接模式无效，请在设置页重新选择。'};
+  } else return {ok:false,code:'BRIDGE_MODE',execution_state:'not_executed',message:'连接模式无效，请在设置页重新选择。'};
   if(callId){request.callId=callId;request.cancelWithCall=true;}
   dispatched=true;
   const result=await cindy.node.request(request);

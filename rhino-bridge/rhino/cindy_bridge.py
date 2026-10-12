@@ -28,41 +28,42 @@ LF = bytes(bytearray([10]))
 MAX_RECEIPTS = 5000
 
 class BridgeError(Exception):
-    def __init__(self, code, message):
+    def __init__(self, code, message, execution_state='unknown'):
+        self.execution_state = execution_state
         self.code = code
         self.message = message
         Exception.__init__(self, message)
 
-def fail(code, message):
-    return dict(ok=False, code=code, message=message)
+def fail(code, message, execution_state='unknown'):
+    return dict(ok=False, code=code, message=message, execution_state=execution_state)
 
 def text_value(value, label, limit=160):
     if not isinstance(value, string_types) or not value.strip() or len(value) > limit:
-        raise BridgeError('BRIDGE_ARGS', label + u'无效，请按工具说明填写。')
+        raise BridgeError('BRIDGE_ARGS', label + u'无效，请按工具说明填写。', execution_state="not_executed")
     return value
 
 def number(value, label, positive=False):
     if isinstance(value, bool) or not isinstance(value, number_types):
-        raise BridgeError('BRIDGE_ARGS', label + u'必须是数字。')
+        raise BridgeError('BRIDGE_ARGS', label + u'必须是数字。', execution_state="not_executed")
     value = float(value)
     if math.isnan(value) or math.isinf(value) or abs(value) > 1e12 or (positive and value <= 0):
-        raise BridgeError('BRIDGE_ARGS', label + u'超出允许范围，请检查单位与数值。')
+        raise BridgeError('BRIDGE_ARGS', label + u'超出允许范围，请检查单位与数值。', execution_state="not_executed")
     return value
 
 def vector(value, label):
     if not isinstance(value, list) or len(value) != 3:
-        raise BridgeError('BRIDGE_ARGS', label + u'必须是三个数字。')
+        raise BridgeError('BRIDGE_ARGS', label + u'必须是三个数字。', execution_state="not_executed")
     return [number(x, label) for x in value]
 
 def integer(value, label, low, high):
     n = number(value, label)
     if n != int(n) or n < low or n > high:
-        raise BridgeError('BRIDGE_ARGS', label + u'超出允许范围。')
+        raise BridgeError('BRIDGE_ARGS', label + u'超出允许范围。', execution_state="not_executed")
     return int(n)
 
 def only(args, allowed, required=()):
     if not isinstance(args, dict) or set(args) - set(allowed) or any(x not in args for x in required):
-        raise BridgeError('BRIDGE_ARGS', u'参数缺失或包含不支持的字段，请按工具说明填写。')
+        raise BridgeError('BRIDGE_ARGS', u'参数缺失或包含不支持的字段，请按工具说明填写。', execution_state="not_executed")
 
 def secure_equal(a, b):
     if not isinstance(a, string_types) or len(a) != len(b):
@@ -80,9 +81,10 @@ class Engine(object):
         self.receipts = {}
 
     def dispatch(self, action, args):
+        execution_state = "not_executed"
         try:
             if action not in WRITES + READS:
-                raise BridgeError('BRIDGE_ACTION', u'不支持此操作，请使用插件已声明的工具。')
+                raise BridgeError('BRIDGE_ACTION', u'不支持此操作，请使用插件已声明的工具。', execution_state="not_executed")
             if action == 'operation_result':
                 only(args, ('operation_id',), ('operation_id',))
                 op = text_value(args['operation_id'], u'操作编号', 80)
@@ -93,29 +95,32 @@ class Engine(object):
                 return self.backend.read(action, args, self.session)
             op = text_value(args.get('operation_id'), u'操作编号', 80)
             if not re.match(r'^[A-Za-z0-9_-]{8,80}$', op):
-                raise BridgeError('BRIDGE_ARGS', u'操作编号须为 8–80 位字母、数字、下划线或短横线。')
+                raise BridgeError('BRIDGE_ARGS', u'操作编号须为 8–80 位字母、数字、下划线或短横线。', execution_state="not_executed")
             digest = hashlib.sha256(json.dumps([action, args], sort_keys=True, ensure_ascii=True, allow_nan=False).encode('utf-8')).hexdigest()
             existing = self.receipts.get(op)
             if existing:
                 if existing[0] != digest:
-                    raise BridgeError('BRIDGE_ID_CONFLICT', u'操作编号已用于不同参数。请核对原操作结果；新操作使用新编号。')
+                    raise BridgeError('BRIDGE_ID_CONFLICT', u'操作编号已用于不同参数。请核对原操作结果；新操作使用新编号。', execution_state="not_executed")
                 answer = dict(existing[1]); answer['replayed'] = True
                 return answer
             if len(self.receipts) >= MAX_RECEIPTS:
-                raise BridgeError('BRIDGE_CAPACITY', u'本次连接的操作记录已满。请核对全部操作结果后重启连接脚本。')
+                raise BridgeError('BRIDGE_CAPACITY', u'本次连接的操作记录已满。请核对全部操作结果后重启连接脚本。', execution_state="not_executed")
             try:
+                execution_state = "unknown"
                 result = self.backend.write(action, args, self.session)
+                execution_state = result.get("execution_state", "executed" if result.get("ok") else "unknown")
+                result["execution_state"] = execution_state
             except BridgeError as ex:
-                result = fail(ex.code, ex.message)
+                result = fail(ex.code, ex.message, ex.execution_state)
             except Exception:
                 result = fail('BRIDGE_EXECUTION', u'Rhino 操作异常，结果可能部分完成。请检查模型并使用 Rhino 撤销，勿直接重做。')
             result['operation_id'] = op
             self.receipts[op] = (digest, result)
             return result
         except BridgeError as ex:
-            return fail(ex.code, ex.message)
+            return fail(ex.code, ex.message, ex.execution_state)
         except Exception:
-            return fail('BRIDGE_REQUEST', u'请求处理失败，请检查参数；若为修改操作，请先核对模型与操作记录。')
+            return fail('BRIDGE_REQUEST', u'请求处理失败，请检查参数；若为修改操作，请先核对模型与操作记录。', execution_state)
 
 class RhinoBackend(object):
     def __init__(self):
@@ -129,12 +134,12 @@ class RhinoBackend(object):
     def document(self, args, session, check_units=False):
         doc = self.Rhino.RhinoDoc.ActiveDoc
         if doc is None:
-            raise BridgeError('BRIDGE_DOCUMENT', u'没有打开的 Rhino 文档，请先新建或打开模型。')
+            raise BridgeError('BRIDGE_DOCUMENT', u'没有打开的 Rhino 文档，请先新建或打开模型。', execution_state="not_executed")
         doc_id = session + ':' + str(doc.RuntimeSerialNumber)
         if args.get('document_id') != doc_id:
-            raise BridgeError('BRIDGE_DOCUMENT_CHANGED', u'目标文档已变化，请重新读取模型状态，核对目标后再操作。')
+            raise BridgeError('BRIDGE_DOCUMENT_CHANGED', u'目标文档已变化，请重新读取模型状态，核对目标后再操作。', execution_state="not_executed")
         if check_units and args.get('units') != str(doc.ModelUnitSystem):
-            raise BridgeError('BRIDGE_UNITS_CHANGED', u'模型单位已变化，请重新读取状态并换算尺寸。')
+            raise BridgeError('BRIDGE_UNITS_CHANGED', u'模型单位已变化，请重新读取状态并换算尺寸。', execution_state="not_executed")
         return doc
 
     def layer(self, doc, layer_id):
@@ -142,28 +147,28 @@ class RhinoBackend(object):
         for layer in doc.Layers:
             if not layer.IsDeleted and layer.Id == gid:
                 return layer
-        raise BridgeError('BRIDGE_LAYER', u'图层不存在，请重新读取图层列表。')
+        raise BridgeError('BRIDGE_LAYER', u'图层不存在，请重新读取图层列表。', execution_state="not_executed")
 
     def guid(self, value):
         try:
             return self.System.Guid(text_value(value, u'对象或图层 ID', 40))
         except Exception:
-            raise BridgeError('BRIDGE_ID', u'对象或图层 ID 无效，请使用查询返回的 ID。')
+            raise BridgeError('BRIDGE_ID', u'对象或图层 ID 无效，请使用查询返回的 ID。', execution_state="not_executed")
 
     def editable_layer(self, layer):
         if layer.IsLocked or not layer.IsVisible:
-            raise BridgeError('BRIDGE_LOCKED', u'目标图层已锁定或隐藏，请在 Rhino 中处理后再操作。')
+            raise BridgeError('BRIDGE_LOCKED', u'目标图层已锁定或隐藏，请在 Rhino 中处理后再操作。', execution_state="not_executed")
 
     def objects(self, doc, ids):
         if not isinstance(ids, list) or not 1 <= len(ids) <= 100 or len(set(ids)) != len(ids):
-            raise BridgeError('BRIDGE_ARGS', u'每次需要 1–100 个不重复的对象 ID。')
+            raise BridgeError('BRIDGE_ARGS', u'每次需要 1–100 个不重复的对象 ID。', execution_state="not_executed")
         found = []
         for ident in ids:
             obj = doc.Objects.FindId(self.guid(ident))
             if obj is None or obj.IsDeleted:
-                raise BridgeError('BRIDGE_OBJECT', u'对象已不存在，请重新查询对象列表。')
+                raise BridgeError('BRIDGE_OBJECT', u'对象已不存在，请重新查询对象列表。', execution_state="not_executed")
             if obj.IsLocked or obj.IsHidden or obj.IsReference:
-                raise BridgeError('BRIDGE_LOCKED', u'对象已锁定、隐藏或属于引用模型，请在 Rhino 中处理后重试。')
+                raise BridgeError('BRIDGE_LOCKED', u'对象已锁定、隐藏或属于引用模型，请在 Rhino 中处理后重试。', execution_state="not_executed")
             self.editable_layer(doc.Layers[obj.Attributes.LayerIndex])
             found.append(obj)
         return found
@@ -191,7 +196,7 @@ class RhinoBackend(object):
         limit = integer(args.get('limit', 100), u'分页数量', 1, 200)
         selected = args.get('selected_only', True)
         if not isinstance(selected, bool):
-            raise BridgeError('BRIDGE_ARGS', u'selected_only 必须是布尔值。')
+            raise BridgeError('BRIDGE_ARGS', u'selected_only 必须是布尔值。', execution_state="not_executed")
         source = doc.Objects.GetSelectedObjects(False, False) if selected else doc.Objects
         rows = []; seen = 0; more = False
         for obj in source:
@@ -221,7 +226,7 @@ class RhinoBackend(object):
                 only(p, ('start', 'end'), ('start', 'end'))
                 a = G.Point3d(*vector(p['start'], u'起点')); b = G.Point3d(*vector(p['end'], u'终点'))
                 if a.DistanceTo(b) <= doc.ModelAbsoluteTolerance:
-                    raise BridgeError('BRIDGE_GEOMETRY', u'线段长度须大于模型容差。')
+                    raise BridgeError('BRIDGE_GEOMETRY', u'线段长度须大于模型容差。', execution_state="not_executed")
                 prepared = G.LineCurve(a, b)
             elif kind in ('circle', 'sphere'):
                 only(p, ('center', 'radius'), ('center', 'radius'))
@@ -233,9 +238,9 @@ class RhinoBackend(object):
                 for d in dims: number(d, u'尺寸', True)
                 prepared = G.Box(G.Plane(origin, G.Vector3d.ZAxis), G.Interval(0, dims[0]), G.Interval(0, dims[1]), G.Interval(0, dims[2])).ToBrep()
             else:
-                raise BridgeError('BRIDGE_GEOMETRY', u'仅支持 point、line、circle、sphere、box。')
+                raise BridgeError('BRIDGE_GEOMETRY', u'仅支持 point、line、circle、sphere、box。', execution_state="not_executed")
             if prepared is None or not prepared.IsValid:
-                raise BridgeError('BRIDGE_GEOMETRY', u'几何无效，请检查尺寸与模型容差。')
+                raise BridgeError('BRIDGE_GEOMETRY', u'几何无效，请检查尺寸与模型容差。', execution_state="not_executed")
             attrs = self.Rhino.DocObjects.ObjectAttributes()
             layer = self.layer(doc, args['layer_id']) if args.get('layer_id') else doc.Layers.CurrentLayer
             self.editable_layer(layer); attrs.LayerIndex = layer.Index
@@ -248,28 +253,28 @@ class RhinoBackend(object):
             elif mode == 'rotate':
                 only(args, common + ('object_ids', 'mode', 'center', 'axis', 'angle_degrees'), common + ('object_ids', 'mode', 'center', 'axis', 'angle_degrees'))
                 axis = G.Vector3d(*vector(args['axis'], u'旋转轴'))
-                if not axis.Unitize(): raise BridgeError('BRIDGE_ARGS', u'旋转轴不能为零。')
+                if not axis.Unitize(): raise BridgeError('BRIDGE_ARGS', u'旋转轴不能为零。', execution_state="not_executed")
                 xform = G.Transform.Rotation(math.radians(number(args['angle_degrees'], u'角度')), axis, G.Point3d(*vector(args['center'], u'旋转中心')))
             elif mode == 'scale':
                 only(args, common + ('object_ids', 'mode', 'center', 'factor'), common + ('object_ids', 'mode', 'center', 'factor'))
                 xform = G.Transform.Scale(G.Point3d(*vector(args['center'], u'缩放中心')), number(args['factor'], u'缩放倍数', True))
-            else: raise BridgeError('BRIDGE_ARGS', u'变换模式须为 move、rotate 或 scale。')
+            else: raise BridgeError('BRIDGE_ARGS', u'变换模式须为 move、rotate 或 scale。', execution_state="not_executed")
             prepared = []
             for obj in items:
                 geo = obj.Geometry.Duplicate()
                 if geo is None or not geo.Transform(xform) or not geo.IsValid:
-                    raise BridgeError('BRIDGE_GEOMETRY', u'对象无法完成此次变换，未修改模型，请检查对象类型与参数。')
+                    raise BridgeError('BRIDGE_GEOMETRY', u'对象无法完成此次变换，未修改模型，请检查对象类型与参数。', execution_state="not_executed")
                 prepared.append((obj.Id, geo))
         elif action == 'create_layer':
             name = text_value(args['name'], u'图层名称')
             if any(c in name for c in ('::', chr(10), chr(13))):
-                raise BridgeError('BRIDGE_ARGS', u'第一版只创建顶层图层，请使用不含 :: 或换行的名称。')
+                raise BridgeError('BRIDGE_ARGS', u'第一版只创建顶层图层，请使用不含 :: 或换行的名称。', execution_state="not_executed")
             if any(not x.IsDeleted and x.FullPath.lower() == name.lower() for x in doc.Layers):
-                raise BridgeError('BRIDGE_LAYER_EXISTS', u'同名图层已存在，请使用现有图层 ID 或换一个名称。')
+                raise BridgeError('BRIDGE_LAYER_EXISTS', u'同名图层已存在，请使用现有图层 ID 或换一个名称。', execution_state="not_executed")
             layer = self.Rhino.DocObjects.Layer(); layer.Name = name
             if 'color' in args:
                 color = args['color']
-                if not isinstance(color, list) or len(color) != 3: raise BridgeError('BRIDGE_ARGS', u'颜色须为三个 0–255 的整数。')
+                if not isinstance(color, list) or len(color) != 3: raise BridgeError('BRIDGE_ARGS', u'颜色须为三个 0–255 的整数。', execution_state="not_executed")
                 layer.Color = self.System.Drawing.Color.FromArgb(*[integer(v, u'颜色', 0, 255) for v in color])
         else:
             items = self.objects(doc, args['object_ids']); layer = self.layer(doc, args['layer_id']); self.editable_layer(layer)
@@ -278,7 +283,7 @@ class RhinoBackend(object):
                 attr = obj.Attributes.Duplicate(); attr.LayerIndex = layer.Index; prepared.append((obj.Id, attr))
         undo = doc.BeginUndoRecord('Cindy Rhino Bridge: ' + action)
         if undo == 0:
-            raise BridgeError('BRIDGE_UNDO', u'Rhino 当前无法建立撤销记录，请结束当前命令后重试。')
+            raise BridgeError('BRIDGE_UNDO', u'Rhino 当前无法建立撤销记录，请结束当前命令后重试。', execution_state="not_executed")
         changed = []; layer_id = None
         try:
             if action == 'create':
@@ -295,11 +300,14 @@ class RhinoBackend(object):
                     if not success: raise RuntimeError('modify failed')
                     changed.append(str(ident))
         except Exception:
-            return dict(ok=False, code='BRIDGE_PARTIAL', execution_state=('executed' if changed else 'unknown'), message=u'操作中断，可能部分完成。已修改对象：' + ', '.join(changed) + u'。请检查模型并在 Rhino 中撤销；不要直接重做。', object_ids=changed, undo_serial=int(undo))
+            return dict(ok=False, code='BRIDGE_PARTIAL', execution_state=('executed' if changed or layer_id is not None else 'unknown'), message=u'操作中断，可能部分完成。已修改对象：' + ', '.join(changed) + u'。请检查模型并在 Rhino 中撤销；不要直接重做。', object_ids=changed, undo_serial=int(undo))
         finally:
-            doc.EndUndoRecord(undo)
-            doc.Views.Redraw()
-        return dict(ok=True, document_id=args['document_id'], units=args['units'], object_ids=changed, layer_id=layer_id, undo_serial=int(undo), undo_hint=u'在 Rhino 中使用 Undo 撤销最近一次修改。')
+            try:
+                doc.EndUndoRecord(undo)
+                doc.Views.Redraw()
+            except Exception:
+                return fail("BRIDGE_FINALIZE", u"Rhino finalization failed; inspect the model before retrying.", "executed" if changed or layer_id is not None else "unknown")
+        return dict(ok=True, execution_state='executed', document_id=args['document_id'], units=args['units'], object_ids=changed, layer_id=layer_id, undo_serial=int(undo), undo_hint=u'在 Rhino 中使用 Undo 撤销最近一次修改。')
 
 class Server(object):
     def __init__(self, backend, port, token=None):
@@ -328,7 +336,7 @@ class Server(object):
         while True:
             try:
                 job = self.pending.get_nowait()
-                job['result'] = fail('BRIDGE_STOPPED', u'连接已停止；此排队请求未执行，请重新连接后核对模型。'); job['event'].set()
+                job['result'] = fail('BRIDGE_STOPPED', u'连接已停止；此排队请求未执行，请重新连接后核对模型。', execution_state="not_executed"); job['event'].set()
             except queue.Empty:
                 break
 
@@ -363,9 +371,9 @@ class Server(object):
             if request.get('protocol') != 1 or not isinstance(request.get('id'), string_types) or len(request['id']) > 80:
                 raise ValueError('protocol')
             if not secure_equal(request.get('token'), self.token):
-                result = fail('BRIDGE_AUTH', u'配对密钥不匹配，请在插件设置中更新本次 Rhino 连接的密钥。')
+                result = fail('BRIDGE_AUTH', u'配对密钥不匹配，请在插件设置中更新本次 Rhino 连接的密钥。', execution_state="not_executed")
             elif request.get('action') not in WRITES + READS or not isinstance(request.get('args'), dict):
-                result = fail('BRIDGE_ARGS', u'请求操作或参数不合法，请使用插件工具。')
+                result = fail('BRIDGE_ARGS', u'请求操作或参数不合法，请使用插件工具。', execution_state="not_executed")
             else:
                 job = dict(request=request, event=threading.Event(), deadline=time.time() + 10, result=None)
                 try:
@@ -373,7 +381,7 @@ class Server(object):
                     job['event'].wait(13)
                     result = job['result'] or fail('BRIDGE_OUTCOME_UNKNOWN', u'Rhino 尚未返回结果，请用原操作编号查询，勿直接重做。')
                 except queue.Full:
-                    result = fail('BRIDGE_BUSY', u'Rhino 请求队列已满，此请求未入队，请稍后重试。')
+                    result = fail('BRIDGE_BUSY', u'Rhino 请求队列已满，此请求未入队，请稍后重试。', execution_state="not_executed")
             payload = json.dumps(dict(protocol=1, id=request['id'], result=result), ensure_ascii=True, allow_nan=False).encode('utf-8') + LF
             if len(payload) > 786432:
                 payload = json.dumps(dict(protocol=1, id=request['id'], result=fail('BRIDGE_RESPONSE_SIZE', u'返回内容过大，请缩小查询范围；修改请查询原操作编号。'))).encode('utf-8') + LF
@@ -390,7 +398,7 @@ class Server(object):
         try: job = self.pending.get_nowait()
         except queue.Empty: return
         if time.time() > job['deadline']:
-            job['result'] = fail('BRIDGE_EXPIRED', u'Rhino 忙碌导致请求过期，此排队请求未执行。请结束命令后重试。')
+            job['result'] = fail('BRIDGE_EXPIRED', u'Rhino 忙碌导致请求过期，此排队请求未执行。请结束命令后重试。', execution_state="not_executed")
         else:
             request = job['request']
             job['result'] = self.engine.dispatch(request['action'], request['args'])
@@ -427,7 +435,7 @@ def run_in_rhino():
     Rhino.RhinoApp.Closing += on_close
     sc.sticky[key] = (server, on_idle, on_close)
     # Dialog only: do not print the pairing token to command history.
-    rs.EditBox(server.token, 'Copy this key into Cindy Rhino Bridge settings, then close this dialog. Keep the key out of chat. Running this script again stops the bridge.', 'Cindy Rhino Bridge pairing key')
+    rs.EditBox(message='Copy this key into Cindy Rhino Bridge settings, then close this dialog. Keep the key out of chat. Running this script again stops the bridge.', default_string=server.token, title='Cindy Rhino Bridge pairing key')
     Rhino.RhinoApp.WriteLine('Cindy Rhino Bridge listening on 127.0.0.1:' + str(port))
 
 if __name__ == '__main__':

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import './rhino-bridge-state.test.mjs';
 import { createRequire } from 'node:module';
 import { EventEmitter } from 'node:events';
 import { spawnSync } from 'node:child_process';
@@ -16,7 +17,7 @@ const worker = require(path.join(plugin, 'node', 'worker.cjs'));
 
 test('manifest preserves the minimal Rhino bridge capability boundary', () => {
   assert.equal(manifest.schemaVersion, 3);
-  assert.equal(manifest.version, '0.2.6');
+  assert.equal(manifest.version, '0.2.7');
   assert.equal(manifest.author, 'Cindy');
   assert.deepEqual(manifest.setup, { requires: [] });
   assert.equal(manifest.node.lifecycle, 'on-demand');

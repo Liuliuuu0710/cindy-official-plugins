@@ -91,7 +91,7 @@ class Router {
     timer.unref?.();
   }
   async initialize() {
-    const init = await this.request('initialize', {protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'cindy-rhino-bridge',version:'0.2.6'}});
+    const init = await this.request('initialize', {protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'cindy-rhino-bridge',version:'0.2.7'}});
     if (!['2024-11-05','2025-03-26','2025-06-18'].includes(init?.protocolVersion) || !init?.capabilities?.tools) throw error('OFFICIAL_PROTOCOL', '官方 Router 的 MCP 版本或工具能力不受当前插件支持，请核对版本。');
     this.send({jsonrpc:'2.0',method:'notifications/initialized'});
     return init;
@@ -184,9 +184,9 @@ async function officialRequest(params) {
   } catch(e) {
     if (params?.operation === 'call' && router?.lastRequestUnknown) {
       const outcome = unknownOutcome(e);
-      return {ok:false,code:outcome.code,message:outcome.message};
+      return {ok:false,code:outcome.code,message:outcome.message,execution_state:'unknown'};
     }
-    return {ok:false,code:e.code?.startsWith('OFFICIAL_')?e.code:'OFFICIAL_CONFIG',message:e.code?.startsWith('OFFICIAL_')?e.message:'官方 Router 未能启动，请安装官方插件并核对 MCPConnect 返回的可执行文件路径。'};
+    return {ok:false,execution_state:'not_executed',code:e.code?.startsWith('OFFICIAL_')?e.code:'OFFICIAL_CONFIG',message:e.code?.startsWith('OFFICIAL_')?e.message:'官方 Router 未能启动，请安装官方插件并核对 MCPConnect 返回的可执行文件路径。'};
   }
   finally { router?.close(); }
 }
