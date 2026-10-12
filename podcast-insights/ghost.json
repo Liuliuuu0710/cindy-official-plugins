@@ -1,0 +1,289 @@
+{
+  "schemaVersion": 3,
+  "minCindyVersion": "0.1.103",
+  "id": "podcast-insights",
+  "name": "Podcast Insights",
+  "description": "Import podcasts and transcripts, verify original quotes, and compare views with evidence. Optional user-confirmed paid cloud transcription.",
+  "whenToUse": "Podcast transcripts, summaries, content questions, cross-show viewpoints, original quotes, speakers and timestamps. Searches imported material only.",
+  "version": "0.2.0",
+  "entry": "main.js",
+  "icon": "assets/podcast-icon.jpg",
+  "launch": "on-demand",
+  "command": "podcast",
+  "tools": [
+    {
+      "name": "podcast_import",
+      "description": "Import public RSS, Apple Podcasts, Xiaoyuzhou or audio links. Store up to 500 episode metadata; fetch selected publisher transcripts (latest 3 default). Xiaoyuzhou RSS candidates require a real user card click; never automatically choose.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "episodes": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 50
+              }
+            ]
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "podcast_import_transcript",
+      "description": "Save user-provided JSON, VTT, SRT, TXT, MD or supported HTML transcript, at most 5 MB. Preserve versions; never invent missing timestamps or speaker identities.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "episode_id": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "json",
+              "vtt",
+              "srt",
+              "txt",
+              "md",
+              "html"
+            ]
+          }
+        },
+        "required": [
+          "episode_id",
+          "content",
+          "format"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "podcast_library",
+      "description": "List shows, episodes, cloud jobs and library space; supports transcript-state filters and pagination.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "show_id": {
+            "type": "string"
+          },
+          "transcript_state": {
+            "type": "string",
+            "enum": [
+              "none",
+              "remote_available",
+              "ready",
+              "transcribing",
+              "failed"
+            ]
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "podcast_search",
+      "description": "Search normalized Chinese/English keywords in imported text. Optional show/episode/time filters; at most 50 hits with adjacent context. No semantic or automatic cross-language search.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "show_id": {
+            "type": "string"
+          },
+          "episode_id": {
+            "type": "string"
+          },
+          "from_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "to_ms": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "podcast_read",
+      "description": "Read transcript pages, around a segment or from a timestamp. At most 20000 characters per call; follow next_offset. Tool results may be sent to the current model service.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "episode_id": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "from_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "around_segment": {
+            "type": "string"
+          },
+          "max_chars": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20000
+          },
+          "char_offset": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "episode_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "podcast_cite",
+      "description": "Check original quotes, including adjacent segments. Return exact, normalized or not_found. Only verified quotes enter cards. Verifies wording, not AI interpretation; call before quoting in answers.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "references": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "properties": {
+                "episode_id": {
+                  "type": "string"
+                },
+                "quote": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "episode_id",
+                "quote"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "references"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "podcast_transcribe",
+      "description": "Prepare an AssemblyAI estimate only; tool arguments cannot submit. A real confirmation card click sends the public audio URL for full-audio processing and incurs provider charges. User-supplied key required.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "episode_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "episode_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "podcast_status",
+      "description": "Check and resume cloud jobs without resubmitting. Unknown submissions need provider reconciliation; no automatic retry. Stopping local polling does not cancel cloud work or charges.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "card": {},
+  "library": true,
+  "agent": {
+    "tasks": true
+  },
+  "mainView": {
+    "title": "Podcast library",
+    "icon": "database",
+    "html": "main-view.html"
+  },
+  "settingsHtml": "settings.html",
+  "setup": {
+    "requires": []
+  },
+  "network": {
+    "hosts": [
+      "api.assemblyai.com"
+    ],
+    "secrets": [
+      {
+        "key": "assemblyai_key",
+        "label": "AssemblyAI API Key",
+        "hint": "Optional. Cloud processing and provider charges require a confirmation card click.",
+        "url": "https://www.assemblyai.com/dashboard/",
+        "inject": {
+          "header": "Authorization",
+          "format": "{value}",
+          "hosts": [
+            "api.assemblyai.com"
+          ]
+        }
+      }
+    ]
+  },
+  "manual": {
+    "items": [
+      {
+        "dir": "manual/workflow",
+        "name": "workflow",
+        "description": "Import, verified citations, cloud estimates, user confirmation and recovery."
+      }
+    ]
+  },
+  "locales": {
+    "en": "locales/en.json",
+    "zh-CN": "locales/zh-CN.json",
+    "ja": "locales/ja.json",
+    "ko": "locales/ko.json"
+  }
+}

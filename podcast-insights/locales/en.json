@@ -1,0 +1,39 @@
+{
+  "name": "Podcast Insights",
+  "description": "Import podcasts and transcripts, verify original quotes, and compare views with evidence. Optional user-confirmed paid cloud transcription.",
+  "whenToUse": "Podcast transcripts, summaries, content questions, cross-show viewpoints, original quotes, speakers and timestamps. Searches imported material only.",
+  "tools": {
+    "podcast_import": {
+      "description": "Import public RSS, Apple Podcasts, Xiaoyuzhou or audio links. Store up to 500 episode metadata; fetch selected publisher transcripts (latest 3 default). Xiaoyuzhou RSS candidates require a real user card click; never automatically choose."
+    },
+    "podcast_import_transcript": {
+      "description": "Save user-provided JSON, VTT, SRT, TXT, MD or supported HTML transcript, at most 5 MB. Preserve versions; never invent missing timestamps or speaker identities."
+    },
+    "podcast_library": {
+      "description": "List shows, episodes, cloud jobs and library space; supports transcript-state filters and pagination."
+    },
+    "podcast_search": {
+      "description": "Search normalized Chinese/English keywords in imported text. Optional show/episode/time filters; at most 50 hits with adjacent context. No semantic or automatic cross-language search."
+    },
+    "podcast_read": {
+      "description": "Read transcript pages, around a segment or from a timestamp. At most 20000 characters per call; follow next_offset. Tool results may be sent to the current model service."
+    },
+    "podcast_cite": {
+      "description": "Check original quotes, including adjacent segments. Return exact, normalized or not_found. Only verified quotes enter cards. Verifies wording, not AI interpretation; call before quoting in answers."
+    },
+    "podcast_transcribe": {
+      "description": "Prepare an AssemblyAI estimate only; tool arguments cannot submit. A real confirmation card click sends the public audio URL for full-audio processing and incurs provider charges. User-supplied key required."
+    },
+    "podcast_status": {
+      "description": "Check and resume cloud jobs without resubmitting. Unknown submissions need provider reconciliation; no automatic retry. Stopping local polling does not cancel cloud work or charges."
+    }
+  },
+  "network": {
+    "secrets": {
+      "assemblyai_key": {
+        "label": "AssemblyAI API Key",
+        "hint": "Optional. Cloud processing and provider charges require a confirmation card click."
+      }
+    }
+  }
+}

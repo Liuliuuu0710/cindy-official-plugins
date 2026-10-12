@@ -1,0 +1,39 @@
+{
+  "name": "播客洞察",
+  "description": "导入播客与转录，核对原句并比较观点；支持用户确认后的可选付费云转录",
+  "whenToUse": "播客字幕、摘要、内容问答、跨节目观点、原句、说话人与时间戳；只检索已导入资料",
+  "tools": {
+    "podcast_import": {
+      "description": "导入公开 RSS、Apple Podcasts、小宇宙或音频链接；保存最多500集，默认抓最近3集自带转录。小宇宙 RSS 候选必须由用户点击卡片确认，不自动选择"
+    },
+    "podcast_import_transcript": {
+      "description": "保存用户提供的 JSON、VTT、SRT、TXT、MD 或支持的 HTML 转录，最大5 MB；保留版本，不编造时间戳和身份"
+    },
+    "podcast_library": {
+      "description": "按状态筛选并分页列出节目、单集、资料库空间和云转录进度"
+    },
+    "podcast_search": {
+      "description": "按规范化后的中英文关键词检索原文，可按节目、单集、时间筛选；最多50条，附相邻上下文，无语义或自动跨语言检索"
+    },
+    "podcast_read": {
+      "description": "分页读取原文，每次最多20000字符，按 next_offset 继续，可定位段落或时间。工具返回内容可能发送给当前模型服务"
+    },
+    "podcast_cite": {
+      "description": "核对原句，支持相邻两段，返回 exact、normalized 或 not_found；只有通过的引用进入卡片，仅验证原文存在，不验证 AI 解读。引用前必须调用"
+    },
+    "podcast_transcribe": {
+      "description": "仅准备 AssemblyAI 云转录预估卡片，工具参数不能提交。用户亲自点击确认后才发送公开音频 URL，服务商获取完整音频并收费；需用户自带密钥"
+    },
+    "podcast_status": {
+      "description": "查询并恢复云任务，不重新提交。不确定提交须与服务商核对，禁止自动重试；停止本地轮询不等于取消云处理或费用"
+    }
+  },
+  "network": {
+    "secrets": {
+      "assemblyai_key": {
+        "label": "AssemblyAI API Key",
+        "hint": "Optional. Cloud processing and provider charges require a confirmation card click."
+      }
+    }
+  }
+}
