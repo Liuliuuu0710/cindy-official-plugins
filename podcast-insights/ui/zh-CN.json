@@ -48,7 +48,7 @@
   "estimate": "预计费用",
   "estimateDisclaimer": "仅为估算，以 AssemblyAI 账单为准",
   "confirmTranscribe": "确认转写",
-  "cloudDisclosure": "AssemblyAI 会按公开音频链接获取完整音频。请确认有权处理此内容并接受服务商费用；数据保留与训练受服务商设置约束",
+  "cloudDisclosure": "AssemblyAI 接收音频 URL 和处理选项，不发送标题、已有转录或笔记。服务商会拉取整集音频。本插件未请求零保留或退出训练选项，请先核对你的账户政策，再确认内容处理授权与费用。",
   "modelDisclosure": "读取和检索会将文字稿内容返回 Cindy，远端模型服务可能接收这些内容。资料库本地保存不等于分析全程在本地",
   "citeBoundary": "引用核对仅证明原文存在，不证明 AI 解读正确",
   "viewLibrary": "在资料库中查看",
@@ -79,6 +79,7 @@
     "TASKS_UNAVAILABLE": "任务接口不可用，请在 Cindy 任务中导入或更新客户端",
     "QUOTE_MISMATCH": "引用与原文不一致，请重新选择原句",
     "AAI_REJECTED": "服务商拒绝提交，请检查密钥或请求参数",
-    "XML_UNAVAILABLE": "XML 解析器不可用，请更新 Cindy 或导入转录文本"
+    "XML_UNAVAILABLE": "XML 解析器不可用，请更新 Cindy 或导入转录文本",
+    "SOURCE_AUTH_REQUIRED": "来源需要登录授权。请提供可公开读取的 RSS 或转录；AssemblyAI 密钥不能授权此来源。"
   }
 }

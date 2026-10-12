@@ -3,6 +3,7 @@
   const L = typeof module !== 'undefined' ? require('./legacy-core.js') : root.PodcastCore;
   const bytes = s => new TextEncoder().encode(s).length;
   const norm = s => String(s).normalize('NFKC').toLowerCase().replace(/[\p{P}\p{Z}\s]/gu, '');
+  const isoDate = v => { const n=Date.parse(v); return Number.isFinite(n)?new Date(n).toISOString():''; };
   const feedUrl = value => { const u = new URL(L.url(value)); u.hash = ''; return u.href; };
   const nodes = (el, name) => Array.from(el.getElementsByTagName('*')).filter(n => n.localName === name);
   const text = (el, name) => nodes(el, name)[0]?.textContent?.trim() || '';
@@ -48,7 +49,7 @@
     const parsed=L.transcript(content,format), merged=[];
     for (const r of parsed) {
       const prev=merged.at(-1);
-      if (prev && prev.text.length+r.text.length<300 && prev.speaker===r.speaker && (prev.start==null)===(r.start==null)) { prev.text+='\n'+r.text; prev.end=r.end; }
+      if (prev && prev.text.length+r.text.length<300 && prev.speaker===r.speaker && prev.start==null && r.start==null) { prev.text+='\n'+r.text; prev.end=r.end; }
       else merged.push({...r});
     }
     return merged.map((r,idx)=>({idx,text:r.text,norm:norm(r.text),start_ms:r.start==null?null:Math.round(r.start*1000),end_ms:r.end==null?null:Math.round(r.end*1000),speaker:r.speaker || ''}));
@@ -69,6 +70,6 @@
     if (!show && !episode) L.fail('XYZ_PARSE_FAILED');
     return {title:show || episode.title,episodes:episode?[episode]:[]};
   }
-  const api={...L,bytes,norm,feedUrl,feed,segments,xyz,duration};
+  const api={...L,bytes,norm,isoDate,feedUrl,feed,segments,xyz,duration};
   if (typeof module!=='undefined') module.exports=api; else root.PodcastCore=api;
 })(globalThis);

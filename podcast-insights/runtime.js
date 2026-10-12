@@ -68,7 +68,7 @@
       await ready;let r;const progress=setInterval(()=>cindy.send({type:'tool-progress',callId:msg.callId,message:ui.working || 'Working'}).catch(()=>{}),45000);
       try{r=await service.run(msg.tool,msg.args || {},msg.callId);}catch(e){r=error(e);}finally{clearInterval(progress);}
       try{await sendCard(msg.callId,r);}catch{}
-      await cindy.send({type:'tool-result',callId:msg.callId,ok:true,result:r});if(r.jobs)remember(r.jobs);channel.postMessage({type:'changed'});
+      await cindy.send(r.ok===false?{type:'tool-result',callId:msg.callId,ok:false,errorCode:r.errorCode,message:r.message}:{type:'tool-result',callId:msg.callId,ok:true,result:r});if(r.jobs)remember(r.jobs);channel.postMessage({type:'changed'});
     });
     if(msg.type==='event'&&msg.name==='card-action')enqueue(async()=>{
       await ready;await service.init();const slot=msg.spawnCallId || msg.callId;let r;

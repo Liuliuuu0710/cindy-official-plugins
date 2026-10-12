@@ -48,7 +48,7 @@
   "estimate": "Estimated cost",
   "estimateDisclaimer": "Estimate only; AssemblyAI billing prevails.",
   "confirmTranscribe": "Confirm transcription",
-  "cloudDisclosure": "AssemblyAI will fetch the complete audio from its public URL. Confirm you have the right to process it and accept provider charges. Provider retention/training settings apply.",
+  "cloudDisclosure": "AssemblyAI receives the audio URL and processing options, not the episode title, existing transcript or saved notes. It fetches the complete audio. This plugin does not request zero retention or a training opt-out; verify your account policies before confirming. Confirm processing rights and charges.",
   "modelDisclosure": "Reading and searching return transcript text to Cindy; remote model services may receive it. Library storage does not mean analysis stays on this device.",
   "citeBoundary": "Quote matching verifies original wording, not AI interpretation.",
   "viewLibrary": "View in library",
@@ -79,6 +79,7 @@
     "TASKS_UNAVAILABLE": "Task API unavailable. Import through a Cindy task or update the client.",
     "QUOTE_MISMATCH": "Quote differs from original. Select an original passage.",
     "AAI_REJECTED": "Provider rejected submission. Check credentials or request parameters.",
-    "XML_UNAVAILABLE": "XML parser unavailable. Update Cindy or import transcript text."
+    "XML_UNAVAILABLE": "XML parser unavailable. Update Cindy or import transcript text.",
+    "SOURCE_AUTH_REQUIRED": "Source requires authentication. Provide an accessible public RSS or transcript; an AssemblyAI key cannot authorize this source."
   }
 }

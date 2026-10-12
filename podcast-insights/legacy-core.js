@@ -114,8 +114,16 @@
   function normalize(rows, identity = "provided") {
     if (!Array.isArray(rows) || !rows.length || rows.length > 20000)
       fail("INVALID_TRANSCRIPT");
+    // Split long source text before per-row validation. Keep its supplied
+    // interval for each chunk; never invent timing within an utterance.
+    rows = rows.flatMap(r => {
+      const text = string(r.text, 5 * 1024 * 1024), chunks = [];
+      for (let i = 0; i < text.length; i += 12000) chunks.push({...r, text:text.slice(i, i + 12000)});
+      return chunks;
+    });
+    if (rows.length > 20000) fail('INVALID_TRANSCRIPT');
     return rows.map((r, index) => {
-      const text = string(r.text, 12000),
+      const text = r.text,
         start = r.start == null ? null : +r.start,
         end = r.end == null ? null : +r.end;
       if (

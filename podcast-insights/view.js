@@ -26,19 +26,20 @@
     block.append(quote);
     if(e.page_url){const a=node('a',ui.source);a.href=e.page_url;block.append(a);}
     block.append(button(ui.saveNote,async()=>{
-      const selected=String(getSelection() || '').trim(),q=selected&&s.text.includes(selected)?selected:s.text.slice(0,1200),note=prompt(ui.notePrompt,'');if(note==null)return;
+      const selected=String(getSelection() || '').trim(),q=(selected&&s.text.includes(selected)?selected:s.text).slice(0,1200),note=prompt(ui.notePrompt,'');if(note==null)return;
       await request('note',{segment_id:s.id,quote:q,note});await notes();notice(ui.noteSaved);
     }));return block;
   }
-  async function read(eid,offset=0,charOffset=0){
-    episode=eid;$('episode-actions').hidden=false;const r=await request('podcast_read',{episode_id:eid,offset,char_offset:charOffset,...(highlight&&offset===0?{around_segment:highlight}:{})});episode=eid;$('episode-title').textContent=r.episode.title;$('episode-actions').hidden=false;
+  async function read(eid,offset=0,charOffset=0,focusSegment=''){
+    if(episode!==eid || (offset===0&&charOffset===0)){highlight=focusSegment;next=null;nextChar=0;$('more').hidden=true;$('reader').replaceChildren();notice('');}
+    episode=eid;$('episode-actions').hidden=false;const r=await request('podcast_read',{episode_id:eid,offset,char_offset:charOffset,...(highlight&&offset===0&&charOffset===0?{around_segment:highlight}:{})});episode=eid;$('episode-title').textContent=r.episode.title;$('episode-actions').hidden=false;
     if(offset===0&&charOffset===0)$('reader').replaceChildren();for(const s of r.segments)$('reader').append(renderSegment(s,r.episode));next=r.next_offset;nextChar=r.next_char_offset || 0;$('more').hidden=next==null;
     if(highlight)document.getElementById('segment-'+highlight)?.scrollIntoView({block:'center'});
   }
   async function notes(){const r=await request('notes');$('notes').replaceChildren();for(const n of r.notes){const row=node('label');row.className='item';const cb=node('input');cb.type='checkbox';cb.value=n.id;row.append(cb,node('span',n.show_title+' · '+n.title),node('blockquote',n.quote),node('span',n.note));$('notes').append(row);}}
   channel.onmessage=event=>{const m=event.data;if(m.type==='response'||m.type==='pong'){const p=pending.get(m.reqId);if(!p)return;clearTimeout(p.timer);pending.delete(m.reqId);(m.type==='pong'||m.ok)?p.resolve(m.result):p.reject(new Error(m.message || ui.failed));}
     if(m.type==='changed'){if(busy)refreshPending=true;else act(()=>refresh());}
-    if(m.type==='focus'){highlight=m.segment_id;act(()=>read(m.episode_id));}
+    if(m.type==='focus'){act(()=>read(m.episode_id,0,0,m.segment_id));}
   };
   addEventListener('podcast-ui-ready',()=>{ui=PodcastUI;
     $('import').onsubmit=e=>{e.preventDefault();act(async()=>{const r=await request('import_link',{url:$('url').value});notice(r.message || ui.openTask);});};
@@ -47,6 +48,6 @@
     $('cloud').onclick=()=>act(async()=>{const r=await request('cloud',{episode_id:episode});notice(r.message || ui.openTask);});
     $('file').onchange=()=>act(async()=>{const file=$('file').files[0];if(!file)return;if(file.size>5*1024*1024)throw new Error(ui.fileTooLarge);await request('podcast_import_transcript',{episode_id:episode,format:file.name.split('.').at(-1).toLowerCase(),content:await file.text()});$('file').value='';highlight='';await read(episode);});
     $('more').onclick=()=>act(()=>read(episode,next,nextChar));$('export').onclick=()=>act(async()=>{const ids=Array.from($('notes').querySelectorAll('input:checked')).map(e=>e.value);if(!ids.length){notice(ui.selectNotes);return;}const r=await request('export_notes',{ids});notice(r.cancelled?ui.cancelled:ui.exported);});
-    act(async()=>{const r=await fetch('/wake');if(!r.ok)throw new Error(ui.failed);await connect();await refresh();await notes();const cfg=await (await fetch('/kv')).json();if(cfg.selected){highlight=cfg.selected.segment_id;try{await read(cfg.selected.episode_id);}catch(e){notice(e.message);}}request('resume').catch(e=>notice(e.message));});
+    act(async()=>{const r=await fetch('/wake');if(!r.ok)throw new Error(ui.failed);await connect();await refresh();await notes();const cfg=await (await fetch('/kv')).json();if(cfg.selected){try{await read(cfg.selected.episode_id,0,0,cfg.selected.segment_id);}catch(e){notice(e.message);}}request('resume').catch(e=>notice(e.message));});
   });
 })();
