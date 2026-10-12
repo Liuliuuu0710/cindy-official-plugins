@@ -33,3 +33,6 @@ Additional0.2.5 fixes: source retrieval refuses the credentialed AssemblyAI API 
 0.2.9 fixes: Xiaoyuzhou candidate confirmation preserves the requested episodes selector. Import receipts are bounded to60000 bytes with omitted counts and library continuation; stored imports remain intact. Reader pages omit internal norm even with max_chars=1. Notes beyond5000 chars are rejected before saving with a clear message, not truncated. Full GUIDs remain reachable using library include_guid:true and cursors, even without a transcript.
 
 0.2.10 fixes: citation matching checks later direct quotes before earlier normalized matches; search results include source metadata in a60000-byte envelope; documented audio URL extensions allow query strings and fragments; invalid episode selectors fail before source fetch or writes; and each cloud job receives an independent polling budget.
+
+
+0.2.11 fixes: citation search no longer imposes a 20000-row cap; it reaches the full active transcript after source-cue splitting, including the final legal segment.

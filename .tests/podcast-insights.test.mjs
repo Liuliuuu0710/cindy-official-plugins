@@ -246,6 +246,15 @@ test('search counts repeated source metadata in its output budget',async()=>{
   }finally{h.close();}
 });
 
+test('citation reaches segments beyond the source-cue split expansion boundary',async()=>{
+  const h=harness();try{
+    const eid=await seed(h),segs=Array.from({length:20001},(_,i)=>({idx:i,text:i===20000?'final source quote':'filler '+i,norm:i===20000?'finalsourcequote':'filler'+i,speaker:'',start_ms:i,end_ms:i+1}));
+    await h.service.store(eid,segs,'user','txt','','beyond-limit');
+    const r=await h.service.run('podcast_cite',{references:[{episode_id:eid,quote:'final source quote'}]});
+    assert.equal(r.citations[0].status,'exact');assert.equal(r.citations[0].start_ms,20000);
+  }finally{h.close();}
+});
+
 
 test('citation cards retain late exact and normalized evidence and escaped source links',async()=>{
   const h=harness();try{

@@ -21,3 +21,5 @@ Metadata exceeding title500/author300/language64 chars, GUID/URL4000, date128 or
 0.2.9: Candidate confirmation preserves episodes selectors (latest:N or feed GUID arrays). Import receipts are at most60000 bytes, with episode/transcript omission counts and podcast_library continuation scoped to show_id; receipt omissions do not remove stored episodes, and include_guid:true in podcast_library exposes complete GUIDs within its existing budget/cursors, including episodes without transcripts. Reader pages do not return internal norm. Notes max5000 chars; longer input is rejected without saving.
 
 0.2.10: Citation matching checks all active transcript segments for a direct quote before normalized or adjacent matches. Search output has a60000-byte envelope including source metadata. Audio URL imports are limited to documented common extensions, including query strings and fragments. Episode selectors are validated before source fetches and writes. Cloud polling tracks each job's 29-minute/40-check budget independently.
+
+0.2.11: Citation lookup reads the complete active transcript without a row cap, so legal source-cue splitting cannot hide the final segment.

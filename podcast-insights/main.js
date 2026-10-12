@@ -624,7 +624,7 @@
       const all=r.episodes || [],episodes=C.budgetRows(all.map(e=>({id:e.id,guid:e.guid,title:e.title})),500,40000),rawTranscripts=r.transcripts || [],transcripts=C.budgetRows(rawTranscripts,50,16000);
       return {show_id:r.show_id,episodes,episode_count:all.length,episodes_omitted:all.length-episodes.length,transcripts,transcript_count:rawTranscripts.length,transcripts_omitted:rawTranscripts.length-transcripts.length,truncated:!!r.truncated,results_truncated:episodes.length<all.length||transcripts.length<rawTranscripts.length,...(r.rss_found===false?{rss_found:false}:{}),continuation:{tool:'podcast_library',args:{show_id:r.show_id,offset:0,include_guid:true}},max_output_bytes:60000};
     }
-    async segmentRows(eid,tid){return this.rows('SELECT g.* FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE t.episode_id=? AND '+(tid?'t.id=?':'t.is_active=1')+' ORDER BY g.idx LIMIT 20000',[eid,...(tid?[tid]:[])]);}
+    async segmentRows(eid,tid){return this.rows('SELECT g.* FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE t.episode_id=? AND '+(tid?'t.id=?':'t.is_active=1')+' ORDER BY g.idx',[eid,...(tid?[tid]:[])]);}
     async cite(a){
       const results=[];const segmentCache=new Map();let used=0;
       if(!Array.isArray(a.references)||a.references.length<1||a.references.length>20)C.fail('INVALID_INPUT');
