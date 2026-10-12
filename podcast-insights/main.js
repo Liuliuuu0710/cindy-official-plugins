@@ -545,6 +545,8 @@
       return r.body;
     }
     async episode(eid){const e=(await this.rows('SELECT e.id,e.show_id,e.guid,e.title,e.published_at,e.duration_s,e.audio_bytes,e.audio_url,e.page_url,e.transcript_state,s.title AS show_title FROM episodes e JOIN shows s ON s.id=e.show_id WHERE e.id=?',[eid]))[0];if(!e)C.fail('EPISODE_NOT_FOUND');return e;}
+    publicJob(j){if(!j)return j;const {audio_url,...safe}=j;return safe;}
+    publicEpisode(e){if(!e)return e;const {audio_url,...safe}=e;return safe;}
     async ingest(feed,source,kind){
       C.metadata(feed);
       const url=source?C.feedUrl(source):null;
@@ -667,10 +669,10 @@
           await this.sql("UPDATE jobs SET audio_url=?,est_usd=?,card_id=? WHERE id=? AND state='prepared'",[e.audio_url,est,cardId || existing.card_id,existing.id]);
           Object.assign(existing,{audio_url:e.audio_url,est_usd:est,card_id:cardId || existing.card_id});
         }
-        return {job:existing,episode:e,requires_user_confirmation:existing.state==='prepared'};
+        return {job:this.publicJob(existing),episode:this.publicEpisode(e),requires_user_confirmation:existing.state==='prepared'};
       }
       const job={id:id(),episode_id:eid,provider:'assemblyai',state:'prepared',remote_id:'',est_usd:e.duration_s==null?null:e.duration_s/3600*0.23,submitted_at:'',checked_at:'',error:'',card_id:cardId,audio_url:e.audio_url};
-      await this.sql('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)',Object.values(job));return {job,episode:e,requires_user_confirmation:true,rate_usd_per_hour:0.23,estimate_only:true};
+      await this.sql('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)',Object.values(job));return {job:this.publicJob(job),episode:this.publicEpisode(e),requires_user_confirmation:true,rate_usd_per_hour:0.23,estimate_only:true};
     }
     async prepareAfterClaim(j,eid,cardId){await this.releaseClaim(j);return this.prepare(eid,cardId);}
     async releaseClaim(j,allowSubmitting=false){
@@ -817,8 +819,13 @@
       if(tool==='podcast_cite')return this.cite(a);
       if(tool==='podcast_transcribe')return this.prepare(a.episode_id,callId || '');
       if(tool==='podcast_status'){
-        const jobs=await this.rows("SELECT * FROM jobs WHERE "+(a.job_id?'id=?':"state IN ('claiming','submitting','submitted','unknown')")+' LIMIT 100',a.job_id?[a.job_id]:[]),results=[];
-        for(let j of jobs){if(j.state==='submitting')j={...j,state:'unknown',error:'SUBMISSION_UNKNOWN'};try{results.push(await this.check(j));}catch(error){results.push({...j,errorCode:error.code || 'NETWORK_FAILED',recovery_incomplete:true});}}return {jobs:results};
+        const jobs=await this.rows("SELECT * FROM jobs WHERE "+(a.job_id?'id=?':"state IN ('claiming','submitting','submitted','unknown')")+' LIMIT 100',a.job_id?[a.job_id]:[]);
+        const checked=Array(jobs.length);let next=0;
+        const worker=async()=>{while(true){const index=next++;if(index>=jobs.length)return;let j=jobs[index];if(j.state==='submitting')j={...j,state:'unknown',error:'SUBMISSION_UNKNOWN'};try{checked[index]=await this.check(j);}catch(error){checked[index]={...j,errorCode:error.code || 'NETWORK_FAILED',recovery_incomplete:true};}}};
+        await Promise.all(Array.from({length:Math.min(4,jobs.length)},worker));
+        const results=[];let outputTruncated=false;const maxOutputBytes=60000,outputBudget=59000;
+        for(const result of checked){const safe=this.publicJob(result),candidate=[...results,safe];if(C.bytes(JSON.stringify({jobs:candidate,max_output_bytes:maxOutputBytes,results_truncated:false}))>outputBudget){outputTruncated=true;break;}results.push(safe);}
+        return {jobs:results,jobs_omitted:jobs.length-results.length,results_truncated:outputTruncated||results.length<jobs.length,max_output_bytes:maxOutputBytes};
       }
       C.fail('UNKNOWN_TOOL');
     }

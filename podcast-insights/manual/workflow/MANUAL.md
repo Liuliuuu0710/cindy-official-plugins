@@ -23,3 +23,5 @@ Metadata exceeding title500/author300/language64 chars, GUID/URL4000, date128 or
 0.2.10: Citation matching checks all active transcript segments for a direct quote before normalized or adjacent matches. Search output has a60000-byte envelope including source metadata. Audio URL imports are limited to documented common extensions, including query strings and fragments. Episode selectors are validated before source fetches and writes. Cloud polling tracks each job's 29-minute/40-check budget independently.
 
 0.2.11: Citation lookup reads the complete active transcript without a row cap, so legal source-cue splitting cannot hide the final segment.
+
+0.2.12: Cloud estimates and status responses omit full audio URLs before confirmation. Status checks use bounded concurrency and a60000-byte response budget.

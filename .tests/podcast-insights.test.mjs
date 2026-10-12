@@ -255,6 +255,15 @@ test('citation reaches segments beyond the source-cue split expansion boundary',
   }finally{h.close();}
 });
 
+test('cloud estimates and status never return audio URLs and status checks use bounded concurrency',async()=>{
+  let active=0,maxActive=0;const h=harness({network:async a=>{active++;maxActive=Math.max(maxActive,active);await new Promise(resolve=>setTimeout(resolve,2));active--;return {ok:true,status:200,body:JSON.stringify({id:a.url.split('/').pop(),status:'queued'})};}});
+  try{
+    const eid=await seed(h),estimate=await h.service.prepare(eid,'estimate-private');assert.equal(estimate.job.audio_url,undefined);assert.equal(estimate.episode.audio_url,undefined);
+    const insert=h.db.prepare('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)');for(let i=0;i<100;i++)insert.run('job-'+i,eid,'assemblyai','submitted','remote-'+i,null,new Date().toISOString(),'', '', 'slot-'+i,'https://audio.example.test/'+('x'.repeat(3900))+i+'.mp3');
+    const result=await h.service.run('podcast_status',{});assert.ok(maxActive>1&&maxActive<=4);assert.equal(result.jobs.length,100);assert.equal(result.jobs.some(j=>j.audio_url!==undefined),false);assert.equal(result.results_truncated,false);assert.ok(C.bytes(JSON.stringify(result))<=60000);
+  }finally{h.close();}
+});
+
 
 test('citation cards retain late exact and normalized evidence and escaped source links',async()=>{
   const h=harness();try{
@@ -327,7 +336,7 @@ test('prepared estimates refresh feed audio/price and changes after rendering re
   const h=harness();try{
     const eid=await seed(h),first=await h.service.prepare(eid,'estimate-1');
     await seed(h,{audio_url:'https://audio.example.test/two.mp3',duration_s:7200});
-    const refreshed=await h.service.prepare(eid,'estimate-2');assert.equal(refreshed.job.id,first.job.id);assert.equal(refreshed.job.audio_url,'https://audio.example.test/two.mp3');assert.equal(refreshed.job.est_usd,.46);
+    const refreshed=await h.service.prepare(eid,'estimate-2');assert.equal(refreshed.job.id,first.job.id);assert.equal(refreshed.job.audio_url,undefined);assert.equal(refreshed.episode.audio_url,undefined);assert.equal(h.db.prepare('SELECT audio_url FROM jobs WHERE id=?').get(first.job.id).audio_url,'https://audio.example.test/two.mp3');assert.equal(refreshed.job.est_usd,.46);
     await assert.rejects(h.service.submitFromClick(first.job.id,click(first.job.id)),/USER_CLICK_REQUIRED/);
     await seed(h,{audio_url:'https://audio.example.test/three.mp3',duration_s:1800});
     const changed=await h.service.submitFromClick(first.job.id,click(first.job.id,{callId:'estimate-2'}));assert.equal(changed.job.state,'prepared');assert.equal(changed.requires_user_confirmation,true);assert.equal(changed.job.est_usd,.115);assert.equal(h.calls.length,0);
