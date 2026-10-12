@@ -13,6 +13,7 @@
   async function refresh(append=false){
     const r=await request('podcast_library',{show_id:show || undefined,transcript_state:$('state').value || undefined,offset:append?episodeOffset || 0:0});
     if(!append){$('shows').replaceChildren(button(ui.allShows,async()=>{show='';await refresh();}));for(const s of r.shows){const row=node('div');row.append(button(s.title,async()=>{show=s.id;await refresh();}),button(ui.deleteShow,()=>confirmDelete('show',s.id)));$('shows').append(row);}$('episodes').replaceChildren();}
+    if(r.shows_truncated||r.jobs_truncated)notice(ui.libraryLimited);
     $('space').textContent=ui.space+': '+(r.used_bytes/1024/1024).toFixed(1)+' MB';
     for(const e of r.episodes){const row=node('div');row.className='item';row.append(button(e.title,async()=>{$('episode-title').textContent=e.title;await read(e.id);}),node('small',ui[e.transcript_state] || e.transcript_state));$('episodes').append(row);}
     if(!r.episodes.length&&!append)$('episodes').append(node('p',ui.empty));episodeOffset=r.next_offset;$('more-episodes').hidden=episodeOffset==null;

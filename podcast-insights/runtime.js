@@ -9,8 +9,9 @@
   const esc=C.escape;
   const time=ms=>ms==null?(ui.unknown || 'Unknown'):C.time(ms/1000);
   function citationText(c){
+    if(c.match_truncated||c.quote_omitted)return esc(ui.evidenceInLibrary);
     const text=c.text;
-    if(C.bytes(esc(text))<=6000)return esc(text);
+    if(C.bytes(esc(text))<=6000)return esc(text)+(c.text_truncated?'<br><small>'+esc(ui.excerptNotice)+'</small>':'');
     let start=text.indexOf(c.quote),end=start+c.quote.length;
     if(start<0){
       const needle=C.norm(c.quote),offset=C.norm(text).indexOf(needle);
@@ -31,7 +32,7 @@
     if(r.ok===false)body='<p>'+esc(r.message)+'</p>';
     else if(r.candidates)body='<p>'+esc(ui.chooseFeed || 'Choose the matching show')+'</p>'+r.candidates.map((c,i)=>'<p>'+esc(c.title)+' · '+esc(c.author)+'<br><button data-ghost-action="feed:'+r.pending_id+':'+i+'">'+esc(ui.choose || 'Choose')+'</button></p>').join('');
     else if(r.job){const j=r.job;body='<p>'+esc(r.episode?.title?.slice(0,500) || '')+'</p><p>'+esc(ui[j.state] || j.state)+'</p>'+(j.state==='prepared'?'<p>'+esc(ui.cloudDisclosure || 'AssemblyAI will fetch the complete audio. Confirm your right to process it and provider charges.')+'</p><p>'+esc(ui.estimate || 'Estimate')+': '+(j.est_usd==null?esc(ui.unknown || 'Unknown'):'$'+j.est_usd.toFixed(4))+' · $0.23/h</p><p>'+esc(ui.estimateDisclaimer || 'Estimate only; AssemblyAI billing prevails.')+'</p><button data-ghost-action="transcribe:'+j.id+'">'+esc(ui.confirmTranscribe || 'Confirm transcription')+'</button>':'<p>'+esc(ui.errors?.[j.error] || j.error || '')+'</p>');}
-    else if(r.citations){body=r.citations.filter(c=>c.status!=='not_found').slice(0,3).map(c=>'<section><p>'+esc(c.show_title)+' · '+esc(c.episode_title)+'</p><p>'+esc(c.speaker || ui.noSpeaker || 'Speaker not distinguished')+' · '+time(c.start_ms)+' · '+esc(c.status)+'</p><blockquote style="max-height:200px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere">'+citationText(c)+'</blockquote><button data-ghost-action="focus:'+c.episode_id+':'+c.id+'">'+esc(ui.viewLibrary || 'View in library')+'</button>'+(c.page_url?'<a href="'+esc(c.page_url)+'">'+esc(ui.source || 'Source')+'</a>':'')+'</section>').join('')+'<p>'+esc(ui.citeBoundary || 'Matching verifies words, not interpretation.')+'</p>';}
+    else if(r.citations){body=r.citations.filter(c=>c.status!=='not_found').slice(0,3).map(c=>'<section><p>'+esc(c.show_title)+' · '+esc(c.episode_title)+'</p><p>'+esc(c.speaker || ui.noSpeaker || 'Speaker not distinguished')+' · '+time(c.start_ms)+' · '+esc(c.status)+'</p><blockquote style="max-height:200px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere">'+citationText(c)+'</blockquote><button data-ghost-action="focus:'+c.episode_id+':'+c.id+'">'+esc(ui.viewLibrary || 'View in library')+'</button>'+(c.page_url?'<a href="'+esc(c.page_url)+'">'+esc(ui.source || 'Source')+'</a>':'')+'</section>').join('')+(r.citations.filter(c=>c.status!=='not_found').length>3?'<p>'+esc(ui.citationCardLimited)+'</p>':'')+'<p>'+esc(ui.citeBoundary || 'Matching verifies words, not interpretation.')+'</p>';}
     else body='<p>'+esc(ui.resultSaved || 'Result available in the library')+'</p>';
     return '<div style="padding:16px;color:var(--text-primary,#262626);font:14px/22px system-ui"><strong>'+esc(ui.title || 'Podcast Insights')+'</strong>'+body+'</div>';
   }

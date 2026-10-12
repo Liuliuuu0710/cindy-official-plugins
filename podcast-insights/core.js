@@ -3,6 +3,25 @@
   const L = typeof module !== 'undefined' ? require('./legacy-core.js') : root.PodcastCore;
   const bytes = s => new TextEncoder().encode(s).length;
   const norm = s => String(s).normalize('NFKC').toLowerCase().replace(/[\p{P}\p{Z}\s]/gu, '');
+  function metadata(feed){
+    const check=(value,max)=>{if(value!=null&&(typeof value!=='string'||value.length>max))L.fail('METADATA_FIELD_TOO_LONG');};
+    for(const [key,max] of [['title',500],['author',300],['language',64],['link',4000]])check(feed[key],max);
+    for(const e of feed.episodes || []){
+      for(const [key,max] of [['title',500],['guid',4000],['published_at',128],['audio_url',4000],['page_url',4000]])check(e[key],max);
+      if((e.transcripts || []).length>50)L.fail('METADATA_FIELD_TOO_LONG');
+      for(const t of e.transcripts || []){check(t.type,128);check(t.url,4000);}
+    }
+  }
+  function excerpt(full,needle,limit){
+    let left=0,right=full.length,matchEnd=full.length;
+    if(full.length>limit){
+      const offset=norm(full).indexOf(norm(needle));
+      const boundary=target=>{let lo=0,hi=full.length;while(lo<hi){const mid=Math.floor((lo+hi)/2);if(norm(full.slice(0,mid)).length<target)lo=mid+1;else hi=mid;}return lo;};
+      const matchStart=Math.max(0,boundary(offset+1)-8);matchEnd=Math.min(full.length,boundary(offset+norm(needle).length)+8);
+      left=Math.max(0,matchStart-Math.min(80,Math.max(0,limit-(matchEnd-matchStart))));right=Math.min(full.length,left+limit);
+    }
+    return {text:full.slice(left,right),text_truncated:left>0||right<full.length,excerpt_start:left,match_truncated:right<matchEnd};
+  }
   const isoDate = v => { const n=Date.parse(v); return Number.isFinite(n)?new Date(n).toISOString():''; };
   const feedUrl = value => { const u = new URL(L.url(value)); u.hash = ''; return u.href; };
   const nodes = (el, name) => Array.from(el.getElementsByTagName('*')).filter(n => n.localName === name);
@@ -70,6 +89,6 @@
     if (!show && !episode) L.fail('XYZ_PARSE_FAILED');
     return {title:show || episode.title,episodes:episode?[episode]:[]};
   }
-  const api={...L,bytes,norm,isoDate,feedUrl,feed,segments,xyz,duration};
+  const api={...L,bytes,norm,metadata,excerpt,isoDate,feedUrl,feed,segments,xyz,duration};
   if (typeof module!=='undefined') module.exports=api; else root.PodcastCore=api;
 })(globalThis);

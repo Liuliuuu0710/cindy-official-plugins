@@ -83,12 +83,15 @@
     "SOURCE_AUTH_REQUIRED": "来源需要登录授权。请提供可公开读取的 RSS 或转录；AssemblyAI 密钥不能授权此来源。",
     "SOURCE_PROVIDER_FORBIDDEN": "来源链接不能访问托管凭证的转录API，请提供公开RSS或转录链接。",
     "EMPTY_TRANSCRIPT": "服务商未返回语音转录，云任务已结束；请核对服务商费用并使用其他已获授权的来源。",
-    "TRANSCRIPT_SEGMENT_LIMIT": "转录超过20000个原始段落或字幕cue，请拆分为较小的文件后导入。"
+    "TRANSCRIPT_SEGMENT_LIMIT": "转录超过20000个原始段落或字幕cue，请拆分为较小的文件后导入。",
+    "METADATA_FIELD_TOO_LONG": "来源元数据字段过长，请缩短标题、作者或语言字段，或提供其他订阅源。"
   },
   "quoteTooLong": "引用超过1200字符，请缩短选中的原文；本次未保存",
   "excerptNotice": "展示命中原句附近的上下文；[…] 表示省略的原文。完整段落请在资料库核验。",
   "evidenceInLibrary": "命中段落超过卡片容量，请打开资料库核验完整原文。",
   "searchResults": "检索结果",
   "searchExcerpt": "检索摘录已省略部分正文，完整原文请在资料库查看。",
-  "searchLimited": "检索结果达到容量限制，请缩小关键词或节目/单集筛选范围。"
+  "searchLimited": "检索结果达到容量限制，请缩小关键词或节目/单集筛选范围。",
+  "citationCardLimited": "卡片仅展示前3条命中引用，其余请查看工具结果及资料库。",
+  "libraryLimited": "节目超过500条或云任务超过100条的快照已省略；仅单集支持分页。"
 }

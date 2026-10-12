@@ -387,6 +387,25 @@
   const L = typeof module !== 'undefined' ? require('./legacy-core.js') : root.PodcastCore;
   const bytes = s => new TextEncoder().encode(s).length;
   const norm = s => String(s).normalize('NFKC').toLowerCase().replace(/[\p{P}\p{Z}\s]/gu, '');
+  function metadata(feed){
+    const check=(value,max)=>{if(value!=null&&(typeof value!=='string'||value.length>max))L.fail('METADATA_FIELD_TOO_LONG');};
+    for(const [key,max] of [['title',500],['author',300],['language',64],['link',4000]])check(feed[key],max);
+    for(const e of feed.episodes || []){
+      for(const [key,max] of [['title',500],['guid',4000],['published_at',128],['audio_url',4000],['page_url',4000]])check(e[key],max);
+      if((e.transcripts || []).length>50)L.fail('METADATA_FIELD_TOO_LONG');
+      for(const t of e.transcripts || []){check(t.type,128);check(t.url,4000);}
+    }
+  }
+  function excerpt(full,needle,limit){
+    let left=0,right=full.length,matchEnd=full.length;
+    if(full.length>limit){
+      const offset=norm(full).indexOf(norm(needle));
+      const boundary=target=>{let lo=0,hi=full.length;while(lo<hi){const mid=Math.floor((lo+hi)/2);if(norm(full.slice(0,mid)).length<target)lo=mid+1;else hi=mid;}return lo;};
+      const matchStart=Math.max(0,boundary(offset+1)-8);matchEnd=Math.min(full.length,boundary(offset+norm(needle).length)+8);
+      left=Math.max(0,matchStart-Math.min(80,Math.max(0,limit-(matchEnd-matchStart))));right=Math.min(full.length,left+limit);
+    }
+    return {text:full.slice(left,right),text_truncated:left>0||right<full.length,excerpt_start:left,match_truncated:right<matchEnd};
+  }
   const isoDate = v => { const n=Date.parse(v); return Number.isFinite(n)?new Date(n).toISOString():''; };
   const feedUrl = value => { const u = new URL(L.url(value)); u.hash = ''; return u.href; };
   const nodes = (el, name) => Array.from(el.getElementsByTagName('*')).filter(n => n.localName === name);
@@ -454,7 +473,7 @@
     if (!show && !episode) L.fail('XYZ_PARSE_FAILED');
     return {title:show || episode.title,episodes:episode?[episode]:[]};
   }
-  const api={...L,bytes,norm,isoDate,feedUrl,feed,segments,xyz,duration};
+  const api={...L,bytes,norm,metadata,excerpt,isoDate,feedUrl,feed,segments,xyz,duration};
   if (typeof module!=='undefined') module.exports=api; else root.PodcastCore=api;
 })(globalThis);
 
@@ -516,12 +535,13 @@
       const hostname=new URL(C.url(url)).hostname.replace(/\.$/,'');
       if(hostname==='api.assemblyai.com'&&!cloud)C.fail('SOURCE_PROVIDER_FORBIDDEN');
       if(cloud&&hostname!=='api.assemblyai.com')C.fail('INVALID_INPUT');
-      const r=await this.host.fetch({url:C.url(url),...(callId?{callId}:{}),method:body?'POST':'GET',headers:{Accept:'application/json,application/xml,text/plain',...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),as:'text',timeoutMs:60000});
+      const r=await this.host.fetch({url:C.url(url),...(callId?{callId}:{}),method:body?'POST':'GET',headers:{Accept:cloud?'application/json':'application/rss+xml,application/atom+xml,application/xml,text/html,text/vtt,application/x-subrip,application/json,text/plain,*/*;q=0.1',...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),as:'text',timeoutMs:60000});
       if(!r?.ok || r.status<200 || r.status>=300 || r.truncated){const code=r?.status===401?(new URL(url).hostname==='api.assemblyai.com'?'AAI_KEY_MISSING':'SOURCE_AUTH_REQUIRED'):r?.status===403?'NETWORK_FORBIDDEN':'NETWORK_FAILED';throw Object.assign(new Error(code),{code,httpStatus:r?.status,httpResponseCompleted:r?.ok===true});}
       return r.body;
     }
     async episode(eid){const e=(await this.rows('SELECT e.*,s.title AS show_title FROM episodes e JOIN shows s ON s.id=e.show_id WHERE e.id=?',[eid]))[0];if(!e)C.fail('EPISODE_NOT_FOUND');return e;}
     async ingest(feed,source,kind){
+      C.metadata(feed);
       const url=source?C.feedUrl(source):null;
       let s=url?(await this.rows('SELECT id FROM shows WHERE feed_url=?',[url]))[0]:null;
       const sid=s?.id || id(), stamp=now();
@@ -581,9 +601,9 @@
     }
     async segmentRows(eid,tid){return this.rows('SELECT g.* FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE t.episode_id=? AND '+(tid?'t.id=?':'t.is_active=1')+' ORDER BY g.idx LIMIT 2000',[eid,...(tid?[tid]:[])]);}
     async cite(a){
-      const results=[];
+      const results=[];let used=0;
       if(!Array.isArray(a.references)||a.references.length<1||a.references.length>20)C.fail('INVALID_INPUT');
-      for(const ref of a.references){
+      for(const [reference_index,ref] of a.references.entries()){
         const e=await this.episode(ref.episode_id), quote=C.string(ref.quote,1200), needle=C.norm(quote);if(!needle)C.fail('INVALID_INPUT');
         // Locate normalized matches in SQL; then consider each candidate with its immediate neighbor.
         const escaped=needle.replace(/[\\%_]/g,'\\$&');
@@ -591,8 +611,10 @@
         let found=(await this.rows("SELECT g.* FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE t.episode_id=? AND t.is_active=1 AND g.norm LIKE ? ESCAPE '\\' ORDER BY g.idx LIMIT 1",[e.id,'%'+escaped+'%']))[0];
         if(found)found={...found,status:found.text.includes(quote)?'exact':'normalized'};
         for(const g of found?[]:candidates){const n=(await this.rows('SELECT * FROM segments WHERE transcript_id=? AND idx=?',[g.transcript_id,g.idx+1]))[0];const combined=g.text+(n?'\n'+n.text:'');const singleExact=g.text.includes(quote),singleNorm=g.norm.includes(needle);if(singleExact||singleNorm||combined.includes(quote)||C.norm(combined).includes(needle)){found={...g,text:singleExact||singleNorm?g.text:combined,end_ms:singleExact||singleNorm?g.end_ms:n?.end_ms ?? g.end_ms,status:singleExact||combined.includes(quote)?'exact':'normalized'};break;}}
-        results.push(found?{...found,episode_id:e.id,episode_title:e.title,show_title:e.show_title,page_url:e.page_url,quote,interpretation_verified:false}:{episode_id:e.id,quote,status:'not_found'});
-      }return {citations:results,interpretation_verified:false};
+        const shownQuote=20000-used>=quote.length?quote:'';used+=shownQuote.length;
+        if(found){delete found.norm;Object.assign(found,C.excerpt(found.text,quote,Math.min(800,20000-used)));used+=found.text.length;}
+        results.push(found?{...found,episode_id:e.id,episode_title:e.title,show_title:e.show_title,page_url:e.page_url,quote:shownQuote,quote_omitted:!shownQuote,reference_index,interpretation_verified:false}:{episode_id:e.id,quote:shownQuote,quote_omitted:!shownQuote,reference_index,status:'not_found'});
+      }return {citations:results,text_chars:used,max_text_chars:20000,results_truncated:results.some(r=>r.text_truncated||r.quote_omitted),interpretation_verified:false};
     }
     async prepare(eid,cardId=''){
       const e=await this.episode(eid);if(!e.audio_url)C.fail('AUDIO_URL_REQUIRED');
@@ -717,7 +739,7 @@
         const limit=Math.max(1,Math.min(500,Number(a.limit)||100)),offset=Math.max(0,Number(a.offset)||0);
         const where=[],params=[];if(a.show_id){where.push('e.show_id=?');params.push(a.show_id);}if(a.transcript_state){where.push('e.transcript_state=?');params.push(a.transcript_state);}
         const episodes=await this.rows('SELECT e.*,s.title AS show_title FROM episodes e JOIN shows s ON s.id=e.show_id'+(where.length?' WHERE '+where.join(' AND '):'')+' ORDER BY e.published_at DESC,e.id LIMIT ? OFFSET ?',[...params,limit,offset]);
-        const status=await this.io({op:'status'});return {shows:await this.rows('SELECT * FROM shows ORDER BY title LIMIT 500'),episodes,next_offset:episodes.length===limit?offset+limit:null,used_bytes:status.usedBytes,jobs:await this.rows('SELECT * FROM jobs ORDER BY submitted_at DESC LIMIT 100')};
+        const status=await this.io({op:'status'}),shows=await this.rows('SELECT * FROM shows ORDER BY title LIMIT 501'),jobs=await this.rows('SELECT * FROM jobs ORDER BY submitted_at DESC LIMIT 101');return {shows:shows.slice(0,500),shows_truncated:shows.length>500,episodes,next_offset:episodes.length===limit?offset+limit:null,used_bytes:status.usedBytes,jobs:jobs.slice(0,100),jobs_truncated:jobs.length>100};
       }
       if(tool==='podcast_read'){
         const e=await this.episode(a.episode_id);const limit=Math.max(1,Math.min(20000,Number(a.max_chars)||10000));let offset=Math.max(0,Number(a.offset)||0);
@@ -740,14 +762,7 @@
         for(const r of found){
           if(used>=20000)break;
           if(!r.norm.includes(q)&&r.next_id){r.matched_segment_ids=[r.id,r.next_id];r.text+='\n'+r.next_text;r.norm+=C.norm(r.next_text);r.end_ms=r.next_end_ms;}
-          const full=r.text,offset=r.norm.indexOf(q),limit=Math.min(1000,20000-used);
-          let left=0,right=full.length,matchEnd=full.length;
-          if(full.length>limit){
-            const boundary=target=>{let lo=0,hi=full.length;while(lo<hi){const mid=Math.floor((lo+hi)/2);if(C.norm(full.slice(0,mid)).length<target)lo=mid+1;else hi=mid;}return lo;};
-            const matchStart=Math.max(0,boundary(offset+1)-8);matchEnd=Math.min(full.length,boundary(offset+q.length)+8);
-            left=Math.max(0,matchStart-Math.min(80,Math.max(0,limit-(matchEnd-matchStart))));right=Math.min(full.length,left+limit);
-          }
-          r.text=full.slice(left,right);r.text_truncated=left>0||right<full.length;r.excerpt_start=left;r.match_truncated=right<matchEnd;r.context=[];
+          Object.assign(r,C.excerpt(r.text,q,Math.min(1000,20000-used)));r.context=[];
           delete r.norm;delete r.next_id;delete r.next_text;delete r.next_end_ms;
           used+=r.text.length;evidence.push(r);
         }return {evidence,text_chars:used,max_text_chars:20000,results_truncated:evidence.length<found.length||found.length===50};
@@ -785,8 +800,9 @@
   const esc=C.escape;
   const time=ms=>ms==null?(ui.unknown || 'Unknown'):C.time(ms/1000);
   function citationText(c){
+    if(c.match_truncated||c.quote_omitted)return esc(ui.evidenceInLibrary);
     const text=c.text;
-    if(C.bytes(esc(text))<=6000)return esc(text);
+    if(C.bytes(esc(text))<=6000)return esc(text)+(c.text_truncated?'<br><small>'+esc(ui.excerptNotice)+'</small>':'');
     let start=text.indexOf(c.quote),end=start+c.quote.length;
     if(start<0){
       const needle=C.norm(c.quote),offset=C.norm(text).indexOf(needle);
@@ -807,7 +823,7 @@
     if(r.ok===false)body='<p>'+esc(r.message)+'</p>';
     else if(r.candidates)body='<p>'+esc(ui.chooseFeed || 'Choose the matching show')+'</p>'+r.candidates.map((c,i)=>'<p>'+esc(c.title)+' · '+esc(c.author)+'<br><button data-ghost-action="feed:'+r.pending_id+':'+i+'">'+esc(ui.choose || 'Choose')+'</button></p>').join('');
     else if(r.job){const j=r.job;body='<p>'+esc(r.episode?.title?.slice(0,500) || '')+'</p><p>'+esc(ui[j.state] || j.state)+'</p>'+(j.state==='prepared'?'<p>'+esc(ui.cloudDisclosure || 'AssemblyAI will fetch the complete audio. Confirm your right to process it and provider charges.')+'</p><p>'+esc(ui.estimate || 'Estimate')+': '+(j.est_usd==null?esc(ui.unknown || 'Unknown'):'$'+j.est_usd.toFixed(4))+' · $0.23/h</p><p>'+esc(ui.estimateDisclaimer || 'Estimate only; AssemblyAI billing prevails.')+'</p><button data-ghost-action="transcribe:'+j.id+'">'+esc(ui.confirmTranscribe || 'Confirm transcription')+'</button>':'<p>'+esc(ui.errors?.[j.error] || j.error || '')+'</p>');}
-    else if(r.citations){body=r.citations.filter(c=>c.status!=='not_found').slice(0,3).map(c=>'<section><p>'+esc(c.show_title)+' · '+esc(c.episode_title)+'</p><p>'+esc(c.speaker || ui.noSpeaker || 'Speaker not distinguished')+' · '+time(c.start_ms)+' · '+esc(c.status)+'</p><blockquote style="max-height:200px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere">'+citationText(c)+'</blockquote><button data-ghost-action="focus:'+c.episode_id+':'+c.id+'">'+esc(ui.viewLibrary || 'View in library')+'</button>'+(c.page_url?'<a href="'+esc(c.page_url)+'">'+esc(ui.source || 'Source')+'</a>':'')+'</section>').join('')+'<p>'+esc(ui.citeBoundary || 'Matching verifies words, not interpretation.')+'</p>';}
+    else if(r.citations){body=r.citations.filter(c=>c.status!=='not_found').slice(0,3).map(c=>'<section><p>'+esc(c.show_title)+' · '+esc(c.episode_title)+'</p><p>'+esc(c.speaker || ui.noSpeaker || 'Speaker not distinguished')+' · '+time(c.start_ms)+' · '+esc(c.status)+'</p><blockquote style="max-height:200px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere">'+citationText(c)+'</blockquote><button data-ghost-action="focus:'+c.episode_id+':'+c.id+'">'+esc(ui.viewLibrary || 'View in library')+'</button>'+(c.page_url?'<a href="'+esc(c.page_url)+'">'+esc(ui.source || 'Source')+'</a>':'')+'</section>').join('')+(r.citations.filter(c=>c.status!=='not_found').length>3?'<p>'+esc(ui.citationCardLimited)+'</p>':'')+'<p>'+esc(ui.citeBoundary || 'Matching verifies words, not interpretation.')+'</p>';}
     else body='<p>'+esc(ui.resultSaved || 'Result available in the library')+'</p>';
     return '<div style="padding:16px;color:var(--text-primary,#262626);font:14px/22px system-ui"><strong>'+esc(ui.title || 'Podcast Insights')+'</strong>'+body+'</div>';
   }

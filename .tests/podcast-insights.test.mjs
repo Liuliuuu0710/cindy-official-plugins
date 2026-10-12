@@ -439,3 +439,52 @@ test('large legal search inputs emit bounded matching excerpts without normalize
     assert.ok(C.bytes(JSON.stringify(r))<50000);
   }finally{h.close();}
 });
+
+
+test('oversized source metadata is rejected before any show/episode write',async()=>{
+  const h=harness();try{
+    await h.service.init();
+    for(const field of ['title','author','language']){const feed={title:'Show',episodes:[{guid:'one',title:'Episode'}],[field]:'x'.repeat(9*1024*1024)};await assert.rejects(h.service.ingest(feed,'https://example.test/feed','rss'),/METADATA_FIELD_TOO_LONG/);}
+    await assert.rejects(h.service.ingest({title:'Show',episodes:[{guid:'one',title:'x'.repeat(501)}]},'https://example.test/feed','rss'),/METADATA_FIELD_TOO_LONG/);
+    assert.equal(h.db.prepare('SELECT count(*) n FROM shows').get().n,0);assert.equal(h.db.prepare('SELECT count(*) n FROM episodes').get().n,0);
+    await h.service.ingest({title:'x'.repeat(500),author:'a'.repeat(300),language:'z'.repeat(64),episodes:[{guid:'one',title:'Episode'}]},'https://example.test/feed','rss');
+    assert.equal((await h.service.run('podcast_library')).episodes[0].show_title.length,500);
+  }finally{h.close();}
+});
+
+test('twenty large citations preserve reference association inside total quote/excerpt budget',async()=>{
+  const h=harness();try{
+    const eid=await seed(h),quote='Q'.repeat(1200);await h.service.run('podcast_import_transcript',{episode_id:eid,format:'txt',content:'a'.repeat(5000)+quote+'b'.repeat(5000)});
+    const r=await h.service.run('podcast_cite',{references:Array.from({length:20},()=>({episode_id:eid,quote}))});assert.equal(r.citations.length,20);assert.ok(r.text_chars<=20000);assert.equal(r.text_chars,r.citations.reduce((n,c)=>n+c.text.length+c.quote.length,0));assert.equal(r.results_truncated,true);
+    for(const [i,c]of r.citations.entries()){assert.equal(c.reference_index,i);assert.equal(c.status,'exact');assert.equal(c.norm,undefined);assert.ok(c.text.length<=800);assert.equal(c.quote_omitted,c.quote.length===0);assert.equal(c.text_truncated,true);}
+    assert.ok(C.bytes(JSON.stringify(r))<35000);
+  }finally{h.close();}
+});
+
+test('query/quote limits are explicit schemas and all-language contracts',async()=>{
+  const manifest=JSON.parse(fs.readFileSync(new URL('../podcast-insights/ghost.json',import.meta.url),'utf8'));
+  assert.equal(manifest.tools.find(t=>t.name==='podcast_search').parameters.properties.query.maxLength,300);assert.equal(manifest.tools.find(t=>t.name==='podcast_cite').parameters.properties.references.items.properties.quote.maxLength,1200);
+  for(const lang of ['en','zh-CN','ja','ko']){const locale=JSON.parse(fs.readFileSync(new URL('../podcast-insights/locales/'+lang+'.json',import.meta.url),'utf8'));assert.match(locale.tools.podcast_cite.description,/1200/);assert.match(locale.tools.podcast_search.description,/300/);assert.match(locale.tools.podcast_library.description,/500/);assert.match(locale.tools.podcast_library.description,/100/);}
+  const h=harness();try{const eid=await seed(h);await assert.rejects(h.service.run('podcast_search',{query:'x'.repeat(301)}),/INVALID_INPUT/);await assert.rejects(h.service.run('podcast_cite',{references:[{episode_id:eid,quote:'x'.repeat(1201)}]}),/INVALID_INPUT/);}finally{h.close();}
+});
+
+test('citation card explicitly discloses additional matches beyond its first three',async()=>{
+  let listener,deliver,card;const response=new Promise(resolve=>{deliver=resolve;});
+  const citations=Array.from({length:4},(_,i)=>({id:String(i),episode_id:'episode',text:'Source '+i,quote:'Source '+i,status:'exact',show_title:'Show',episode_title:'Episode',start_ms:1000}));
+  const ctx={PodcastCore:C,PodcastService:class{async run(){return {citations};}},fetch:async()=>({ok:true,json:async()=>({citationCardLimited:'Only first3 matches shown'})}),BroadcastChannel:class{postMessage(){}},setInterval,clearInterval,setTimeout,Date,cindy:{request:async()=>({context:{locale:'en'}}),onHostMessage:f=>{listener=f;},send:async m=>{if(m.type==='card-update')card=m;if(m.type==='tool-result')deliver(m);}}};
+  vm.runInNewContext(fs.readFileSync(new URL('../podcast-insights/runtime.js',import.meta.url),'utf8'),ctx);listener({type:'tool-call',tool:'podcast_cite',callId:'four-citations'});await response;assert.match(card.html,/Only first3 matches shown/);assert.equal(card.html.split('<section>').length-1,3);
+});
+
+test('library marks fixed show/job snapshots and keeps episode pagination independent',async()=>{
+  const h=harness();try{
+    const eid=await seed(h);const statements=[];
+    for(let i=0;i<501;i++)statements.push({sql:'INSERT INTO shows VALUES(?,?,?,?,?,?,?,?,?)',params:['show-'+i,'https://example.test/feed/'+i,'Show '+i,'','','','rss','','']});
+    for(let i=0;i<101;i++)statements.push({sql:'INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)',params:['job-'+i,eid,'assemblyai','failed','',null,String(i).padStart(4,'0'),'','','','https://audio.example.test/a.mp3']});
+    await h.service.batch(statements);const r=await h.service.run('podcast_library',{limit:1});assert.equal(r.shows.length,500);assert.equal(r.jobs.length,100);assert.equal(r.shows_truncated,true);assert.equal(r.jobs_truncated,true);assert.equal(r.next_offset,1);
+    const next=await h.service.run('podcast_library',{limit:1,offset:1});assert.equal(next.episodes.length,0);assert.equal(next.shows.length,500);assert.equal(next.jobs.length,100);
+  }finally{h.close();}
+});
+
+test('source Accept supports RSS Atom HTML and subtitle content negotiation',async()=>{
+  const h=harness({network:async a=>{for(const type of ['application/rss+xml','application/atom+xml','text/html','text/vtt','application/x-subrip'])assert.ok(a.headers.Accept.includes(type));return {ok:true,status:200,body:'Synthetic source'};}});try{await h.service.network('https://example.test/feed','source-call');assert.equal(h.calls.length,1);}finally{h.close();}
+});
