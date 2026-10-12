@@ -200,11 +200,19 @@
         return {episode:e,segments,next_offset:segments.length<rows.length||rows.length===2000?offset+segments.length:null};
       }
       if(tool==='podcast_search'){
-        const q=C.norm(C.string(a.query,300));if(!q)C.fail('INVALID_QUERY');const where=['t.is_active=1',"g.norm LIKE ? ESCAPE '\\'"],params=['%'+q.replace(/[\\%_]/g,'\\$&')+'%'];
+        const q=C.norm(C.string(a.query,300));if(!q)C.fail('INVALID_QUERY');
+        const pattern='%'+q.replace(/[\\%_]/g,'\\$&')+'%',width=Array.from(q).length-1;
+        // A suffix/prefix window can match only a crossing query, not a hit
+        // entirely in the next segment. This also covers artificial long-text cuts.
+        const where=['t.is_active=1',width>0?"(g.norm LIKE ? ESCAPE '\\' OR (substr(g.norm,?) || substr(COALESCE(n.norm,''),1,?)) LIKE ? ESCAPE '\\')":"g.norm LIKE ? ESCAPE '\\'"],params=width>0?[pattern,-width,width,pattern]:[pattern];
         for(const [key,col] of [['show_id','e.show_id'],['episode_id','e.id']])if(a[key]){where.push(col+'=?');params.push(a[key]);}
         if(a.from_ms!=null){where.push('g.start_ms>=?');params.push(a.from_ms);}if(a.to_ms!=null){where.push('g.start_ms<=?');params.push(a.to_ms);}
-        const found=await this.rows('SELECT g.*,e.id AS episode_id,e.title AS episode_title,e.page_url,s.title AS show_title FROM segments g JOIN transcripts t ON t.id=g.transcript_id JOIN episodes e ON e.id=t.episode_id JOIN shows s ON s.id=e.show_id WHERE '+where.join(' AND ')+' ORDER BY e.published_at DESC,g.idx LIMIT 50',params);
-        for(const r of found)r.context=await this.rows('SELECT text,start_ms,speaker FROM segments WHERE transcript_id=? AND idx IN (?,?) ORDER BY idx',[r.transcript_id,r.idx-1,r.idx+1]);return {evidence:found};
+        const found=await this.rows('SELECT g.*,n.id AS next_id,n.text AS next_text,n.end_ms AS next_end_ms,e.id AS episode_id,e.title AS episode_title,e.page_url,s.title AS show_title FROM segments g LEFT JOIN segments n ON n.transcript_id=g.transcript_id AND n.idx=g.idx+1 AND n.start_ms IS g.start_ms AND n.end_ms IS g.end_ms AND n.speaker=g.speaker JOIN transcripts t ON t.id=g.transcript_id JOIN episodes e ON e.id=t.episode_id JOIN shows s ON s.id=e.show_id WHERE '+where.join(' AND ')+' ORDER BY e.published_at DESC,g.idx LIMIT 50',params);
+        for(const r of found){
+          if(!r.norm.includes(q)&&r.next_id){r.matched_segment_ids=[r.id,r.next_id];r.text+='\n'+r.next_text;r.norm+=C.norm(r.next_text);r.end_ms=r.next_end_ms;}
+          delete r.next_id;delete r.next_text;delete r.next_end_ms;
+          r.context=await this.rows('SELECT text,start_ms,speaker FROM segments WHERE transcript_id=? AND idx IN (?,?) ORDER BY idx',[r.transcript_id,r.idx-1,r.idx+1]);
+        }return {evidence:found};
       }
       if(tool==='podcast_cite')return this.cite(a);
       if(tool==='podcast_transcribe')return this.prepare(a.episode_id,callId || '');

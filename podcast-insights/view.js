@@ -26,7 +26,9 @@
     block.append(quote);
     if(e.page_url){const a=node('a',ui.source);a.href=e.page_url;block.append(a);}
     block.append(button(ui.saveNote,async()=>{
-      const selected=String(getSelection() || '').trim(),q=(selected&&s.text.includes(selected)?selected:s.text).slice(0,1200),note=prompt(ui.notePrompt,'');if(note==null)return;
+      const selected=String(getSelection() || '').trim(),q=selected&&s.text.includes(selected)?selected:s.text;
+      if(q.length>1200)throw new Error(ui.quoteTooLong);
+      const note=prompt(ui.notePrompt,'');if(note==null)return;
       await request('note',{segment_id:s.id,quote:q,note});await notes();notice(ui.noteSaved);
     }));return block;
   }

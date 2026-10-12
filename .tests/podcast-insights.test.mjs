@@ -205,3 +205,17 @@ test('long completed cloud utterances persist and submit only approved fields',a
     assert.ok(rows.every(r=>r.start_ms===1000&&r.end_ms===90000));
   }finally{h.close();}
 });
+test('search finds Chinese keywords across artificial text cuts without duplicate next-only hits',async()=>{
+  const h=harness();try{
+    const eid=await seed(h);
+    await h.service.run('podcast_import_transcript',{episode_id:eid,format:'txt',content:'a'.repeat(11999)+'城市绿地'});
+    const cross=await h.service.run('podcast_search',{query:'城市',episode_id:eid});
+    assert.equal(cross.evidence.length,1);assert.equal(cross.evidence[0].matched_segment_ids.length,2);assert.ok(C.norm(cross.evidence[0].text).includes('城市'));
+    assert.equal((await h.service.run('podcast_search',{query:'绿地',episode_id:eid})).evidence.length,1);
+    assert.equal((await h.service.run('podcast_search',{query:'市',episode_id:eid})).evidence.length,1);
+    assert.equal((await h.service.run('podcast_search',{query:'不存在',episode_id:eid})).evidence.length,0);
+    const cite=await h.service.run('podcast_cite',{references:[{episode_id:eid,quote:'城市'}]});assert.equal(cite.citations[0].status,'normalized');
+    await h.service.run('podcast_import_transcript',{episode_id:eid,format:'json',content:JSON.stringify([{text:'城',start:1,end:2,speaker:'A'},{text:'市',start:4,end:5,speaker:'A'}])});
+    assert.equal((await h.service.run('podcast_search',{query:'城市',to_ms:2000})).evidence.length,0);
+  }finally{h.close();}
+});

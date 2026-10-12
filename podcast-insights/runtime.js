@@ -43,7 +43,8 @@
     }
     if(m.tool==='note'){
       const seg=(await service.rows('SELECT g.*,t.episode_id FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE g.id=?',[m.args.segment_id]))[0];if(!seg)C.fail('SEGMENT_NOT_FOUND');
-      const quote=C.string(m.args.quote,1200);if(!seg.text.includes(quote))C.fail('QUOTE_MISMATCH');const e=await service.episode(seg.episode_id);
+      const quote=C.string(m.args.quote,1200),next=(await service.rows('SELECT text FROM segments WHERE transcript_id=? AND idx=?',[seg.transcript_id,seg.idx+1]))[0];
+      if(!(seg.text+(next?'\n'+next.text:'')).includes(quote))C.fail('QUOTE_MISMATCH');const e=await service.episode(seg.episode_id);
       await service.sql('INSERT INTO notes VALUES(?,?,?,?,?,?,?)',[crypto.randomUUID(),e.id,seg.id,quote,String(m.args.note || '').slice(0,5000),e.page_url,new Date().toISOString()]);return {saved:true};
     }
     if(m.tool==='notes')return {notes:await service.rows('SELECT n.*,e.title,s.title AS show_title FROM notes n JOIN episodes e ON e.id=n.episode_id JOIN shows s ON s.id=e.show_id ORDER BY n.created_at DESC LIMIT 500')};

@@ -81,5 +81,6 @@
     "AAI_REJECTED": "服务商拒绝提交，请检查密钥或请求参数",
     "XML_UNAVAILABLE": "XML 解析器不可用，请更新 Cindy 或导入转录文本",
     "SOURCE_AUTH_REQUIRED": "来源需要登录授权。请提供可公开读取的 RSS 或转录；AssemblyAI 密钥不能授权此来源。"
-  }
+  },
+  "quoteTooLong": "引用超过1200字符，请缩短选中的原文；本次未保存"
 }
