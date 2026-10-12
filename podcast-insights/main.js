@@ -584,7 +584,7 @@
         const j=JSON.parse(await this.network('https://itunes.apple.com/search?media=podcast&entity=podcast&limit=10&term='+encodeURIComponent(feed.title),callId));
         const candidates=(j.results || []).filter(r=>r.feedUrl).map(r=>({title:r.collectionName,author:r.artistName,feed_url:C.url(r.feedUrl)}));
         if(candidates.length){
-          const pending_id=id();await this.sql('INSERT INTO meta VALUES(?,?)',['import:'+pending_id,JSON.stringify({source,feed,candidates})]);
+          const pending_id=id();await this.sql('INSERT INTO meta VALUES(?,?)',['import:'+pending_id,JSON.stringify({source,feed,candidates,episodes:a.episodes})]);
           return {pending_id,candidates,requires_user_confirmation:true,message:'Choose the matching RSS; no candidate has been selected automatically.'};
         }
         if(!feed.episodes.length)C.fail('RSS_NOT_FOUND');
@@ -603,6 +603,14 @@
         catch(error){await this.sql("UPDATE episodes SET transcript_state=CASE WHEN transcript_state='ready' THEN transcript_state ELSE 'failed' END WHERE id=?",[e.id]);transcripts.push({episode_id:e.id,errorCode:error.code || 'NETWORK_FAILED'});}
       }
       return {...result,episodes:result.episodes.map(e=>({id:e.id,guid:e.guid,title:e.title})),transcripts};
+    }
+    importReceipt(r){
+      if(r.candidates){
+        const candidates=C.budgetRows(r.candidates.map(c=>({...c,title:String(c.title || '').slice(0,200),author:String(c.author || '').slice(0,100)})),10,40000);
+        return {...r,candidates,candidates_omitted:r.candidates.length-candidates.length,max_output_bytes:60000};
+      }
+      const all=r.episodes || [],episodes=C.budgetRows(all.map(e=>({id:e.id,guid:e.guid,title:e.title})),500,40000),rawTranscripts=r.transcripts || [],transcripts=C.budgetRows(rawTranscripts,50,16000);
+      return {show_id:r.show_id,episodes,episode_count:all.length,episodes_omitted:all.length-episodes.length,transcripts,transcript_count:rawTranscripts.length,transcripts_omitted:rawTranscripts.length-transcripts.length,truncated:!!r.truncated,results_truncated:episodes.length<all.length||transcripts.length<rawTranscripts.length,...(r.rss_found===false?{rss_found:false}:{}),continuation:{tool:'podcast_library',args:{show_id:r.show_id,offset:0,include_guid:true}},max_output_bytes:60000};
     }
     async segmentRows(eid,tid){return this.rows('SELECT g.* FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE t.episode_id=? AND '+(tid?'t.id=?':'t.is_active=1')+' ORDER BY g.idx LIMIT 2000',[eid,...(tid?[tid]:[])]);}
     async cite(a){
@@ -738,12 +746,12 @@
     }
     async runData(tool,a={},callId){
       await this.init();
-      if(tool==='podcast_import')return this.importSource(a,callId);
+      if(tool==='podcast_import')return this.importReceipt(await this.importSource(a,callId));
       if(tool==='podcast_import_transcript'){await this.episode(a.episode_id);return this.store(a.episode_id,C.segments(a.content,a.format),'user',a.format);}
       if(tool==='podcast_library'){
         const limit=Math.max(1,Math.min(500,Number(a.limit)||100)),offset=Math.max(0,Number(a.offset)||0);
         const where=[],params=[];if(a.show_id){where.push('e.show_id=?');params.push(a.show_id);}if(a.transcript_state){where.push('e.transcript_state=?');params.push(a.transcript_state);}
-        const raw=await this.rows('SELECT e.id,e.show_id,substr(e.title,1,200) AS title,substr(s.title,1,100) AS show_title,e.published_at,e.duration_s,e.audio_bytes,e.transcript_state,(length(e.audio_url)>0) AS has_audio,(length(e.title)>200 OR length(s.title)>100) AS metadata_truncated FROM episodes e JOIN shows s ON s.id=e.show_id'+(where.length?' WHERE '+where.join(' AND '):'')+' ORDER BY e.published_at DESC,e.id LIMIT ? OFFSET ?',[...params,limit,offset]);
+        const raw=await this.rows('SELECT e.id,e.show_id,substr(e.title,1,200) AS title,substr(s.title,1,100) AS show_title,e.published_at,e.duration_s,e.audio_bytes,e.transcript_state,(length(e.audio_url)>0) AS has_audio,(length(e.title)>200 OR length(s.title)>100) AS metadata_truncated'+(a.include_guid===true?',e.guid':'')+' FROM episodes e JOIN shows s ON s.id=e.show_id'+(where.length?' WHERE '+where.join(' AND '):'')+' ORDER BY e.published_at DESC,e.id LIMIT ? OFFSET ?',[...params,limit,offset]);
         const episodes=C.budgetRows(raw,limit,20000),status=await this.io({op:'status'});
         const rawShows=await this.rows('SELECT id,substr(title,1,200) AS title,substr(author,1,100) AS author,language,(length(title)>200 OR length(author)>100) AS metadata_truncated FROM shows ORDER BY title,id LIMIT 501');
         const rawJobs=await this.rows('SELECT id,episode_id,provider,state,remote_id,est_usd,submitted_at,checked_at,error,card_id FROM jobs ORDER BY submitted_at DESC,id LIMIT 101');
@@ -754,7 +762,7 @@
         const e=await this.episode(a.episode_id);const limit=Math.max(1,Math.min(20000,Number(a.max_chars)||10000));let offset=Math.max(0,Number(a.offset)||0);
         if(a.around_segment){const r=(await this.rows('SELECT g.idx FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE g.id=? AND t.episode_id=? AND t.is_active=1',[a.around_segment,e.id]))[0];if(!r)C.fail('SEGMENT_NOT_FOUND');offset=r.idx;}
         if(a.from_ms!=null){const r=(await this.rows('SELECT g.idx FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE t.episode_id=? AND t.is_active=1 AND g.start_ms>=? ORDER BY g.idx LIMIT 1',[e.id,a.from_ms]))[0];if(!r)return {episode:e,segments:[],next_offset:null};offset=r.idx;}
-        const rows=await this.rows('SELECT g.* FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE t.episode_id=? AND t.is_active=1 AND g.idx>=? ORDER BY g.idx LIMIT 2000',[e.id,offset]);if(!rows.length && e.transcript_state!=='ready')C.fail('NO_TRANSCRIPT');
+        const rows=await this.rows('SELECT g.id,g.transcript_id,g.idx,g.text,g.speaker,g.start_ms,g.end_ms FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE t.episode_id=? AND t.is_active=1 AND g.idx>=? ORDER BY g.idx LIMIT 2000',[e.id,offset]);if(!rows.length && e.transcript_state!=='ready')C.fail('NO_TRANSCRIPT');
         const segments=[];let n=0;for(const raw of rows){const r={...raw};const charOffset=raw.idx===offset?Math.max(0,Number(a.char_offset)||0):0;r.text=r.text.slice(charOffset);if(n+r.text.length>limit){if(!segments.length)return {episode:e,segments:[{...r,text:r.text.slice(0,limit),text_truncated:true}],next_offset:r.idx,next_char_offset:charOffset+limit};break;}segments.push(r);n+=r.text.length;}
         return {episode:e,segments,next_offset:segments.length<rows.length||rows.length===2000?offset+segments.length:null};
       }
@@ -870,7 +878,8 @@
       const seg=(await service.rows('SELECT g.*,t.episode_id FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE g.id=?',[m.args.segment_id]))[0];if(!seg)C.fail('SEGMENT_NOT_FOUND');
       const quote=C.string(m.args.quote,1200),next=(await service.rows('SELECT text FROM segments WHERE transcript_id=? AND idx=?',[seg.transcript_id,seg.idx+1]))[0];
       if(!(seg.text+(next?'\n'+next.text:'')).includes(quote))C.fail('QUOTE_MISMATCH');const e=await service.episode(seg.episode_id);
-      await service.sql('INSERT INTO notes VALUES(?,?,?,?,?,?,?)',[crypto.randomUUID(),e.id,seg.id,quote,String(m.args.note || '').slice(0,5000),e.page_url,new Date().toISOString()]);return {saved:true};
+      const note=m.args.note ?? '';if(typeof note!=='string')C.fail('INVALID_INPUT');if(note.length>5000)C.fail('NOTE_TOO_LONG');
+      await service.sql('INSERT INTO notes VALUES(?,?,?,?,?,?,?)',[crypto.randomUUID(),e.id,seg.id,quote,note,e.page_url,new Date().toISOString()]);return {saved:true};
     }
     if(m.tool==='notes')return service.notes(m.args);
     if(m.tool==='export_notes'){
@@ -903,8 +912,8 @@
         else if(msg.actionId.startsWith('focus:')){
           const [,episode_id,segment_id]=msg.actionId.split(':');const cfg=await (await fetch('/kv')).json();await fetch('/kv',{method:'PUT',body:JSON.stringify({...cfg,selected:{episode_id,segment_id}})});channel.postMessage({type:'focus',episode_id,segment_id});r={saved:true};
         }else if(msg.actionId.startsWith('feed:')){
-          if(!msg.userActionToken)C.fail('USER_CLICK_REQUIRED');const [,pid,index]=msg.actionId.split(':');const row=(await service.rows('SELECT value FROM meta WHERE key=?',['import:'+pid]))[0];if(!row)C.fail('IMPORT_EXPIRED');const candidate=JSON.parse(row.value).candidates[Number(index)];if(!candidate)C.fail('INVALID_INPUT');
-          const accepted=await cindy.agent.run({mode:'continue',promptTemplate:'{{user_message}}\n{{event_json}}',userMessage:'用户已选择以下播客订阅源，请调用 podcast_import 导入。',event:{url:candidate.feed_url},userActionToken:msg.userActionToken});
+          if(!msg.userActionToken)C.fail('USER_CLICK_REQUIRED');const [,pid,index]=msg.actionId.split(':');const row=(await service.rows('SELECT value FROM meta WHERE key=?',['import:'+pid]))[0];if(!row)C.fail('IMPORT_EXPIRED');const selection=JSON.parse(row.value),candidate=selection.candidates[Number(index)];if(!candidate)C.fail('INVALID_INPUT');
+          const accepted=await cindy.agent.run({mode:'continue',promptTemplate:'{{user_message}}\n{{event_json}}',userMessage:'用户已选择以下播客订阅源，请调用 podcast_import 导入。',event:{url:candidate.feed_url,...(selection.episodes!==undefined?{episodes:selection.episodes}:{})},userActionToken:msg.userActionToken});
           if(!accepted.ok)C.fail(accepted.errorCode || 'TASKS_UNAVAILABLE');await service.sql('DELETE FROM meta WHERE key=?',['import:'+pid]);r={saved:true};
         }else C.fail('UNKNOWN_ACTION');
       }catch(e){r=error(e);}

@@ -30,7 +30,7 @@
     block.append(button(ui.saveNote,async()=>{
       const selected=String(getSelection() || '').trim(),q=selected&&s.text.includes(selected)?selected:s.text;
       if(q.length>1200)throw new Error(ui.quoteTooLong);
-      const note=prompt(ui.notePrompt,'');if(note==null)return;
+      const note=prompt(ui.notePrompt,'');if(note==null)return;if(note.length>5000)throw new Error(ui.errors.NOTE_TOO_LONG);
       await request('note',{segment_id:s.id,quote:q,note});await notes();notice(ui.noteSaved);
     }));return block;
   }

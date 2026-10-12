@@ -64,7 +64,8 @@
       const seg=(await service.rows('SELECT g.*,t.episode_id FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE g.id=?',[m.args.segment_id]))[0];if(!seg)C.fail('SEGMENT_NOT_FOUND');
       const quote=C.string(m.args.quote,1200),next=(await service.rows('SELECT text FROM segments WHERE transcript_id=? AND idx=?',[seg.transcript_id,seg.idx+1]))[0];
       if(!(seg.text+(next?'\n'+next.text:'')).includes(quote))C.fail('QUOTE_MISMATCH');const e=await service.episode(seg.episode_id);
-      await service.sql('INSERT INTO notes VALUES(?,?,?,?,?,?,?)',[crypto.randomUUID(),e.id,seg.id,quote,String(m.args.note || '').slice(0,5000),e.page_url,new Date().toISOString()]);return {saved:true};
+      const note=m.args.note ?? '';if(typeof note!=='string')C.fail('INVALID_INPUT');if(note.length>5000)C.fail('NOTE_TOO_LONG');
+      await service.sql('INSERT INTO notes VALUES(?,?,?,?,?,?,?)',[crypto.randomUUID(),e.id,seg.id,quote,note,e.page_url,new Date().toISOString()]);return {saved:true};
     }
     if(m.tool==='notes')return service.notes(m.args);
     if(m.tool==='export_notes'){
@@ -97,8 +98,8 @@
         else if(msg.actionId.startsWith('focus:')){
           const [,episode_id,segment_id]=msg.actionId.split(':');const cfg=await (await fetch('/kv')).json();await fetch('/kv',{method:'PUT',body:JSON.stringify({...cfg,selected:{episode_id,segment_id}})});channel.postMessage({type:'focus',episode_id,segment_id});r={saved:true};
         }else if(msg.actionId.startsWith('feed:')){
-          if(!msg.userActionToken)C.fail('USER_CLICK_REQUIRED');const [,pid,index]=msg.actionId.split(':');const row=(await service.rows('SELECT value FROM meta WHERE key=?',['import:'+pid]))[0];if(!row)C.fail('IMPORT_EXPIRED');const candidate=JSON.parse(row.value).candidates[Number(index)];if(!candidate)C.fail('INVALID_INPUT');
-          const accepted=await cindy.agent.run({mode:'continue',promptTemplate:'{{user_message}}\n{{event_json}}',userMessage:'用户已选择以下播客订阅源，请调用 podcast_import 导入。',event:{url:candidate.feed_url},userActionToken:msg.userActionToken});
+          if(!msg.userActionToken)C.fail('USER_CLICK_REQUIRED');const [,pid,index]=msg.actionId.split(':');const row=(await service.rows('SELECT value FROM meta WHERE key=?',['import:'+pid]))[0];if(!row)C.fail('IMPORT_EXPIRED');const selection=JSON.parse(row.value),candidate=selection.candidates[Number(index)];if(!candidate)C.fail('INVALID_INPUT');
+          const accepted=await cindy.agent.run({mode:'continue',promptTemplate:'{{user_message}}\n{{event_json}}',userMessage:'用户已选择以下播客订阅源，请调用 podcast_import 导入。',event:{url:candidate.feed_url,...(selection.episodes!==undefined?{episodes:selection.episodes}:{})},userActionToken:msg.userActionToken});
           if(!accepted.ok)C.fail(accepted.errorCode || 'TASKS_UNAVAILABLE');await service.sql('DELETE FROM meta WHERE key=?',['import:'+pid]);r={saved:true};
         }else C.fail('UNKNOWN_ACTION');
       }catch(e){r=error(e);}

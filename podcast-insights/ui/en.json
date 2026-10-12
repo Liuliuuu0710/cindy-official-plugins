@@ -110,7 +110,8 @@
     "UNKNOWN_ACTION": "Card action is unavailable. Refresh the task card or open the library.",
     "INVALID_BRIEF": "Brief format is invalid. Supply a structured brief with its source references.",
     "MISSING_EVIDENCE": "Evidence is missing. Read the source and verify the quote before saving the brief.",
-    "NEED_TWO_SHOWS": "Comparison requires evidence from two distinct shows. Import another show or label single-show scope."
+    "NEED_TWO_SHOWS": "Comparison requires evidence from two distinct shows. Import another show or label single-show scope.",
+    "NOTE_TOO_LONG": "Note exceeds5000 characters. Shorten it before saving; nothing was saved."
   },
   "quoteTooLong": "Quote exceeds 1200 characters. Select a shorter passage; nothing was saved.",
   "excerptNotice": "Excerpt around the matching words; […] marks omitted source text. Open the library for the complete passage.",

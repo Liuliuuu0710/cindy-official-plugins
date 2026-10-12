@@ -539,3 +539,50 @@ test('notes beyond500 remain reachable through stable cursors and full old-note 
     assert.equal(ids.size,501);assert.ok(ids.has('n0000'));assert.equal(h.db.prepare('SELECT quote FROM notes WHERE id=?').get('n0000').quote,'quote 0');
   }finally{h.close();}
 });
+
+
+test('Xiaoyuzhou selectors survive pending storage and real-click continuation unchanged',async()=>{
+  const xyz=C.xyz,feed=C.feed;
+  C.xyz=()=>({title:'Synthetic show',episodes:[]});C.feed=()=>({title:'Synthetic show',episodes:Array.from({length:12},(_,i)=>({guid:'guid-'+i,title:'Episode '+i,published_at:new Date(Date.UTC(2025,0,1)+i*1000).toISOString(),transcripts:[{url:'https://example.test/t'+i+'.txt',type:'text/plain'}]}))});
+  try{for(const selector of ['latest:10',['guid-8','guid-9']]){
+    const h=harness({network:async a=>({ok:true,status:200,body:a.url.includes('itunes.apple.com')?JSON.stringify({results:[{collectionName:'Synthetic show',artistName:'Artist',feedUrl:'https://example.test/feed'}]}):'Synthetic text'})});
+    try{
+      const r=await h.service.run('podcast_import',{url:'https://www.xiaoyuzhoufm.com/podcast/one',episodes:selector},'candidate-card');
+      const stored=JSON.parse((await h.service.rows('SELECT value FROM meta WHERE key=?',['import:'+r.pending_id]))[0].value);assert.deepEqual(stored.episodes,selector);
+      let listener,captured,deliver;const done=new Promise(resolve=>{deliver=resolve;});
+      const ctx={PodcastCore:C,PodcastService:class{constructor(){return h.service;}},fetch:async()=>({ok:true,json:async()=>({})}),BroadcastChannel:class{postMessage(){}},setInterval,clearInterval,setTimeout,Date,crypto:globalThis.crypto,cindy:{request:async()=>({context:{locale:'en'}}),onHostMessage:f=>{listener=f;},agent:{run:async a=>{captured=a;return {ok:true};}},send:async m=>{if(m.type==='card-update')deliver(m);}}};
+      vm.runInNewContext(fs.readFileSync(new URL('../podcast-insights/runtime.js',import.meta.url),'utf8'),ctx);listener({type:'event',name:'card-action',actionId:'feed:'+r.pending_id+':0',userActionToken:'synthetic-host-click',callId:'candidate-card'});await done;
+      assert.equal(captured.event.url,'https://example.test/feed');assert.equal(JSON.stringify(captured.event.episodes),JSON.stringify(selector));
+      const continued=await h.service.run('podcast_import',captured.event,'continued-import');assert.equal(continued.transcripts.length,Array.isArray(selector)?2:10);
+    }finally{h.close();}
+  }}finally{C.xyz=xyz;C.feed=feed;}
+});
+
+test('large import receipt stays bounded while full imported GUIDs remain cursor-reachable',async()=>{
+  const original=C.feed;C.feed=()=>({title:'Show',episodes:Array.from({length:500},(_,i)=>({guid:'g'+i+'x'.repeat(3900),title:'t'.repeat(500),transcripts:[]}))});
+  const h=harness({network:async()=>({ok:true,status:200,body:'Synthetic RSS'})});try{
+    const r=await h.service.run('podcast_import',{url:'https://example.test/feed'},'import-big');assert.ok(C.bytes(JSON.stringify(r))<=60000);assert.equal(r.episode_count,500);assert.equal(r.episodes_omitted,500-r.episodes.length);assert.equal(r.results_truncated,true);assert.equal(h.db.prepare('SELECT count(*) n FROM episodes').get().n,500);
+    assert.equal(r.continuation.tool,'podcast_library');assert.equal(r.continuation.args.include_guid,true);
+    let offset=0,count=0;for(let page=0;page<300;page++){const next=await h.service.run('podcast_library',{...r.continuation.args,offset});assert.ok(C.bytes(JSON.stringify(next))<=60000);for(const e of next.episodes){assert.ok(e.guid.length>3900);assert.equal(h.db.prepare('SELECT guid FROM episodes WHERE id=?').get(e.id).guid,e.guid);}count+=next.episodes.length;if(next.next_offset==null)break;assert.ok(next.next_offset>offset);offset=next.next_offset;}
+    assert.equal(count,500);
+  }finally{C.feed=original;h.close();}
+});
+
+test('one-character reader pages do not leak or repeat full internal norm',async()=>{
+  const h=harness();try{
+    const eid=await seed(h);await h.service.run('podcast_import_transcript',{episode_id:eid,format:'txt',content:'x'.repeat(12000)});
+    for(const char_offset of [0,1,11999]){const r=await h.service.run('podcast_read',{episode_id:eid,max_chars:1,char_offset});assert.equal(r.segments[0].text.length,1);assert.equal(r.segments[0].norm,undefined);assert.ok(C.bytes(JSON.stringify(r))<1500);}
+  }finally{h.close();}
+});
+
+test('note backend rejects5001 chars without writing and preserves all5000 valid chars',async()=>{
+  const h=harness();try{
+    const eid=await seed(h);await h.service.run('podcast_import_transcript',{episode_id:eid,format:'txt',content:'Original quote'});const segment=h.db.prepare('SELECT id FROM segments').get().id;
+    let channel,deliver;const ui=JSON.parse(fs.readFileSync(new URL('../podcast-insights/ui/en.json',import.meta.url),'utf8'));
+    const ctx={PodcastCore:C,PodcastService:class{constructor(){return h.service;}},fetch:async()=>({ok:true,json:async()=>ui}),BroadcastChannel:class{constructor(){channel=this;}postMessage(m){if(m.type==='response')deliver(m);}},setInterval,clearInterval,setTimeout,Date,crypto:globalThis.crypto,cindy:{request:async()=>({context:{locale:'en'}}),onHostMessage(){},send:async()=>{}}};
+    vm.runInNewContext(fs.readFileSync(new URL('../podcast-insights/runtime.js',import.meta.url),'utf8'),ctx);
+    const request=note=>new Promise(resolve=>{deliver=resolve;channel.onmessage({data:{type:'request',reqId:globalThis.crypto.randomUUID(),tool:'note',args:{segment_id:segment,quote:'Original quote',note}}});});
+    const rejected=await request('n'.repeat(5001));assert.equal(rejected.ok,false);assert.equal(rejected.errorCode,'NOTE_TOO_LONG');assert.equal(h.db.prepare('SELECT count(*) n FROM notes').get().n,0);
+    assert.equal((await request('n'.repeat(5000))).ok,true);assert.equal(h.db.prepare('SELECT note FROM notes').get().note,'n'.repeat(5000));
+  }finally{h.close();}
+});
