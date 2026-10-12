@@ -219,3 +219,60 @@ test('search finds Chinese keywords across artificial text cuts without duplicat
     assert.equal((await h.service.run('podcast_search',{query:'城市',to_ms:2000})).evidence.length,0);
   }finally{h.close();}
 });
+
+
+test('citation cards retain late exact and normalized evidence and escaped source links',async()=>{
+  const h=harness();try{
+    const eid=await seed(h),text='&'.repeat(11900)+'城市，绿地很重要。<script>untrusted</script>';
+    await h.service.run('podcast_import_transcript',{episode_id:eid,format:'txt',content:text});
+    const result=await h.service.run('podcast_cite',{references:[{episode_id:eid,quote:'城市，绿地很重要。'},{episode_id:eid,quote:'城市 绿地很重要'}]});
+    assert.deepEqual(result.citations.map(c=>c.status),['exact','normalized']);
+    let listener,deliver,card;const response=new Promise(resolve=>{deliver=resolve;});
+    const ctx={PodcastCore:C,PodcastService:class{async run(){return result;}},
+      fetch:async()=>({ok:true,json:async()=>({excerptNotice:'Source shortened; open library',evidenceInLibrary:'Open library'})}),BroadcastChannel:class{postMessage(){}},setInterval,clearInterval,setTimeout,Date,
+      cindy:{request:async()=>({context:{locale:'en'}}),onHostMessage:f=>{listener=f;},send:async m=>{if(m.type==='card-update')card=m;if(m.type==='tool-result')deliver(m);}}};
+    vm.runInNewContext(fs.readFileSync(new URL('../podcast-insights/runtime.js',import.meta.url),'utf8'),ctx);
+    listener({type:'tool-call',tool:'podcast_cite',callId:'cite-card'});await response;
+    assert.equal(card.html.split(C.escape('城市，绿地很重要。')).length-1,2);assert.ok(C.bytes(card.html)<32768);assert.match(card.html,/Source shortened/);assert.ok(!card.html.includes('<script>'));
+    assert.match(card.html,/overflow:auto/);assert.match(card.html,/href="https:\/\/example.test\/episode"/);
+    const manifest=JSON.parse(fs.readFileSync(new URL('../podcast-insights/ghost.json',import.meta.url),'utf8'));
+    assert.equal(manifest.card.externalLinks,true);
+  }finally{h.close();}
+});
+
+test('accepted cloud POST survives two state-write failures and resumes without another POST',async()=>{
+  let listFails=true;
+  const h=harness({network:async a=>{
+    if(a.method==='POST')return {ok:true,status:200,body:JSON.stringify({id:'remote-1'})};
+    if(a.url.includes('?limit=100')){
+      if(listFails)throw new Error('Provider unavailable');
+      return {ok:true,status:200,body:JSON.stringify({transcripts:[{id:'remote-1',audio_url:'https://audio.example.test/one.mp3',created:new Date().toISOString()}]})};
+    }
+    return {ok:true,status:200,body:JSON.stringify({id:'remote-1',status:'queued'})};
+  }});
+  try{
+    const eid=await seed(h),r=await h.service.prepare(eid,'estimate-1'),original=h.host.library;let failWrites=true,failures=0;
+    h.host.library=async a=>{
+      if(failWrites&&a.op==='db.exec'&&(a.sql.startsWith("UPDATE jobs SET state='submitted'")||a.sql==='UPDATE jobs SET state=?,error=? WHERE id=?')){failures++;throw new Error('Disk full');}
+      return original(a);
+    };
+    const done=await h.service.submitFromClick(r.job.id,click(r.job.id));
+    assert.equal(failures,2);assert.equal(done.job.state,'unknown');assert.equal(done.job.error,'SUBMISSION_UNKNOWN');assert.equal(done.job.local_state_persisted,false);assert.equal(done.job.remote_id,'remote-1');
+    assert.equal(h.db.prepare('SELECT state FROM jobs').get().state,'submitting');
+    const resume=await h.service.run('podcast_status',{});assert.equal(resume.jobs.length,1);assert.equal(resume.jobs[0].state,'unknown');assert.equal(resume.jobs[0].error,'SUBMISSION_UNKNOWN');assert.equal(resume.jobs[0].recovery_incomplete,true);
+    assert.equal((await h.service.prepare(eid,'estimate-2')).requires_user_confirmation,false);
+    await h.service.submitFromClick(r.job.id,click(r.job.id,{callId:'progress-1'}));assert.equal(h.calls.filter(c=>c.method==='POST').length,1);
+    failWrites=false;listFails=false;const recovered=await h.service.run('podcast_status',{});assert.equal(recovered.jobs[0].state,'submitted');assert.equal(recovered.jobs[0].remote_id,'remote-1');
+    assert.equal(h.calls.filter(c=>c.method==='POST').length,1);
+  }finally{h.close();}
+});
+
+test('restart restores submitting warning and reconciles with GET only',async()=>{
+  const h=harness({network:async()=>({ok:true,status:200,body:JSON.stringify({transcripts:[]})})});try{
+    const eid=await seed(h),r=await h.service.prepare(eid,'estimate-1');
+    h.db.prepare("UPDATE jobs SET state='submitting',submitted_at=? WHERE id=?").run(new Date().toISOString(),r.job.id);
+    const restarted=new Service(h.host),status=await restarted.run('podcast_status',{});
+    assert.equal(status.jobs.length,1);assert.equal(status.jobs[0].state,'unknown');assert.equal(status.jobs[0].error,'SUBMISSION_UNKNOWN');assert.equal(status.jobs[0].recovery_incomplete,true);
+    assert.ok(h.calls.every(a=>a.method==='GET'));assert.equal((await restarted.prepare(eid,'estimate-2')).job.id,r.job.id);
+  }finally{h.close();}
+});

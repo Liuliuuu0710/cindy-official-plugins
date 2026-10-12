@@ -82,5 +82,7 @@
     "XML_UNAVAILABLE": "XML 解析器不可用，请更新 Cindy 或导入转录文本",
     "SOURCE_AUTH_REQUIRED": "来源需要登录授权。请提供可公开读取的 RSS 或转录；AssemblyAI 密钥不能授权此来源。"
   },
-  "quoteTooLong": "引用超过1200字符，请缩短选中的原文；本次未保存"
+  "quoteTooLong": "引用超过1200字符，请缩短选中的原文；本次未保存",
+  "excerptNotice": "展示命中原句附近的上下文；[…] 表示省略的原文。完整段落请在资料库核验。",
+  "evidenceInLibrary": "命中段落超过卡片容量，请打开资料库核验完整原文。"
 }

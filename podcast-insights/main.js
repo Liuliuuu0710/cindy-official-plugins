@@ -486,7 +486,7 @@
         await this.io({op:'db.migrate',dbPath:'podcasts.sqlite',targetVersion:1,steps:[{toVersion:1,sql:schema}]});
         await this.migrateLegacy();
         // A crash during submission is uncertain, never a reason to resubmit.
-        await this.sql("UPDATE jobs SET state='unknown' WHERE state='submitting'");
+        await this.sql("UPDATE jobs SET state='unknown',error='SUBMISSION_UNKNOWN' WHERE state='submitting'");
       })().catch(e=>{this.ready=null;throw e;});return this.ready;
     }
     async migrateLegacy(){
@@ -603,16 +603,33 @@
       if(j.card_id!==event.callId)C.fail('USER_CLICK_REQUIRED');
       if(j.state!=='prepared')return {job:j,already_submitted:true};
       if(!(await this.host.credentialsStatus()))C.fail('AAI_KEY_MISSING');
-      const claimed=await this.sql("UPDATE jobs SET state='submitting',submitted_at=?,card_id=? WHERE id=? AND state='prepared'",[now(),event.spawnCallId || event.callId,jid]);if(claimed.changes!==1)C.fail('JOB_EXISTS');
       await this.sql("UPDATE episodes SET transcript_state=CASE WHEN transcript_state='ready' THEN 'ready' ELSE 'transcribing' END WHERE id=?",[j.episode_id]);
+      const submittedAt=now(),cardId=event.spawnCallId || event.callId;
+      const claimed=await this.sql("UPDATE jobs SET state='submitting',submitted_at=?,card_id=? WHERE id=? AND state='prepared'",[submittedAt,cardId,jid]);if(claimed.changes!==1)C.fail('JOB_EXISTS');
+      Object.assign(j,{state:'submitting',submitted_at:submittedAt,card_id:cardId});
       try{
         const r=JSON.parse(await this.network('https://api.assemblyai.com/v2/transcript',null,{audio_url:j.audio_url,speech_models:['universal-3-5-pro','universal-2'],language_detection:true,speaker_labels:true}));
         if(!/^[a-zA-Z0-9_-]{1,100}$/.test(r.id || ''))C.fail('SUBMISSION_UNKNOWN');
-        await this.sql("UPDATE jobs SET state='submitted',remote_id=?,checked_at=? WHERE id=?",[r.id,now(),jid]);
-      }catch(error){const rejected=error.httpStatus>=400 && error.httpStatus<500;await this.sql('UPDATE jobs SET state=?,error=? WHERE id=?',[rejected?'failed':'unknown',rejected?'AAI_REJECTED':'SUBMISSION_UNKNOWN',jid]);if(rejected)await this.sql("UPDATE episodes SET transcript_state=CASE WHEN transcript_state='ready' THEN 'ready' ELSE 'failed' END WHERE id=?",[j.episode_id]);}
-      return {job:(await this.rows('SELECT * FROM jobs WHERE id=?',[jid]))[0]};
+        j.remote_id=r.id;j.checked_at=now();
+        await this.sql("UPDATE jobs SET state='submitted',remote_id=?,checked_at=? WHERE id=?",[j.remote_id,j.checked_at,jid]);j.state='submitted';
+      }catch(error){
+        const rejected=error.httpStatus>=400 && error.httpStatus<500;
+        Object.assign(j,{state:rejected?'failed':'unknown',error:rejected?'AAI_REJECTED':'SUBMISSION_UNKNOWN'});
+        try{
+          await this.sql('UPDATE jobs SET state=?,error=? WHERE id=?',[j.state,j.error,jid]);
+          if(rejected)await this.sql("UPDATE episodes SET transcript_state=CASE WHEN transcript_state='ready' THEN 'ready' ELSE 'failed' END WHERE id=?",[j.episode_id]);
+        }catch{
+          // The provider may have accepted a paid job. Never let a second local
+          // write failure turn that outcome into an ordinary retryable error.
+          Object.assign(j,{state:'unknown',error:'SUBMISSION_UNKNOWN',local_state_persisted:false,recovery_incomplete:true});
+        }
+      }
+      // Do not require another database read to report the external outcome.
+      return {job:j};
     }
+
     async check(j){
+      if(j.state==='submitting')j={...j,state:'unknown',error:'SUBMISSION_UNKNOWN'};
       if(j.state==='prepared'||['completed','failed'].includes(j.state))return j;
       if(!j.remote_id){
         const r=JSON.parse(await this.network('https://api.assemblyai.com/v2/transcript?limit=100'));
@@ -620,7 +637,7 @@
         const matches=(r.transcripts || []).filter(t=>{const created=Date.parse(t.created);return t.audio_url===j.audio_url && Number.isFinite(submitted) && created>=submitted-5000 && created<=submitted+65000;});
         if(matches.length!==1)return {...j,recovery_incomplete:true};
         j.remote_id=matches[0].id;if(!/^[a-zA-Z0-9_-]{1,100}$/.test(j.remote_id))C.fail('INVALID_INPUT');
-        await this.sql("UPDATE jobs SET remote_id=?,state='submitted' WHERE id=?",[j.remote_id,j.id]);
+        await this.sql("UPDATE jobs SET remote_id=?,state='submitted',error='' WHERE id=?",[j.remote_id,j.id]);
       }
       const r=JSON.parse(await this.network('https://api.assemblyai.com/v2/transcript/'+j.remote_id));
       if(r.id!==j.remote_id)C.fail('INVALID_RESPONSE');
@@ -676,8 +693,8 @@
       if(tool==='podcast_cite')return this.cite(a);
       if(tool==='podcast_transcribe')return this.prepare(a.episode_id,callId || '');
       if(tool==='podcast_status'){
-        const jobs=await this.rows("SELECT * FROM jobs WHERE "+(a.job_id?'id=?':"state IN ('submitted','unknown')")+' LIMIT 100',a.job_id?[a.job_id]:[]),results=[];
-        for(const j of jobs){try{results.push(await this.check(j));}catch(error){results.push({...j,errorCode:error.code || 'NETWORK_FAILED'});}}return {jobs:results};
+        const jobs=await this.rows("SELECT * FROM jobs WHERE "+(a.job_id?'id=?':"state IN ('submitting','submitted','unknown')")+' LIMIT 100',a.job_id?[a.job_id]:[]),results=[];
+        for(let j of jobs){if(j.state==='submitting')j={...j,state:'unknown',error:'SUBMISSION_UNKNOWN'};try{results.push(await this.check(j));}catch(error){results.push({...j,errorCode:error.code || 'NETWORK_FAILED',recovery_incomplete:true});}}return {jobs:results};
       }
       C.fail('UNKNOWN_TOOL');
     }
@@ -705,12 +722,30 @@
   const error=e=>({ok:false,errorCode:e.code || 'INTERNAL_ERROR',message:ui.errors?.[e.code] || (zh?'操作未完成，请检查输入、网络或资料库后重试':'Operation incomplete. Check input, network, or library and retry.')});
   const esc=C.escape;
   const time=ms=>ms==null?(ui.unknown || 'Unknown'):C.time(ms/1000);
+  function citationText(c){
+    const text=c.text;
+    if(C.bytes(esc(text))<=6000)return esc(text);
+    let start=text.indexOf(c.quote),end=start+c.quote.length;
+    if(start<0){
+      const needle=C.norm(c.quote),offset=C.norm(text).indexOf(needle);
+      if(offset<0)return esc(ui.evidenceInLibrary);
+      // Map normalized offsets back to source text; include a small boundary
+      // margin for Unicode normalization across adjacent source characters.
+      const boundary=target=>{let lo=0,hi=text.length;while(lo<hi){const mid=Math.floor((lo+hi)/2);if(C.norm(text.slice(0,mid)).length<target)lo=mid+1;else hi=mid;}return lo;};
+      start=Math.max(0,boundary(offset+1)-8);end=Math.min(text.length,boundary(offset+needle.length)+8);
+    }
+    let left=Math.max(0,start-80),right=Math.min(text.length,end+80);
+    let excerpt=esc(text.slice(left,right));
+    if(C.bytes(excerpt)>6000){left=start;right=end;excerpt=esc(text.slice(left,right));}
+    if(C.bytes(excerpt)>6000)return esc(ui.evidenceInLibrary);
+    return (left?'[…] ':'')+excerpt+(right<text.length?' […]':'')+'<br><small>'+esc(ui.excerptNotice)+'</small>';
+  }
   function render(r){
     let body='';
     if(r.ok===false)body='<p>'+esc(r.message)+'</p>';
     else if(r.candidates)body='<p>'+esc(ui.chooseFeed || 'Choose the matching show')+'</p>'+r.candidates.map((c,i)=>'<p>'+esc(c.title)+' · '+esc(c.author)+'<br><button data-ghost-action="feed:'+r.pending_id+':'+i+'">'+esc(ui.choose || 'Choose')+'</button></p>').join('');
     else if(r.job){const j=r.job;body='<p>'+esc(r.episode?.title?.slice(0,500) || '')+'</p><p>'+esc(ui[j.state] || j.state)+'</p>'+(j.state==='prepared'?'<p>'+esc(ui.cloudDisclosure || 'AssemblyAI will fetch the complete audio. Confirm your right to process it and provider charges.')+'</p><p>'+esc(ui.estimate || 'Estimate')+': '+(j.est_usd==null?esc(ui.unknown || 'Unknown'):'$'+j.est_usd.toFixed(4))+' · $0.23/h</p><p>'+esc(ui.estimateDisclaimer || 'Estimate only; AssemblyAI billing prevails.')+'</p><button data-ghost-action="transcribe:'+j.id+'">'+esc(ui.confirmTranscribe || 'Confirm transcription')+'</button>':'<p>'+esc(ui.errors?.[j.error] || j.error || '')+'</p>');}
-    else if(r.citations){body=r.citations.filter(c=>c.status!=='not_found').slice(0,3).map(c=>'<section><p>'+esc(c.show_title)+' · '+esc(c.episode_title)+'</p><p>'+esc(c.speaker || ui.noSpeaker || 'Speaker not distinguished')+' · '+time(c.start_ms)+' · '+esc(c.status)+'</p><blockquote>'+esc(c.text.slice(0,1600))+'</blockquote><button data-ghost-action="focus:'+c.episode_id+':'+c.id+'">'+esc(ui.viewLibrary || 'View in library')+'</button>'+(c.page_url?'<a href="'+esc(c.page_url)+'">'+esc(ui.source || 'Source')+'</a>':'')+'</section>').join('')+'<p>'+esc(ui.citeBoundary || 'Matching verifies words, not interpretation.')+'</p>';}
+    else if(r.citations){body=r.citations.filter(c=>c.status!=='not_found').slice(0,3).map(c=>'<section><p>'+esc(c.show_title)+' · '+esc(c.episode_title)+'</p><p>'+esc(c.speaker || ui.noSpeaker || 'Speaker not distinguished')+' · '+time(c.start_ms)+' · '+esc(c.status)+'</p><blockquote style="max-height:200px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere">'+citationText(c)+'</blockquote><button data-ghost-action="focus:'+c.episode_id+':'+c.id+'">'+esc(ui.viewLibrary || 'View in library')+'</button>'+(c.page_url?'<a href="'+esc(c.page_url)+'">'+esc(ui.source || 'Source')+'</a>':'')+'</section>').join('')+'<p>'+esc(ui.citeBoundary || 'Matching verifies words, not interpretation.')+'</p>';}
     else body='<p>'+esc(ui.resultSaved || 'Result available in the library')+'</p>';
     return '<div style="padding:16px;color:var(--text-primary,#262626);font:14px/22px system-ui"><strong>'+esc(ui.title || 'Podcast Insights')+'</strong>'+body+'</div>';
   }
@@ -719,10 +754,10 @@
   const polling=new Map();
   function schedule(){if(timer||!polling.size)return;timer=setTimeout(()=>{timer=null;enqueue(async()=>{
     if(++pollCount>40||Date.now()-pollStarted>29*60*1000){polling.clear();return;}
-    for(const [jid,slot] of polling){try{const j=(await service.run('podcast_status',{job_id:jid})).jobs[0];if(!j||['completed','failed','prepared'].includes(j.state)){polling.delete(jid);}if(j)await sendCard(slot,{job:j},['submitted','unknown'].includes(j.state)?'working':'done');}catch{polling.delete(jid);}}
+    for(const [jid,slot] of polling){try{const j=(await service.run('podcast_status',{job_id:jid})).jobs[0];if(!j||['completed','failed','prepared'].includes(j.state)){polling.delete(jid);}if(j)await sendCard(slot,{job:j},['submitting','submitted','unknown'].includes(j.state)?'working':'done');}catch{polling.delete(jid);}}
     channel.postMessage({type:'changed'});schedule();
   });},Math.min(60000,15000*2**Math.min(pollCount,2)));}
-  const remember=jobs=>{if(!polling.size){pollCount=0;pollStarted=Date.now();}for(const j of jobs || [])if(['submitted','unknown'].includes(j.state)&&j.card_id)polling.set(j.id,j.card_id);schedule();};
+  const remember=jobs=>{if(!polling.size){pollCount=0;pollStarted=Date.now();}for(const j of jobs || [])if(['submitting','submitted','unknown'].includes(j.state)&&j.card_id)polling.set(j.id,j.card_id);schedule();};
   const requests=new Map();
   async function uiRequest(m){
     if(['podcast_library','podcast_read','podcast_search','podcast_import_transcript'].includes(m.tool))return service.run(m.tool,m.args);
@@ -780,7 +815,7 @@
           if(!accepted.ok)C.fail(accepted.errorCode || 'TASKS_UNAVAILABLE');await service.sql('DELETE FROM meta WHERE key=?',['import:'+pid]);r={saved:true};
         }else C.fail('UNKNOWN_ACTION');
       }catch(e){r=error(e);}
-      await sendCard(slot,r,r.job&&['submitted','unknown'].includes(r.job.state)?'working':'done');channel.postMessage({type:'changed'});
+      await sendCard(slot,r,r.job&&['submitting','submitted','unknown'].includes(r.job.state)?'working':'done');channel.postMessage({type:'changed'});
     });
   });
 })();

@@ -82,5 +82,7 @@
     "XML_UNAVAILABLE": "XML parser unavailable. Update Cindy or import transcript text.",
     "SOURCE_AUTH_REQUIRED": "Source requires authentication. Provide an accessible public RSS or transcript; an AssemblyAI key cannot authorize this source."
   },
-  "quoteTooLong": "Quote exceeds 1200 characters. Select a shorter passage; nothing was saved."
+  "quoteTooLong": "Quote exceeds 1200 characters. Select a shorter passage; nothing was saved.",
+  "excerptNotice": "Excerpt around the matching words; […] marks omitted source text. Open the library for the complete passage.",
+  "evidenceInLibrary": "The matching passage exceeds the card limit. Open the library to verify the complete source."
 }

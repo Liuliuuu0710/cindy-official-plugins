@@ -27,7 +27,7 @@
         await this.io({op:'db.migrate',dbPath:'podcasts.sqlite',targetVersion:1,steps:[{toVersion:1,sql:schema}]});
         await this.migrateLegacy();
         // A crash during submission is uncertain, never a reason to resubmit.
-        await this.sql("UPDATE jobs SET state='unknown' WHERE state='submitting'");
+        await this.sql("UPDATE jobs SET state='unknown',error='SUBMISSION_UNKNOWN' WHERE state='submitting'");
       })().catch(e=>{this.ready=null;throw e;});return this.ready;
     }
     async migrateLegacy(){
@@ -144,16 +144,33 @@
       if(j.card_id!==event.callId)C.fail('USER_CLICK_REQUIRED');
       if(j.state!=='prepared')return {job:j,already_submitted:true};
       if(!(await this.host.credentialsStatus()))C.fail('AAI_KEY_MISSING');
-      const claimed=await this.sql("UPDATE jobs SET state='submitting',submitted_at=?,card_id=? WHERE id=? AND state='prepared'",[now(),event.spawnCallId || event.callId,jid]);if(claimed.changes!==1)C.fail('JOB_EXISTS');
       await this.sql("UPDATE episodes SET transcript_state=CASE WHEN transcript_state='ready' THEN 'ready' ELSE 'transcribing' END WHERE id=?",[j.episode_id]);
+      const submittedAt=now(),cardId=event.spawnCallId || event.callId;
+      const claimed=await this.sql("UPDATE jobs SET state='submitting',submitted_at=?,card_id=? WHERE id=? AND state='prepared'",[submittedAt,cardId,jid]);if(claimed.changes!==1)C.fail('JOB_EXISTS');
+      Object.assign(j,{state:'submitting',submitted_at:submittedAt,card_id:cardId});
       try{
         const r=JSON.parse(await this.network('https://api.assemblyai.com/v2/transcript',null,{audio_url:j.audio_url,speech_models:['universal-3-5-pro','universal-2'],language_detection:true,speaker_labels:true}));
         if(!/^[a-zA-Z0-9_-]{1,100}$/.test(r.id || ''))C.fail('SUBMISSION_UNKNOWN');
-        await this.sql("UPDATE jobs SET state='submitted',remote_id=?,checked_at=? WHERE id=?",[r.id,now(),jid]);
-      }catch(error){const rejected=error.httpStatus>=400 && error.httpStatus<500;await this.sql('UPDATE jobs SET state=?,error=? WHERE id=?',[rejected?'failed':'unknown',rejected?'AAI_REJECTED':'SUBMISSION_UNKNOWN',jid]);if(rejected)await this.sql("UPDATE episodes SET transcript_state=CASE WHEN transcript_state='ready' THEN 'ready' ELSE 'failed' END WHERE id=?",[j.episode_id]);}
-      return {job:(await this.rows('SELECT * FROM jobs WHERE id=?',[jid]))[0]};
+        j.remote_id=r.id;j.checked_at=now();
+        await this.sql("UPDATE jobs SET state='submitted',remote_id=?,checked_at=? WHERE id=?",[j.remote_id,j.checked_at,jid]);j.state='submitted';
+      }catch(error){
+        const rejected=error.httpStatus>=400 && error.httpStatus<500;
+        Object.assign(j,{state:rejected?'failed':'unknown',error:rejected?'AAI_REJECTED':'SUBMISSION_UNKNOWN'});
+        try{
+          await this.sql('UPDATE jobs SET state=?,error=? WHERE id=?',[j.state,j.error,jid]);
+          if(rejected)await this.sql("UPDATE episodes SET transcript_state=CASE WHEN transcript_state='ready' THEN 'ready' ELSE 'failed' END WHERE id=?",[j.episode_id]);
+        }catch{
+          // The provider may have accepted a paid job. Never let a second local
+          // write failure turn that outcome into an ordinary retryable error.
+          Object.assign(j,{state:'unknown',error:'SUBMISSION_UNKNOWN',local_state_persisted:false,recovery_incomplete:true});
+        }
+      }
+      // Do not require another database read to report the external outcome.
+      return {job:j};
     }
+
     async check(j){
+      if(j.state==='submitting')j={...j,state:'unknown',error:'SUBMISSION_UNKNOWN'};
       if(j.state==='prepared'||['completed','failed'].includes(j.state))return j;
       if(!j.remote_id){
         const r=JSON.parse(await this.network('https://api.assemblyai.com/v2/transcript?limit=100'));
@@ -161,7 +178,7 @@
         const matches=(r.transcripts || []).filter(t=>{const created=Date.parse(t.created);return t.audio_url===j.audio_url && Number.isFinite(submitted) && created>=submitted-5000 && created<=submitted+65000;});
         if(matches.length!==1)return {...j,recovery_incomplete:true};
         j.remote_id=matches[0].id;if(!/^[a-zA-Z0-9_-]{1,100}$/.test(j.remote_id))C.fail('INVALID_INPUT');
-        await this.sql("UPDATE jobs SET remote_id=?,state='submitted' WHERE id=?",[j.remote_id,j.id]);
+        await this.sql("UPDATE jobs SET remote_id=?,state='submitted',error='' WHERE id=?",[j.remote_id,j.id]);
       }
       const r=JSON.parse(await this.network('https://api.assemblyai.com/v2/transcript/'+j.remote_id));
       if(r.id!==j.remote_id)C.fail('INVALID_RESPONSE');
@@ -217,8 +234,8 @@
       if(tool==='podcast_cite')return this.cite(a);
       if(tool==='podcast_transcribe')return this.prepare(a.episode_id,callId || '');
       if(tool==='podcast_status'){
-        const jobs=await this.rows("SELECT * FROM jobs WHERE "+(a.job_id?'id=?':"state IN ('submitted','unknown')")+' LIMIT 100',a.job_id?[a.job_id]:[]),results=[];
-        for(const j of jobs){try{results.push(await this.check(j));}catch(error){results.push({...j,errorCode:error.code || 'NETWORK_FAILED'});}}return {jobs:results};
+        const jobs=await this.rows("SELECT * FROM jobs WHERE "+(a.job_id?'id=?':"state IN ('submitting','submitted','unknown')")+' LIMIT 100',a.job_id?[a.job_id]:[]),results=[];
+        for(let j of jobs){if(j.state==='submitting')j={...j,state:'unknown',error:'SUBMISSION_UNKNOWN'};try{results.push(await this.check(j));}catch(error){results.push({...j,errorCode:error.code || 'NETWORK_FAILED',recovery_incomplete:true});}}return {jobs:results};
       }
       C.fail('UNKNOWN_TOOL');
     }

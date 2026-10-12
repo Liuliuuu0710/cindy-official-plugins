@@ -8,12 +8,30 @@
   const error=e=>({ok:false,errorCode:e.code || 'INTERNAL_ERROR',message:ui.errors?.[e.code] || (zh?'操作未完成，请检查输入、网络或资料库后重试':'Operation incomplete. Check input, network, or library and retry.')});
   const esc=C.escape;
   const time=ms=>ms==null?(ui.unknown || 'Unknown'):C.time(ms/1000);
+  function citationText(c){
+    const text=c.text;
+    if(C.bytes(esc(text))<=6000)return esc(text);
+    let start=text.indexOf(c.quote),end=start+c.quote.length;
+    if(start<0){
+      const needle=C.norm(c.quote),offset=C.norm(text).indexOf(needle);
+      if(offset<0)return esc(ui.evidenceInLibrary);
+      // Map normalized offsets back to source text; include a small boundary
+      // margin for Unicode normalization across adjacent source characters.
+      const boundary=target=>{let lo=0,hi=text.length;while(lo<hi){const mid=Math.floor((lo+hi)/2);if(C.norm(text.slice(0,mid)).length<target)lo=mid+1;else hi=mid;}return lo;};
+      start=Math.max(0,boundary(offset+1)-8);end=Math.min(text.length,boundary(offset+needle.length)+8);
+    }
+    let left=Math.max(0,start-80),right=Math.min(text.length,end+80);
+    let excerpt=esc(text.slice(left,right));
+    if(C.bytes(excerpt)>6000){left=start;right=end;excerpt=esc(text.slice(left,right));}
+    if(C.bytes(excerpt)>6000)return esc(ui.evidenceInLibrary);
+    return (left?'[…] ':'')+excerpt+(right<text.length?' […]':'')+'<br><small>'+esc(ui.excerptNotice)+'</small>';
+  }
   function render(r){
     let body='';
     if(r.ok===false)body='<p>'+esc(r.message)+'</p>';
     else if(r.candidates)body='<p>'+esc(ui.chooseFeed || 'Choose the matching show')+'</p>'+r.candidates.map((c,i)=>'<p>'+esc(c.title)+' · '+esc(c.author)+'<br><button data-ghost-action="feed:'+r.pending_id+':'+i+'">'+esc(ui.choose || 'Choose')+'</button></p>').join('');
     else if(r.job){const j=r.job;body='<p>'+esc(r.episode?.title?.slice(0,500) || '')+'</p><p>'+esc(ui[j.state] || j.state)+'</p>'+(j.state==='prepared'?'<p>'+esc(ui.cloudDisclosure || 'AssemblyAI will fetch the complete audio. Confirm your right to process it and provider charges.')+'</p><p>'+esc(ui.estimate || 'Estimate')+': '+(j.est_usd==null?esc(ui.unknown || 'Unknown'):'$'+j.est_usd.toFixed(4))+' · $0.23/h</p><p>'+esc(ui.estimateDisclaimer || 'Estimate only; AssemblyAI billing prevails.')+'</p><button data-ghost-action="transcribe:'+j.id+'">'+esc(ui.confirmTranscribe || 'Confirm transcription')+'</button>':'<p>'+esc(ui.errors?.[j.error] || j.error || '')+'</p>');}
-    else if(r.citations){body=r.citations.filter(c=>c.status!=='not_found').slice(0,3).map(c=>'<section><p>'+esc(c.show_title)+' · '+esc(c.episode_title)+'</p><p>'+esc(c.speaker || ui.noSpeaker || 'Speaker not distinguished')+' · '+time(c.start_ms)+' · '+esc(c.status)+'</p><blockquote>'+esc(c.text.slice(0,1600))+'</blockquote><button data-ghost-action="focus:'+c.episode_id+':'+c.id+'">'+esc(ui.viewLibrary || 'View in library')+'</button>'+(c.page_url?'<a href="'+esc(c.page_url)+'">'+esc(ui.source || 'Source')+'</a>':'')+'</section>').join('')+'<p>'+esc(ui.citeBoundary || 'Matching verifies words, not interpretation.')+'</p>';}
+    else if(r.citations){body=r.citations.filter(c=>c.status!=='not_found').slice(0,3).map(c=>'<section><p>'+esc(c.show_title)+' · '+esc(c.episode_title)+'</p><p>'+esc(c.speaker || ui.noSpeaker || 'Speaker not distinguished')+' · '+time(c.start_ms)+' · '+esc(c.status)+'</p><blockquote style="max-height:200px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere">'+citationText(c)+'</blockquote><button data-ghost-action="focus:'+c.episode_id+':'+c.id+'">'+esc(ui.viewLibrary || 'View in library')+'</button>'+(c.page_url?'<a href="'+esc(c.page_url)+'">'+esc(ui.source || 'Source')+'</a>':'')+'</section>').join('')+'<p>'+esc(ui.citeBoundary || 'Matching verifies words, not interpretation.')+'</p>';}
     else body='<p>'+esc(ui.resultSaved || 'Result available in the library')+'</p>';
     return '<div style="padding:16px;color:var(--text-primary,#262626);font:14px/22px system-ui"><strong>'+esc(ui.title || 'Podcast Insights')+'</strong>'+body+'</div>';
   }
@@ -22,10 +40,10 @@
   const polling=new Map();
   function schedule(){if(timer||!polling.size)return;timer=setTimeout(()=>{timer=null;enqueue(async()=>{
     if(++pollCount>40||Date.now()-pollStarted>29*60*1000){polling.clear();return;}
-    for(const [jid,slot] of polling){try{const j=(await service.run('podcast_status',{job_id:jid})).jobs[0];if(!j||['completed','failed','prepared'].includes(j.state)){polling.delete(jid);}if(j)await sendCard(slot,{job:j},['submitted','unknown'].includes(j.state)?'working':'done');}catch{polling.delete(jid);}}
+    for(const [jid,slot] of polling){try{const j=(await service.run('podcast_status',{job_id:jid})).jobs[0];if(!j||['completed','failed','prepared'].includes(j.state)){polling.delete(jid);}if(j)await sendCard(slot,{job:j},['submitting','submitted','unknown'].includes(j.state)?'working':'done');}catch{polling.delete(jid);}}
     channel.postMessage({type:'changed'});schedule();
   });},Math.min(60000,15000*2**Math.min(pollCount,2)));}
-  const remember=jobs=>{if(!polling.size){pollCount=0;pollStarted=Date.now();}for(const j of jobs || [])if(['submitted','unknown'].includes(j.state)&&j.card_id)polling.set(j.id,j.card_id);schedule();};
+  const remember=jobs=>{if(!polling.size){pollCount=0;pollStarted=Date.now();}for(const j of jobs || [])if(['submitting','submitted','unknown'].includes(j.state)&&j.card_id)polling.set(j.id,j.card_id);schedule();};
   const requests=new Map();
   async function uiRequest(m){
     if(['podcast_library','podcast_read','podcast_search','podcast_import_transcript'].includes(m.tool))return service.run(m.tool,m.args);
@@ -83,7 +101,7 @@
           if(!accepted.ok)C.fail(accepted.errorCode || 'TASKS_UNAVAILABLE');await service.sql('DELETE FROM meta WHERE key=?',['import:'+pid]);r={saved:true};
         }else C.fail('UNKNOWN_ACTION');
       }catch(e){r=error(e);}
-      await sendCard(slot,r,r.job&&['submitted','unknown'].includes(r.job.state)?'working':'done');channel.postMessage({type:'changed'});
+      await sendCard(slot,r,r.job&&['submitting','submitted','unknown'].includes(r.job.state)?'working':'done');channel.postMessage({type:'changed'});
     });
   });
 })();
