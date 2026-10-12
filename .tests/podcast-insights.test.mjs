@@ -220,6 +220,32 @@ test('search finds Chinese keywords across artificial text cuts without duplicat
   }finally{h.close();}
 });
 
+test('citation prefers a later exact segment over an earlier normalized match',async()=>{
+  const h=harness();try{
+    const eid=await seed(h);await h.service.run('podcast_import_transcript',{episode_id:eid,format:'json',content:JSON.stringify([{text:'alpha beta',start:1,end:2,speaker:'Alice'},{text:'alpha, beta',start:3,end:4,speaker:'Bob'}])});
+    const r=await h.service.run('podcast_cite',{references:[{episode_id:eid,quote:'alpha, beta'}]});
+    assert.equal(r.citations[0].status,'exact');assert.equal(r.citations[0].speaker,'Bob');assert.equal(r.citations[0].start_ms,3000);
+  }finally{h.close();}
+});
+
+test('invalid episode selector fails before source fetch or writes and audio fragments are accepted',async()=>{
+  const h=harness();try{
+    await assert.rejects(h.service.run('podcast_import',{url:'https://example.test/feed',episodes:'last:3'},'selector-call'),/INVALID_INPUT/);
+    assert.equal(h.calls.length,0);assert.equal(h.db.prepare('SELECT count(*) n FROM episodes').get().n,0);
+    const r=await h.service.run('podcast_import',{url:'https://audio.example.test/download.mp3#t=0'},'audio-call');
+    assert.equal(r.episodes.length,1);assert.match(r.episodes[0].guid,/download.mp3#t=0/);
+  }finally{h.close();}
+});
+
+test('search counts repeated source metadata in its output budget',async()=>{
+  const h=harness();try{
+    const eid=await seed(h);await h.service.run('podcast_import_transcript',{episode_id:eid,format:'json',content:JSON.stringify(Array.from({length:50},(_,i)=>({text:'城市 evidence '+i,start:i,end:i+1}))) });
+    h.db.prepare('UPDATE episodes SET page_url=? WHERE id=?').run('https://example.test/'+ 'p'.repeat(3900),eid);h.db.prepare('UPDATE shows SET title=? WHERE id=(SELECT show_id FROM episodes WHERE id=?)').run('s'.repeat(500),eid);
+    const r=await h.service.run('podcast_search',{query:'城市',episode_id:eid});
+    assert.equal(r.max_output_bytes,60000);assert.ok(C.bytes(JSON.stringify(r))<=60000);assert.ok(r.results_truncated);
+  }finally{h.close();}
+});
+
 
 test('citation cards retain late exact and normalized evidence and escaped source links',async()=>{
   const h=harness();try{

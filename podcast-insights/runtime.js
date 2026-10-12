@@ -37,14 +37,19 @@
     return '<div style="padding:16px;color:var(--text-primary,#262626);font:14px/22px system-ui"><strong>'+esc(ui.title || 'Podcast Insights')+'</strong>'+body+'</div>';
   }
   const sendCard=(callId,r,state='done')=>cindy.send({type:'card-update',callId,v:2,state,html:render(r),height:360});
-  let timer=null,pollCount=0,pollStarted=Date.now();
+  const MAX_POLLS=40,MAX_POLL_MS=29*60*1000;
+  let timer=null;
   const polling=new Map();
-  function schedule(){if(timer||!polling.size)return;timer=setTimeout(()=>{timer=null;enqueue(async()=>{
-    if(++pollCount>40||Date.now()-pollStarted>29*60*1000){polling.clear();return;}
-    for(const [jid,slot] of polling){try{const j=(await service.run('podcast_status',{job_id:jid})).jobs[0];if(!j||['completed','failed','prepared'].includes(j.state)){polling.delete(jid);}if(j)await sendCard(slot,{job:j},['submitting','submitted','unknown'].includes(j.state)?'working':'done');}catch{polling.delete(jid);}}
+  function schedule(){if(timer||!polling.size)return;const maxPolls=Math.max(...Array.from(polling.values(),entry=>entry.polls));timer=setTimeout(()=>{timer=null;enqueue(async()=>{
+    const now=Date.now();
+    for(const [jid,entry] of polling){
+      if(entry.polls>=MAX_POLLS||now-entry.startedAt>=MAX_POLL_MS){polling.delete(jid);continue;}
+      entry.polls++;
+      try{const j=(await service.run('podcast_status',{job_id:jid})).jobs[0];if(!j||['completed','failed','prepared'].includes(j.state)){polling.delete(jid);}if(j)await sendCard(entry.slot,{job:j},['submitting','submitted','unknown'].includes(j.state)?'working':'done');}catch{polling.delete(jid);}
+    }
     channel.postMessage({type:'changed'});schedule();
-  });},Math.min(60000,15000*2**Math.min(pollCount,2)));}
-  const remember=jobs=>{if(!polling.size){pollCount=0;pollStarted=Date.now();}for(const j of jobs || [])if(['submitting','submitted','unknown'].includes(j.state)&&j.card_id)polling.set(j.id,j.card_id);schedule();};
+  });},Math.min(60000,15000*2**Math.min(maxPolls,2)));}
+  const remember=jobs=>{for(const j of jobs || [])if(['submitting','submitted','unknown'].includes(j.state)&&j.card_id){const entry=polling.get(j.id);if(entry)entry.slot=j.card_id;else polling.set(j.id,{slot:j.card_id,startedAt:Date.now(),polls:0});}schedule();};
   const requests=new Map();
   async function uiRequest(m){
     if(['podcast_library','podcast_read','podcast_search','podcast_import_transcript'].includes(m.tool))return service.run(m.tool,m.args);

@@ -2,7 +2,7 @@
 
 Approved scope: [proposal #158](https://github.com/makecindy/cindy-official-plugins/issues/158#issuecomment-6120456702). M1 imports and original-evidence workflows plus optional M2 AssemblyAI cloud transcription. In-app playback is deferred to M3.
 
-Open the sidebar library, import RSS / Apple Podcasts / Xiaoyuzhou or public audio links, then search or read the available transcript. Link import in the page creates a visible Cindy task; match RSS candidates and confirm cloud fees in its cards. Tools expose eight stable `podcast_*` names. The optional key is stored only by Cindy; Agent arguments cannot submit paid transcription.
+Open the sidebar library, import RSS / Apple Podcasts / Xiaoyuzhou or public audio URLs ending in `.mp3`, `.m4a`, `.wav`, `.ogg`, `.aac` or `.flac`, then search or read the available transcript. Query strings and fragments are allowed. Link import in the page creates a visible Cindy task; match RSS candidates and confirm cloud fees in its cards. Tools expose eight stable `podcast_*` names. The optional key is stored only by Cindy; Agent arguments cannot submit paid transcription.
 
 Build: `node podcast-insights/build.mjs`. Tests: `node --test .tests/podcast-insights.test.mjs`. Requires stable/Beta Cindy >=0.1.103. Metadata locales cover en/zh-CN/ja/ko; runtime pages support Chinese and English with English fallback.
 
@@ -31,3 +31,5 @@ Additional0.2.5 fixes: source retrieval refuses the credentialed AssemblyAI API 
 0.2.8 fixes: excerpts prefer the exact quote location before normalization;20000 source cues can expand beyond20000 storage chunks. Known audio limits4 hours/256 MiB are explicit. Library summaries omit remote transcripts, GUID and audio/page URLs, project short titles and share a60000-byte envelope; episode cursors follow returned rows. around_segment starts with its target. Notes have independent bounded pages and a Load more action. Expected errors give concrete remedies.
 
 0.2.9 fixes: Xiaoyuzhou candidate confirmation preserves the requested episodes selector. Import receipts are bounded to60000 bytes with omitted counts and library continuation; stored imports remain intact. Reader pages omit internal norm even with max_chars=1. Notes beyond5000 chars are rejected before saving with a clear message, not truncated. Full GUIDs remain reachable using library include_guid:true and cursors, even without a transcript.
+
+0.2.10 fixes: citation matching checks later direct quotes before earlier normalized matches; search results include source metadata in a60000-byte envelope; documented audio URL extensions allow query strings and fragments; invalid episode selectors fail before source fetch or writes; and each cloud job receives an independent polling budget.

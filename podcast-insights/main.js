@@ -572,8 +572,20 @@
       if(active){final.push({sql:'UPDATE transcripts SET is_active=0 WHERE episode_id=?',params:[eid]},{sql:'UPDATE transcripts SET is_active=1 WHERE id=?',params:[tid]});}
       final.push({sql:"UPDATE episodes SET transcript_state='ready' WHERE id=?",params:[eid]},{sql:'INSERT OR REPLACE INTO meta VALUES(?,?)',params:['complete:'+tid,now()]});await this.batch(final);return {episode_id:eid,transcript_id:tid,segment_count:segs.length};
     }
+    validateEpisodeSelector(value){
+      if(value===undefined)return;
+      if(Array.isArray(value)){
+        if(value.length>50)C.fail('INVALID_INPUT');
+        for(const guid of value)C.string(guid,4000);
+        return;
+      }
+      if(typeof value!=='string'||value.length>4000||!/^latest:[0-9]+$/.test(value))C.fail('INVALID_INPUT');
+      const n=Number(value.slice(7));if(!Number.isInteger(n)||n<1||n>50)C.fail('INVALID_INPUT');
+    }
     async importSource(a,callId){
       if(!callId) C.fail('AGENT_CALL_REQUIRED');
+      // Reject malformed selectors before any source fetch or database write.
+      this.validateEpisodeSelector(a.episodes);
       let source=C.url(a.url), u=new URL(source), feed, kind='rss';
       if(u.hostname==='podcasts.apple.com'){
         const aid=u.pathname.match(/id(\d+)/)?.[1];if(!aid)C.fail('INVALID_URL');
@@ -589,13 +601,13 @@
         }
         if(!feed.episodes.length)C.fail('RSS_NOT_FOUND');
         const r=await this.ingest(feed,source,kind);return {...r,rss_found:false};
-      }else if(/\.(mp3|m4a|wav|ogg|aac|flac)(?:$|\?)/i.test(source)){
+      }else if(/\.(mp3|m4a|wav|ogg|aac|flac)(?:$|[?#])/i.test(source)){
         const r=await this.ingest({title:u.pathname.split('/').at(-1),episodes:[{guid:source,title:u.pathname.split('/').at(-1),audio_url:source,page_url:'',transcripts:[]}]},source,'audio');return r;
       }
       feed=C.feed(await this.network(source,callId),source);const result=await this.ingest(feed,source,kind);
       let selected;
       if(Array.isArray(a.episodes)) selected=result.episodes.filter(e=>a.episodes.includes(e.guid));
-      else {const selector=a.episodes ?? 'latest:3';if(typeof selector!=='string'||!/^latest:[0-9]+$/.test(selector))C.fail('INVALID_INPUT');const n=Number(selector.split(':')[1]);if(!Number.isInteger(n)||n<1||n>50)C.fail('INVALID_INPUT');selected=[...result.episodes].sort((a,b)=>(Date.parse(b.published_at)||0)-(Date.parse(a.published_at)||0)).slice(0,n);}
+      else {const selector=a.episodes ?? 'latest:3';const n=Number(selector.slice(7));selected=[...result.episodes].sort((a,b)=>(Date.parse(b.published_at)||0)-(Date.parse(a.published_at)||0)).slice(0,n);}
       const transcripts=[];
       for(const e of selected){
         if(!e.transcripts?.length)continue;
@@ -612,18 +624,33 @@
       const all=r.episodes || [],episodes=C.budgetRows(all.map(e=>({id:e.id,guid:e.guid,title:e.title})),500,40000),rawTranscripts=r.transcripts || [],transcripts=C.budgetRows(rawTranscripts,50,16000);
       return {show_id:r.show_id,episodes,episode_count:all.length,episodes_omitted:all.length-episodes.length,transcripts,transcript_count:rawTranscripts.length,transcripts_omitted:rawTranscripts.length-transcripts.length,truncated:!!r.truncated,results_truncated:episodes.length<all.length||transcripts.length<rawTranscripts.length,...(r.rss_found===false?{rss_found:false}:{}),continuation:{tool:'podcast_library',args:{show_id:r.show_id,offset:0,include_guid:true}},max_output_bytes:60000};
     }
-    async segmentRows(eid,tid){return this.rows('SELECT g.* FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE t.episode_id=? AND '+(tid?'t.id=?':'t.is_active=1')+' ORDER BY g.idx LIMIT 2000',[eid,...(tid?[tid]:[])]);}
+    async segmentRows(eid,tid){return this.rows('SELECT g.* FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE t.episode_id=? AND '+(tid?'t.id=?':'t.is_active=1')+' ORDER BY g.idx LIMIT 20000',[eid,...(tid?[tid]:[])]);}
     async cite(a){
-      const results=[];let used=0;
+      const results=[];const segmentCache=new Map();let used=0;
       if(!Array.isArray(a.references)||a.references.length<1||a.references.length>20)C.fail('INVALID_INPUT');
       for(const [reference_index,ref] of a.references.entries()){
         const e=await this.episode(ref.episode_id), quote=C.string(ref.quote,1200), needle=C.norm(quote);if(!needle)C.fail('INVALID_INPUT');
-        // Locate normalized matches in SQL; then consider each candidate with its immediate neighbor.
-        const escaped=needle.replace(/[\\%_]/g,'\\$&');
-        const candidates=await this.rows("SELECT g.* FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE t.episode_id=? AND t.is_active=1 AND (g.norm LIKE ? ESCAPE '\\' OR (g.norm || COALESCE((SELECT n.norm FROM segments n WHERE n.transcript_id=g.transcript_id AND n.idx=g.idx+1),'')) LIKE ? ESCAPE '\\') ORDER BY g.idx LIMIT 100",[e.id,'%'+escaped+'%','%'+escaped+'%']);
-        let found=(await this.rows("SELECT g.* FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE t.episode_id=? AND t.is_active=1 AND g.norm LIKE ? ESCAPE '\\' ORDER BY g.idx LIMIT 1",[e.id,'%'+escaped+'%']))[0];
-        if(found)found={...found,status:found.text.includes(quote)?'exact':'normalized'};
-        for(const g of found?[]:candidates){const n=(await this.rows('SELECT * FROM segments WHERE transcript_id=? AND idx=?',[g.transcript_id,g.idx+1]))[0];const combined=g.text+(n?'\n'+n.text:'');const singleExact=g.text.includes(quote),singleNorm=g.norm.includes(needle);if(singleExact||singleNorm||combined.includes(quote)||C.norm(combined).includes(needle)){found={...g,text:singleExact||singleNorm?g.text:combined,end_ms:singleExact||singleNorm?g.end_ms:n?.end_ms ?? g.end_ms,status:singleExact||combined.includes(quote)?'exact':'normalized'};break;}}
+        // Search the whole transcript in priority order: exact single-segment,
+        // exact boundary-spanning, normalized single-segment, then normalized
+        // boundary-spanning. A normalized hit in an earlier segment must not
+        // hide an exact quote in a later segment.
+        let rows=segmentCache.get(e.id);if(!rows){rows=await this.segmentRows(e.id);segmentCache.set(e.id,rows);}
+        let found=rows.find(g=>g.text.includes(quote));
+        if(found)found={...found,status:'exact'};
+        if(!found){
+          for(let i=0;i<rows.length-1;i++){
+            const g=rows[i],n=rows[i+1];if(g.transcript_id!==n.transcript_id||n.idx!==g.idx+1)continue;
+            const combined=g.text+'\n'+n.text;if(combined.includes(quote)){found={...g,text:combined,end_ms:n.end_ms,status:'exact'};break;}
+          }
+        }
+        if(!found)found=rows.find(g=>g.norm.includes(needle));
+        if(found)found={...found,status:found.status || 'normalized'};
+        if(!found){
+          for(let i=0;i<rows.length-1;i++){
+            const g=rows[i],n=rows[i+1];if(g.transcript_id!==n.transcript_id||n.idx!==g.idx+1)continue;
+            const combined=g.text+'\n'+n.text;if(C.norm(combined).includes(needle)){found={...g,text:combined,end_ms:n.end_ms,status:'normalized'};break;}
+          }
+        }
         const shownQuote=20000-used>=quote.length?quote:'';used+=shownQuote.length;
         if(found){delete found.norm;Object.assign(found,C.excerpt(found.text,quote,Math.min(800,20000-used)));used+=found.text.length;}
         results.push(found?{...found,episode_id:e.id,episode_title:e.title,show_title:e.show_title,page_url:e.page_url,quote:shownQuote,quote_omitted:!shownQuote,reference_index,interpretation_verified:false}:{episode_id:e.id,quote:shownQuote,quote_omitted:!shownQuote,reference_index,status:'not_found'});
@@ -774,15 +801,18 @@
         const where=['t.is_active=1',width>0?"(g.norm LIKE ? ESCAPE '\\' OR (substr(g.norm,?) || substr(COALESCE(n.norm,''),1,?)) LIKE ? ESCAPE '\\')":"g.norm LIKE ? ESCAPE '\\'"],params=width>0?[pattern,-width,width,pattern]:[pattern];
         for(const [key,col] of [['show_id','e.show_id'],['episode_id','e.id']])if(a[key]){where.push(col+'=?');params.push(a[key]);}
         if(a.from_ms!=null){where.push('g.start_ms>=?');params.push(a.from_ms);}if(a.to_ms!=null){where.push('g.start_ms<=?');params.push(a.to_ms);}
-        const found=await this.rows('SELECT g.*,n.id AS next_id,n.text AS next_text,n.end_ms AS next_end_ms,e.id AS episode_id,e.title AS episode_title,e.page_url,s.title AS show_title FROM segments g LEFT JOIN segments n ON n.transcript_id=g.transcript_id AND n.idx=g.idx+1 AND n.start_ms IS g.start_ms AND n.end_ms IS g.end_ms AND n.speaker=g.speaker JOIN transcripts t ON t.id=g.transcript_id JOIN episodes e ON e.id=t.episode_id JOIN shows s ON s.id=e.show_id WHERE '+where.join(' AND ')+' ORDER BY e.published_at DESC,g.idx LIMIT 50',params);
-        const evidence=[];let used=0;
+        const found=await this.rows('SELECT g.id,g.transcript_id,g.idx,g.start_ms,g.end_ms,g.speaker,g.text,g.norm,n.id AS next_id,n.text AS next_text,n.end_ms AS next_end_ms,e.id AS episode_id,e.title AS episode_title,e.page_url,s.title AS show_title FROM segments g LEFT JOIN segments n ON n.transcript_id=g.transcript_id AND n.idx=g.idx+1 AND n.start_ms IS g.start_ms AND n.end_ms IS g.end_ms AND n.speaker=g.speaker JOIN transcripts t ON t.id=g.transcript_id JOIN episodes e ON e.id=t.episode_id JOIN shows s ON s.id=e.show_id WHERE '+where.join(' AND ')+' ORDER BY e.published_at DESC,g.idx LIMIT 50',params);
+        const evidence=[];let used=0,outputTruncated=false;const maxOutputBytes=60000,outputBudget=59000;
         for(const r of found){
           if(used>=20000)break;
           if(!r.norm.includes(q)&&r.next_id){r.matched_segment_ids=[r.id,r.next_id];r.text+='\n'+r.next_text;r.norm+=C.norm(r.next_text);r.end_ms=r.next_end_ms;}
           Object.assign(r,C.excerpt(r.text,q,Math.min(1000,20000-used)));r.context=[];
           delete r.norm;delete r.next_id;delete r.next_text;delete r.next_end_ms;
+          const nextEvidence=[...evidence,r];
+          if(C.bytes(JSON.stringify({evidence:nextEvidence,text_chars:used+r.text.length,max_text_chars:20000,max_output_bytes:maxOutputBytes,results_truncated:false}))>outputBudget){outputTruncated=true;break;}
           used+=r.text.length;evidence.push(r);
-        }return {evidence,text_chars:used,max_text_chars:20000,results_truncated:evidence.length<found.length||found.length===50};
+        }
+        return {evidence,text_chars:used,max_text_chars:20000,max_output_bytes:maxOutputBytes,output_bytes:C.bytes(JSON.stringify({evidence,text_chars:used,max_text_chars:20000,max_output_bytes:maxOutputBytes})),results_truncated:outputTruncated||evidence.length<found.length||found.length===50};
       }
       if(tool==='podcast_cite')return this.cite(a);
       if(tool==='podcast_transcribe')return this.prepare(a.episode_id,callId || '');
@@ -851,14 +881,19 @@
     return '<div style="padding:16px;color:var(--text-primary,#262626);font:14px/22px system-ui"><strong>'+esc(ui.title || 'Podcast Insights')+'</strong>'+body+'</div>';
   }
   const sendCard=(callId,r,state='done')=>cindy.send({type:'card-update',callId,v:2,state,html:render(r),height:360});
-  let timer=null,pollCount=0,pollStarted=Date.now();
+  const MAX_POLLS=40,MAX_POLL_MS=29*60*1000;
+  let timer=null;
   const polling=new Map();
-  function schedule(){if(timer||!polling.size)return;timer=setTimeout(()=>{timer=null;enqueue(async()=>{
-    if(++pollCount>40||Date.now()-pollStarted>29*60*1000){polling.clear();return;}
-    for(const [jid,slot] of polling){try{const j=(await service.run('podcast_status',{job_id:jid})).jobs[0];if(!j||['completed','failed','prepared'].includes(j.state)){polling.delete(jid);}if(j)await sendCard(slot,{job:j},['submitting','submitted','unknown'].includes(j.state)?'working':'done');}catch{polling.delete(jid);}}
+  function schedule(){if(timer||!polling.size)return;const maxPolls=Math.max(...Array.from(polling.values(),entry=>entry.polls));timer=setTimeout(()=>{timer=null;enqueue(async()=>{
+    const now=Date.now();
+    for(const [jid,entry] of polling){
+      if(entry.polls>=MAX_POLLS||now-entry.startedAt>=MAX_POLL_MS){polling.delete(jid);continue;}
+      entry.polls++;
+      try{const j=(await service.run('podcast_status',{job_id:jid})).jobs[0];if(!j||['completed','failed','prepared'].includes(j.state)){polling.delete(jid);}if(j)await sendCard(entry.slot,{job:j},['submitting','submitted','unknown'].includes(j.state)?'working':'done');}catch{polling.delete(jid);}
+    }
     channel.postMessage({type:'changed'});schedule();
-  });},Math.min(60000,15000*2**Math.min(pollCount,2)));}
-  const remember=jobs=>{if(!polling.size){pollCount=0;pollStarted=Date.now();}for(const j of jobs || [])if(['submitting','submitted','unknown'].includes(j.state)&&j.card_id)polling.set(j.id,j.card_id);schedule();};
+  });},Math.min(60000,15000*2**Math.min(maxPolls,2)));}
+  const remember=jobs=>{for(const j of jobs || [])if(['submitting','submitted','unknown'].includes(j.state)&&j.card_id){const entry=polling.get(j.id);if(entry)entry.slot=j.card_id;else polling.set(j.id,{slot:j.card_id,startedAt:Date.now(),polls:0});}schedule();};
   const requests=new Map();
   async function uiRequest(m){
     if(['podcast_library','podcast_read','podcast_search','podcast_import_transcript'].includes(m.tool))return service.run(m.tool,m.args);
