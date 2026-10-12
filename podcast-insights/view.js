@@ -8,7 +8,7 @@
   const node=(tag,text)=>{const e=document.createElement(tag);if(text!=null)e.textContent=text;return e;};
   const button=(text,fn)=>{const b=node('button',text);b.type='button';b.onclick=()=>act(fn);return b;};
   async function act(fn){if(busy)return;busy=true;try{await fn();}catch(e){notice(e.message);}finally{busy=false;if(refreshPending){refreshPending=false;act(()=>refresh());}}}
-  const stamp=ms=>ms==null?ui.unknown:new Date(ms).toISOString().slice(11,19);
+  const stamp=ms=>{if(ms==null)return ui.unknown;const seconds=Math.floor(ms/1000);return [Math.floor(seconds/3600),Math.floor(seconds/60)%60,seconds%60].map(n=>String(n).padStart(2,'0')).join(':');};
   const confirmDelete=async(kind,id)=>{if(!confirm(ui.confirmDelete))return;await request('delete',{kind,id,confirm:true});episode='';$('reader').replaceChildren();await refresh();notice(ui.deletedBackup);};
   async function refresh(append=false){
     const r=await request('podcast_library',{show_id:show || undefined,transcript_state:$('state').value || undefined,offset:append?episodeOffset || 0:0});
@@ -24,7 +24,7 @@
     const quote=node('blockquote');
     const q=$('query').value,idx=q?s.text.toLowerCase().indexOf(q.toLowerCase()):-1;
     if(idx>=0){quote.append(document.createTextNode(s.text.slice(0,idx)),node('mark',s.text.slice(idx,idx+q.length)),document.createTextNode(s.text.slice(idx+q.length)));}else quote.textContent=s.text;
-    block.append(quote);
+    block.append(quote);if(s.text_truncated)block.append(node('small',ui.searchExcerpt));
     if(e.page_url){const a=node('a',ui.source);a.href=e.page_url;block.append(a);}
     block.append(button(ui.saveNote,async()=>{
       const selected=String(getSelection() || '').trim(),q=selected&&s.text.includes(selected)?selected:s.text;
@@ -46,7 +46,7 @@
   };
   addEventListener('podcast-ui-ready',()=>{ui=PodcastUI;
     $('import').onsubmit=e=>{e.preventDefault();act(async()=>{const r=await request('import_link',{url:$('url').value});notice(r.message || ui.openTask);});};
-    $('search').onsubmit=e=>{e.preventDefault();act(async()=>{const r=await request('podcast_search',{query:$('query').value,show_id:show || undefined});episode='';highlight='';next=null;nextChar=0;$('episode-title').textContent=ui.searchResults;$('episode-actions').hidden=true;$('reader').replaceChildren();for(const s of r.evidence)$('reader').append(renderSegment(s,s));notice(r.evidence.length?'':ui.noHits);$('more').hidden=true;});};
+    $('search').onsubmit=e=>{e.preventDefault();act(async()=>{const r=await request('podcast_search',{query:$('query').value,show_id:show || undefined});episode='';highlight='';next=null;nextChar=0;$('episode-title').textContent=ui.searchResults;$('episode-actions').hidden=true;$('reader').replaceChildren();for(const s of r.evidence)$('reader').append(renderSegment(s,s));notice(!r.evidence.length?ui.noHits:r.results_truncated?ui.searchLimited:'');$('more').hidden=true;});};
     $('state').onchange=()=>act(()=>refresh());$('more-episodes').onclick=()=>act(()=>refresh(true));$('clear').onclick=()=>act(()=>confirmDelete('all',''));$('delete-episode').onclick=()=>act(()=>confirmDelete('episode',episode));
     $('cloud').onclick=()=>act(async()=>{const r=await request('cloud',{episode_id:episode});notice(r.message || ui.openTask);});
     $('file').onchange=()=>act(async()=>{const file=$('file').files[0];if(!file)return;if(file.size>5*1024*1024)throw new Error(ui.fileTooLarge);await request('podcast_import_transcript',{episode_id:episode,format:file.name.split('.').at(-1).toLowerCase(),content:await file.text()});$('file').value='';highlight='';await read(episode);});

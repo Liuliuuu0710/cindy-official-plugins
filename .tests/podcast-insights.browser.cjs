@@ -93,6 +93,11 @@ const root=path.resolve(__dirname,'../podcast-insights');
     assert.ok((await page.locator('#reader').textContent()).includes('empty.mp3'));
     await page.locator('#reader').getByRole('button',{name:'在资料库中查看',exact:true}).click();
     await page.waitForFunction(()=>document.getElementById('episode-title').textContent==='empty.mp3');assert.equal(await page.locator('#episode-actions').isVisible(),true);
+    await page.evaluate(eid=>hostListener({type:'tool-call',tool:'podcast_import_transcript',args:{episode_id:eid,content:JSON.stringify([{text:'Duration evidence',start:90000,end:90001}]),format:'json'},callId:'duration-text'}),other);
+    await page.waitForFunction(()=>responses.some(r=>r.callId==='duration-text'));
+    await page.locator('#episodes').getByRole('button',{name:'empty.mp3',exact:true}).click();
+    await page.waitForFunction(()=>document.querySelector('#reader small')?.textContent.includes('25:00:00'));
+    assert.ok(!(await page.locator('#reader small').first().textContent()).includes('01:00:00'));
     await page.getByRole('button',{name:'Synthetic episode',exact:true}).click();await page.locator('#query').fill('');
     const output=process.env.PODCAST_SCREENSHOT_DIR || '/private/tmp/podcast-158-visual';fs.mkdirSync(output,{recursive:true});
     for(const language of ['zh-CN','en']){

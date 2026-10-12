@@ -23,3 +23,5 @@ Review fixes in0.2.1: interruption-safe legacy migration, reset reader state whe
 0.2.5 fixes: durable claiming separates the pre-submit phase from possible paid submission. A failed ownership read releases only its own claim and restores the prior episode/card state; failed releases can resume through status, preparation or restart. Recovery of claiming never queries or submits to the provider.
 
 Additional0.2.5 fixes: source retrieval refuses the credentialed AssemblyAI API host; only fixed cloud operations may use it. Fallback persistence keeps known provider IDs and reports execution. Library search displays actual show/episode and clears old action targets. Empty completed transcription ends in an atomic failed state.
+
+0.2.6 fixes: only Host-completed 4xx responses mean a rejected cloud POST; incomplete transport remains unknown. Transcript input limits are5 MB and20000 source cues before splitting. Search emits no internal norm or full adjacent context, with a20000-character total/1000-character excerpt budget and explicit truncation flags. UI timestamps format elapsed duration beyond24 hours without wrapping.

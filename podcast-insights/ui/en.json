@@ -82,10 +82,13 @@
     "XML_UNAVAILABLE": "XML parser unavailable. Update Cindy or import transcript text.",
     "SOURCE_AUTH_REQUIRED": "Source requires authentication. Provide an accessible public RSS or transcript; an AssemblyAI key cannot authorize this source.",
     "SOURCE_PROVIDER_FORBIDDEN": "Source URLs cannot access the credentialed transcription API. Provide a public RSS or transcript URL.",
-    "EMPTY_TRANSCRIPT": "No speech transcript was returned. The cloud task has ended; review provider charges and use another authorized source."
+    "EMPTY_TRANSCRIPT": "No speech transcript was returned. The cloud task has ended; review provider charges and use another authorized source.",
+    "TRANSCRIPT_SEGMENT_LIMIT": "Transcript exceeds20000 source segments/cues. Split into smaller imports."
   },
   "quoteTooLong": "Quote exceeds 1200 characters. Select a shorter passage; nothing was saved.",
   "excerptNotice": "Excerpt around the matching words; […] marks omitted source text. Open the library for the complete passage.",
   "evidenceInLibrary": "The matching passage exceeds the card limit. Open the library to verify the complete source.",
-  "searchResults": "Search results"
+  "searchResults": "Search results",
+  "searchExcerpt": "Shortened search excerpt. Open the library for complete source text.",
+  "searchLimited": "Search result budget reached. Narrow the query or show/episode filters."
 }

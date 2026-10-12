@@ -413,3 +413,29 @@ test('empty completed transcript reaches atomic terminal state and retains exist
     }finally{h.close();}
   }
 });
+
+
+test('incomplete transport with 4xx status is unknown while completed rejection is not executed',async()=>{
+  for(const [ok,status,state,outcome] of [[false,408,'unknown','unknown'],[false,400,'unknown','unknown'],[true,400,'failed','not_executed'],[true,401,'failed','not_executed'],[true,503,'unknown','unknown']]){
+    const h=harness({network:async()=>({ok,status})});try{
+      const eid=await seed(h),r=await h.service.prepare(eid,'estimate-1');const done=await h.service.submitFromClick(r.job.id,click(r.job.id));assert.equal(done.job.state,state);assert.equal(done.job.submission_outcome,outcome);
+      if(state==='unknown'){const existing=await h.service.prepare(eid,'other-card');assert.equal(existing.job.id,r.job.id);assert.equal(existing.requires_user_confirmation,false);await assert.rejects(h.service.remove('episode',eid),/ACTIVE_CLOUD_JOB/);}
+      assert.equal(h.calls.filter(a=>a.method==='POST').length,1);
+    }finally{h.close();}
+  }
+});
+
+test('source cue limit has actionable failure and is disclosed in all tool contracts',()=>{
+  const cues=Array.from({length:20000},()=>({text:'a',start:1,end:2}));assert.equal(C.segments(JSON.stringify(cues),'json').length,20000);cues.push({text:'a',start:1,end:2});const content=JSON.stringify(cues);assert.ok(C.bytes(content)<5*1024*1024);assert.throws(()=>C.segments(content,'json'),/TRANSCRIPT_SEGMENT_LIMIT/);
+  for(const lang of ['en','zh-CN','ja','ko']){const locale=JSON.parse(fs.readFileSync(new URL('../podcast-insights/locales/'+lang+'.json',import.meta.url),'utf8'));assert.match(locale.tools.podcast_import_transcript.description,/20000/);}
+});
+
+test('large legal search inputs emit bounded matching excerpts without normalized/internal context',async()=>{
+  const h=harness();try{
+    const eid=await seed(h),content=JSON.stringify(Array.from({length:60},(_,i)=>({text:'x'.repeat(5500)+' 城市绿地很重要 '+'y'.repeat(5500)+i,start:i,end:i+1})));assert.ok(C.bytes(content)<5*1024*1024);
+    await h.service.run('podcast_import_transcript',{episode_id:eid,format:'json',content});const r=await h.service.run('podcast_search',{query:'城市'});
+    assert.equal(r.max_text_chars,20000);assert.ok(r.text_chars<=20000);assert.equal(r.text_chars,r.evidence.reduce((n,e)=>n+e.text.length,0));assert.equal(r.results_truncated,true);assert.ok(r.evidence.length>1&&r.evidence.length<50);
+    for(const e of r.evidence){assert.ok(e.text.length<=1000);assert.ok(C.norm(e.text).includes('城市'));assert.equal(e.text_truncated,true);assert.ok(e.excerpt_start>0);assert.equal(e.norm,undefined);assert.equal(e.next_text,undefined);assert.deepEqual(e.context,[]);assert.equal(e.match_truncated,false);}
+    assert.ok(C.bytes(JSON.stringify(r))<50000);
+  }finally{h.close();}
+});

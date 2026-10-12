@@ -113,7 +113,8 @@
     };
   }
   function normalize(rows, identity = "provided") {
-    if (!Array.isArray(rows) || !rows.length || rows.length > 20000)
+    if (Array.isArray(rows) && rows.length > 20000) fail("TRANSCRIPT_SEGMENT_LIMIT");
+    if (!Array.isArray(rows) || !rows.length)
       fail("INVALID_TRANSCRIPT");
     // Split long source text before per-row validation. Keep its supplied
     // interval for each chunk; never invent timing within an utterance.
@@ -516,7 +517,7 @@
       if(hostname==='api.assemblyai.com'&&!cloud)C.fail('SOURCE_PROVIDER_FORBIDDEN');
       if(cloud&&hostname!=='api.assemblyai.com')C.fail('INVALID_INPUT');
       const r=await this.host.fetch({url:C.url(url),...(callId?{callId}:{}),method:body?'POST':'GET',headers:{Accept:'application/json,application/xml,text/plain',...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),as:'text',timeoutMs:60000});
-      if(!r?.ok || r.status<200 || r.status>=300 || r.truncated){const code=r?.status===401?(new URL(url).hostname==='api.assemblyai.com'?'AAI_KEY_MISSING':'SOURCE_AUTH_REQUIRED'):r?.status===403?'NETWORK_FORBIDDEN':'NETWORK_FAILED';throw Object.assign(new Error(code),{code,httpStatus:r?.status});}
+      if(!r?.ok || r.status<200 || r.status>=300 || r.truncated){const code=r?.status===401?(new URL(url).hostname==='api.assemblyai.com'?'AAI_KEY_MISSING':'SOURCE_AUTH_REQUIRED'):r?.status===403?'NETWORK_FORBIDDEN':'NETWORK_FAILED';throw Object.assign(new Error(code),{code,httpStatus:r?.status,httpResponseCompleted:r?.ok===true});}
       return r.body;
     }
     async episode(eid){const e=(await this.rows('SELECT e.*,s.title AS show_title FROM episodes e JOIN shows s ON s.id=e.show_id WHERE e.id=?',[eid]))[0];if(!e)C.fail('EPISODE_NOT_FOUND');return e;}
@@ -653,7 +654,7 @@
         j.remote_id=r.id;j.checked_at=now();
         await this.sql("UPDATE jobs SET state='submitted',remote_id=?,checked_at=? WHERE id=?",[j.remote_id,j.checked_at,jid]);j.state='submitted';
       }catch(error){
-        const rejected=error.httpStatus>=400 && error.httpStatus<500;
+        const rejected=error.httpResponseCompleted===true && error.httpStatus>=400 && error.httpStatus<500;
         Object.assign(j,{state:rejected?'failed':j.remote_id?'submitted':'unknown',error:rejected?'AAI_REJECTED':j.remote_id?'':'SUBMISSION_UNKNOWN',submission_outcome:j.remote_id?'executed':rejected?'not_executed':'unknown'});
         try{
           if(rejected)await this.batch([
@@ -735,11 +736,21 @@
         for(const [key,col] of [['show_id','e.show_id'],['episode_id','e.id']])if(a[key]){where.push(col+'=?');params.push(a[key]);}
         if(a.from_ms!=null){where.push('g.start_ms>=?');params.push(a.from_ms);}if(a.to_ms!=null){where.push('g.start_ms<=?');params.push(a.to_ms);}
         const found=await this.rows('SELECT g.*,n.id AS next_id,n.text AS next_text,n.end_ms AS next_end_ms,e.id AS episode_id,e.title AS episode_title,e.page_url,s.title AS show_title FROM segments g LEFT JOIN segments n ON n.transcript_id=g.transcript_id AND n.idx=g.idx+1 AND n.start_ms IS g.start_ms AND n.end_ms IS g.end_ms AND n.speaker=g.speaker JOIN transcripts t ON t.id=g.transcript_id JOIN episodes e ON e.id=t.episode_id JOIN shows s ON s.id=e.show_id WHERE '+where.join(' AND ')+' ORDER BY e.published_at DESC,g.idx LIMIT 50',params);
+        const evidence=[];let used=0;
         for(const r of found){
+          if(used>=20000)break;
           if(!r.norm.includes(q)&&r.next_id){r.matched_segment_ids=[r.id,r.next_id];r.text+='\n'+r.next_text;r.norm+=C.norm(r.next_text);r.end_ms=r.next_end_ms;}
-          delete r.next_id;delete r.next_text;delete r.next_end_ms;
-          r.context=await this.rows('SELECT text,start_ms,speaker FROM segments WHERE transcript_id=? AND idx IN (?,?) ORDER BY idx',[r.transcript_id,r.idx-1,r.idx+1]);
-        }return {evidence:found};
+          const full=r.text,offset=r.norm.indexOf(q),limit=Math.min(1000,20000-used);
+          let left=0,right=full.length,matchEnd=full.length;
+          if(full.length>limit){
+            const boundary=target=>{let lo=0,hi=full.length;while(lo<hi){const mid=Math.floor((lo+hi)/2);if(C.norm(full.slice(0,mid)).length<target)lo=mid+1;else hi=mid;}return lo;};
+            const matchStart=Math.max(0,boundary(offset+1)-8);matchEnd=Math.min(full.length,boundary(offset+q.length)+8);
+            left=Math.max(0,matchStart-Math.min(80,Math.max(0,limit-(matchEnd-matchStart))));right=Math.min(full.length,left+limit);
+          }
+          r.text=full.slice(left,right);r.text_truncated=left>0||right<full.length;r.excerpt_start=left;r.match_truncated=right<matchEnd;r.context=[];
+          delete r.norm;delete r.next_id;delete r.next_text;delete r.next_end_ms;
+          used+=r.text.length;evidence.push(r);
+        }return {evidence,text_chars:used,max_text_chars:20000,results_truncated:evidence.length<found.length||found.length===50};
       }
       if(tool==='podcast_cite')return this.cite(a);
       if(tool==='podcast_transcribe')return this.prepare(a.episode_id,callId || '');

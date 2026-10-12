@@ -112,7 +112,8 @@
     };
   }
   function normalize(rows, identity = "provided") {
-    if (!Array.isArray(rows) || !rows.length || rows.length > 20000)
+    if (Array.isArray(rows) && rows.length > 20000) fail("TRANSCRIPT_SEGMENT_LIMIT");
+    if (!Array.isArray(rows) || !rows.length)
       fail("INVALID_TRANSCRIPT");
     // Split long source text before per-row validation. Keep its supplied
     // interval for each chunk; never invent timing within an utterance.
