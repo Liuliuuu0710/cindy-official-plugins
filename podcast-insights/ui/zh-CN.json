@@ -80,9 +80,12 @@
     "QUOTE_MISMATCH": "引用与原文不一致，请重新选择原句",
     "AAI_REJECTED": "服务商拒绝提交，请检查密钥或请求参数",
     "XML_UNAVAILABLE": "XML 解析器不可用，请更新 Cindy 或导入转录文本",
-    "SOURCE_AUTH_REQUIRED": "来源需要登录授权。请提供可公开读取的 RSS 或转录；AssemblyAI 密钥不能授权此来源。"
+    "SOURCE_AUTH_REQUIRED": "来源需要登录授权。请提供可公开读取的 RSS 或转录；AssemblyAI 密钥不能授权此来源。",
+    "SOURCE_PROVIDER_FORBIDDEN": "来源链接不能访问托管凭证的转录API，请提供公开RSS或转录链接。",
+    "EMPTY_TRANSCRIPT": "服务商未返回语音转录，云任务已结束；请核对服务商费用并使用其他已获授权的来源。"
   },
   "quoteTooLong": "引用超过1200字符，请缩短选中的原文；本次未保存",
   "excerptNotice": "展示命中原句附近的上下文；[…] 表示省略的原文。完整段落请在资料库核验。",
-  "evidenceInLibrary": "命中段落超过卡片容量，请打开资料库核验完整原文。"
+  "evidenceInLibrary": "命中段落超过卡片容量，请打开资料库核验完整原文。",
+  "searchResults": "检索结果"
 }

@@ -19,6 +19,7 @@
   }
   function renderSegment(s,e){
     const block=node('div');block.className='item'+(highlight===s.id?' selected':'');block.id='segment-'+s.id;
+    if(s.episode_title){block.append(node('p',s.show_title+' · '+s.episode_title),button(ui.viewLibrary,()=>read(s.episode_id,0,0,s.id)));}
     block.append(node('small',(s.speaker || ui.noSpeaker)+' · '+stamp(s.start_ms)));
     const quote=node('blockquote');
     const q=$('query').value,idx=q?s.text.toLowerCase().indexOf(q.toLowerCase()):-1;
@@ -45,7 +46,7 @@
   };
   addEventListener('podcast-ui-ready',()=>{ui=PodcastUI;
     $('import').onsubmit=e=>{e.preventDefault();act(async()=>{const r=await request('import_link',{url:$('url').value});notice(r.message || ui.openTask);});};
-    $('search').onsubmit=e=>{e.preventDefault();act(async()=>{const r=await request('podcast_search',{query:$('query').value,show_id:show || undefined});$('reader').replaceChildren();for(const s of r.evidence)$('reader').append(renderSegment(s,s));notice(r.evidence.length?'':ui.noHits);$('more').hidden=true;});};
+    $('search').onsubmit=e=>{e.preventDefault();act(async()=>{const r=await request('podcast_search',{query:$('query').value,show_id:show || undefined});episode='';highlight='';next=null;nextChar=0;$('episode-title').textContent=ui.searchResults;$('episode-actions').hidden=true;$('reader').replaceChildren();for(const s of r.evidence)$('reader').append(renderSegment(s,s));notice(r.evidence.length?'':ui.noHits);$('more').hidden=true;});};
     $('state').onchange=()=>act(()=>refresh());$('more-episodes').onclick=()=>act(()=>refresh(true));$('clear').onclick=()=>act(()=>confirmDelete('all',''));$('delete-episode').onclick=()=>act(()=>confirmDelete('episode',episode));
     $('cloud').onclick=()=>act(async()=>{const r=await request('cloud',{episode_id:episode});notice(r.message || ui.openTask);});
     $('file').onchange=()=>act(async()=>{const file=$('file').files[0];if(!file)return;if(file.size>5*1024*1024)throw new Error(ui.fileTooLarge);await request('podcast_import_transcript',{episode_id:episode,format:file.name.split('.').at(-1).toLowerCase(),content:await file.text()});$('file').value='';highlight='';await read(episode);});

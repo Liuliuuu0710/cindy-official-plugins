@@ -26,6 +26,7 @@
         await this.io({op:'open'});await this.io({op:'db.open',dbPath:'podcasts.sqlite'});
         await this.io({op:'db.migrate',dbPath:'podcasts.sqlite',targetVersion:1,steps:[{toVersion:1,sql:schema}]});
         await this.migrateLegacy();
+        for(const j of await this.rows("SELECT * FROM jobs WHERE state='claiming'"))await this.releaseClaim(j);
         // A crash during submission is uncertain, never a reason to resubmit.
         await this.sql("UPDATE jobs SET state='unknown',error='SUBMISSION_UNKNOWN' WHERE state='submitting'");
       })().catch(e=>{this.ready=null;throw e;});return this.ready;
@@ -51,7 +52,10 @@
       for(const j of d.jobs) await this.sql('INSERT OR IGNORE INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)',[j.id,j.episode_id,'assemblyai',j.status==='completed'?'completed':j.status==='error'?'failed':j.remote_id?'submitted':'unknown',j.remote_id || '',null,j.created_at || '', '',j.error_code || '', '',d.episodes.find(e=>e.id===j.episode_id)?.audio_url || '']);
       await this.sql("INSERT INTO meta VALUES('legacy_imported',?)",[now()]);
     }
-    async network(url,callId,body){
+    async network(url,callId,body,cloud=false){
+      const hostname=new URL(C.url(url)).hostname.replace(/\.$/,'');
+      if(hostname==='api.assemblyai.com'&&!cloud)C.fail('SOURCE_PROVIDER_FORBIDDEN');
+      if(cloud&&hostname!=='api.assemblyai.com')C.fail('INVALID_INPUT');
       const r=await this.host.fetch({url:C.url(url),...(callId?{callId}:{}),method:body?'POST':'GET',headers:{Accept:'application/json,application/xml,text/plain',...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),as:'text',timeoutMs:60000});
       if(!r?.ok || r.status<200 || r.status>=300 || r.truncated){const code=r?.status===401?(new URL(url).hostname==='api.assemblyai.com'?'AAI_KEY_MISSING':'SOURCE_AUTH_REQUIRED'):r?.status===403?'NETWORK_FORBIDDEN':'NETWORK_FAILED';throw Object.assign(new Error(code),{code,httpStatus:r?.status});}
       return r.body;
@@ -134,7 +138,8 @@
       const e=await this.episode(eid);if(!e.audio_url)C.fail('AUDIO_URL_REQUIRED');
       if(e.duration_s>14400 || e.audio_bytes>256*1024*1024)C.fail('AUDIO_TOO_LARGE');
       if(!(await this.host.credentialsStatus()))C.fail('AAI_KEY_MISSING');
-      const existing=(await this.rows("SELECT * FROM jobs WHERE episode_id=? AND state IN ('prepared','submitting','submitted','unknown') ORDER BY submitted_at DESC LIMIT 1",[eid]))[0];if(existing){
+      const existing=(await this.rows("SELECT * FROM jobs WHERE episode_id=? AND state IN ('prepared','claiming','submitting','submitted','unknown') ORDER BY submitted_at DESC LIMIT 1",[eid]))[0];if(existing){
+        if(existing.state==='claiming')return this.prepareAfterClaim(existing,eid,cardId);
         if(existing.state==='prepared'){
           const est=e.duration_s==null?null:e.duration_s/3600*0.23;
           await this.sql("UPDATE jobs SET audio_url=?,est_usd=?,card_id=? WHERE id=? AND state='prepared'",[e.audio_url,est,cardId || existing.card_id,existing.id]);
@@ -144,6 +149,17 @@
       }
       const job={id:id(),episode_id:eid,provider:'assemblyai',state:'prepared',remote_id:'',est_usd:e.duration_s==null?null:e.duration_s/3600*0.23,submitted_at:'',checked_at:'',error:'',card_id:cardId,audio_url:e.audio_url};
       await this.sql('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)',Object.values(job));return {job,episode:e,requires_user_confirmation:true,rate_usd_per_hour:0.23,estimate_only:true};
+    }
+    async prepareAfterClaim(j,eid,cardId){await this.releaseClaim(j);return this.prepare(eid,cardId);}
+    async releaseClaim(j,allowSubmitting=false){
+      // claiming is durably before any paid request. Restore only this owner.
+      const prior=JSON.parse(j.error),phase=allowSubmitting?'submitting':'claiming';
+      if(!['none','remote_available','ready','failed','transcribing'].includes(prior.state)||typeof prior.card_id!=='string')C.fail('INVALID_INPUT');
+      await this.batch([
+        {sql:"UPDATE episodes SET transcript_state=CASE WHEN transcript_state='ready' THEN 'ready' ELSE ? END WHERE id=? AND EXISTS (SELECT 1 FROM jobs WHERE id=? AND state IN ('claiming',?) AND checked_at=?)",params:[prior.state,j.episode_id,j.id,phase,j.checked_at]},
+        {sql:"UPDATE jobs SET state='prepared',submitted_at='',checked_at='',error='',card_id=? WHERE id=? AND state IN ('claiming',?) AND checked_at=?",params:[prior.card_id,j.id,phase,j.checked_at]},
+      ]);
+      return (await this.rows('SELECT * FROM jobs WHERE id=?',[j.id]))[0];
     }
     async submitFromClick(jid,event){
       // Only the host listener passes events. No public tool or BroadcastChannel route reaches here.
@@ -157,26 +173,35 @@
       if(e.audio_url!==j.audio_url || est!==j.est_usd)return this.prepare(j.episode_id,event.spawnCallId || event.callId);
       if(e.duration_s>14400 || e.audio_bytes>256*1024*1024)C.fail('AUDIO_TOO_LARGE');
       const submittedAt=now(),cardId=event.spawnCallId || event.callId,claim=id();
+      const prior=JSON.stringify({state:e.transcript_state,card_id:j.card_id});
       await this.batch([
-        {sql:"UPDATE jobs SET state='submitting',submitted_at=?,card_id=?,checked_at=? WHERE id=? AND state='prepared'",params:[submittedAt,cardId,claim,jid]},
-        {sql:"UPDATE episodes SET transcript_state=CASE WHEN transcript_state='ready' THEN 'ready' ELSE 'transcribing' END WHERE id=? AND EXISTS (SELECT 1 FROM jobs WHERE id=? AND state='submitting' AND checked_at=?)",params:[j.episode_id,jid,claim]},
+        {sql:"UPDATE jobs SET state='claiming',submitted_at=?,card_id=?,checked_at=?,error=? WHERE id=? AND state='prepared'",params:[submittedAt,cardId,claim,prior,jid]},
+        {sql:"UPDATE episodes SET transcript_state=CASE WHEN transcript_state='ready' THEN 'ready' ELSE 'transcribing' END WHERE id=? AND EXISTS (SELECT 1 FROM jobs WHERE id=? AND state='claiming' AND checked_at=?)",params:[j.episode_id,jid,claim]},
       ]);
-      const claimed=(await this.rows('SELECT checked_at FROM jobs WHERE id=?',[jid]))[0];if(claimed?.checked_at!==claim)C.fail('JOB_EXISTS');
+      const owned={...j,state:'claiming',checked_at:claim,error:prior};
+      try{
+        const claimed=(await this.rows('SELECT checked_at FROM jobs WHERE id=?',[jid]))[0];if(claimed?.checked_at!==claim)C.fail('JOB_EXISTS');
+      }catch(error){await this.releaseClaim(owned);throw error;}
+      // Mark possible external submission immediately before the POST. If this
+      // write fails, no request has been sent; release the known pre-submit owner.
+      try{
+        const marked=await this.sql("UPDATE jobs SET state='submitting',error='' WHERE id=? AND state='claiming' AND checked_at=?",[jid,claim]);if(marked.changes!==1)C.fail('JOB_EXISTS');
+      }catch(error){await this.releaseClaim(owned,true);throw error;}
       Object.assign(j,{state:'submitting',submitted_at:submittedAt,card_id:cardId});
       try{
-        const r=JSON.parse(await this.network('https://api.assemblyai.com/v2/transcript',null,{audio_url:j.audio_url,speech_models:['universal-3-5-pro','universal-2'],language_detection:true,speaker_labels:true}));
+        const r=JSON.parse(await this.network('https://api.assemblyai.com/v2/transcript',null,{audio_url:j.audio_url,speech_models:['universal-3-5-pro','universal-2'],language_detection:true,speaker_labels:true},true));
         if(!/^[a-zA-Z0-9_-]{1,100}$/.test(r.id || ''))C.fail('SUBMISSION_UNKNOWN');
         j.remote_id=r.id;j.checked_at=now();
         await this.sql("UPDATE jobs SET state='submitted',remote_id=?,checked_at=? WHERE id=?",[j.remote_id,j.checked_at,jid]);j.state='submitted';
       }catch(error){
         const rejected=error.httpStatus>=400 && error.httpStatus<500;
-        Object.assign(j,{state:rejected?'failed':'unknown',error:rejected?'AAI_REJECTED':'SUBMISSION_UNKNOWN'});
+        Object.assign(j,{state:rejected?'failed':j.remote_id?'submitted':'unknown',error:rejected?'AAI_REJECTED':j.remote_id?'':'SUBMISSION_UNKNOWN',submission_outcome:j.remote_id?'executed':rejected?'not_executed':'unknown'});
         try{
           if(rejected)await this.batch([
             {sql:'UPDATE jobs SET state=?,error=? WHERE id=?',params:[j.state,j.error,jid]},
             {sql:"UPDATE episodes SET transcript_state=CASE WHEN transcript_state='ready' THEN 'ready' ELSE 'failed' END WHERE id=?",params:[j.episode_id]},
           ]);
-          else await this.sql('UPDATE jobs SET state=?,error=? WHERE id=?',[j.state,j.error,jid]);
+          else await this.sql('UPDATE jobs SET state=?,error=?,remote_id=?,checked_at=? WHERE id=?',[j.state,j.error,j.remote_id,j.checked_at,jid]);
         }catch{
           // The provider may have accepted a paid job. Never let a second local
           // write failure turn that outcome into an ordinary retryable error.
@@ -187,30 +212,35 @@
       return {job:j};
     }
 
+    async failJob(j,error){
+      await this.batch([
+        {sql:"UPDATE jobs SET state='failed',checked_at=?,error=? WHERE id=?",params:[now(),error,j.id]},
+        {sql:"UPDATE episodes SET transcript_state=CASE WHEN transcript_state='ready' THEN 'ready' ELSE 'failed' END WHERE id=?",params:[j.episode_id]},
+      ]);
+      return (await this.rows('SELECT * FROM jobs WHERE id=?',[j.id]))[0];
+    }
     async check(j){
+      if(j.state==='claiming')return this.releaseClaim(j);
       if(j.state==='submitting')j={...j,state:'unknown',error:'SUBMISSION_UNKNOWN'};
       if(j.state==='prepared'||['completed','failed'].includes(j.state))return j;
       if(!j.remote_id){
-        const r=JSON.parse(await this.network('https://api.assemblyai.com/v2/transcript?limit=100'));
+        const r=JSON.parse(await this.network('https://api.assemblyai.com/v2/transcript?limit=100',null,null,true));
         const submitted=Date.parse(j.submitted_at);
         const matches=(r.transcripts || []).filter(t=>{const created=Date.parse(t.created);return t.audio_url===j.audio_url && Number.isFinite(submitted) && created>=submitted-5000 && created<=submitted+65000;});
         if(matches.length!==1)return {...j,recovery_incomplete:true};
         j.remote_id=matches[0].id;if(!/^[a-zA-Z0-9_-]{1,100}$/.test(j.remote_id))C.fail('INVALID_INPUT');
         await this.sql("UPDATE jobs SET remote_id=?,state='submitted',error='' WHERE id=?",[j.remote_id,j.id]);
       }
-      const r=JSON.parse(await this.network('https://api.assemblyai.com/v2/transcript/'+j.remote_id));
+      const r=JSON.parse(await this.network('https://api.assemblyai.com/v2/transcript/'+j.remote_id,null,null,true));
       if(r.id!==j.remote_id)C.fail('INVALID_RESPONSE');
       if(r.status==='completed'){
         let segs=r.utterances;
-        if(!Array.isArray(segs)||!segs.length){const sentences=JSON.parse(await this.network('https://api.assemblyai.com/v2/transcript/'+j.remote_id+'/sentences'));segs=sentences.sentences;}
-        if(!Array.isArray(segs)||!segs.length)C.fail('INVALID_TRANSCRIPT');
+        if(!Array.isArray(segs)||!segs.length){const sentences=JSON.parse(await this.network('https://api.assemblyai.com/v2/transcript/'+j.remote_id+'/sentences',null,null,true));segs=sentences.sentences;}
+        if(!Array.isArray(segs)||!segs.length)return this.failJob(j,'EMPTY_TRANSCRIPT');
         await this.store(j.episode_id,C.segments(JSON.stringify(segs.map(s=>({text:s.text,start:s.start==null?null:s.start/1000,end:s.end==null?null:s.end/1000,speaker:s.speaker || ''}))),'json'),'assemblyai','json','',j.id);
         await this.sql("UPDATE jobs SET state='completed',checked_at=?,error='' WHERE id=?",[now(),j.id]);
       }else if(r.status==='error'){
-        await this.batch([
-          {sql:"UPDATE jobs SET state='failed',checked_at=?,error='AAI_FETCH_FAILED' WHERE id=?",params:[now(),j.id]},
-          {sql:"UPDATE episodes SET transcript_state=CASE WHEN transcript_state='ready' THEN 'ready' ELSE 'failed' END WHERE id=?",params:[j.episode_id]},
-        ]);
+        return this.failJob(j,'AAI_FETCH_FAILED');
       }else if(!['queued','processing'].includes(r.status))C.fail('INVALID_RESPONSE');
       else await this.sql('UPDATE jobs SET checked_at=? WHERE id=?',[now(),j.id]);
       return (await this.rows('SELECT * FROM jobs WHERE id=?',[j.id]))[0];
@@ -255,7 +285,7 @@
       if(tool==='podcast_cite')return this.cite(a);
       if(tool==='podcast_transcribe')return this.prepare(a.episode_id,callId || '');
       if(tool==='podcast_status'){
-        const jobs=await this.rows("SELECT * FROM jobs WHERE "+(a.job_id?'id=?':"state IN ('submitting','submitted','unknown')")+' LIMIT 100',a.job_id?[a.job_id]:[]),results=[];
+        const jobs=await this.rows("SELECT * FROM jobs WHERE "+(a.job_id?'id=?':"state IN ('claiming','submitting','submitted','unknown')")+' LIMIT 100',a.job_id?[a.job_id]:[]),results=[];
         for(let j of jobs){if(j.state==='submitting')j={...j,state:'unknown',error:'SUBMISSION_UNKNOWN'};try{results.push(await this.check(j));}catch(error){results.push({...j,errorCode:error.code || 'NETWORK_FAILED',recovery_incomplete:true});}}return {jobs:results};
       }
       C.fail('UNKNOWN_TOOL');
@@ -263,7 +293,7 @@
     async remove(kind,value){
       const where=kind==='all'?'1=1':kind==='show'?'show_id=?':'id=?',params=kind==='all'?[]:[value];
       const eids='SELECT id FROM episodes WHERE '+where;
-      if((await this.rows("SELECT id FROM jobs WHERE state IN ('submitting','submitted','unknown') AND episode_id IN ("+eids+') LIMIT 1',params)).length)C.fail('ACTIVE_CLOUD_JOB');
+      if((await this.rows("SELECT id FROM jobs WHERE state IN ('claiming','submitting','submitted','unknown') AND episode_id IN ("+eids+') LIMIT 1',params)).length)C.fail('ACTIVE_CLOUD_JOB');
       await this.io({op:'db.backup',dbPath:'podcasts.sqlite',label:'pre-delete'});
       const statements=[{sql:'DELETE FROM segments WHERE transcript_id IN (SELECT id FROM transcripts WHERE episode_id IN ('+eids+'))',params},{sql:'DELETE FROM transcripts WHERE episode_id IN ('+eids+')',params},{sql:'DELETE FROM notes WHERE episode_id IN ('+eids+')',params},{sql:'DELETE FROM jobs WHERE episode_id IN ('+eids+')',params},{sql:'DELETE FROM episodes WHERE '+where,params}];
       if(kind==='show')statements.push({sql:'DELETE FROM shows WHERE id=?',params});if(kind==='all')statements.push({sql:'DELETE FROM shows',params:[]},{sql:"DELETE FROM meta WHERE key LIKE 'import:%'",params:[]});

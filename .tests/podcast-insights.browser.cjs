@@ -82,6 +82,18 @@ const root=path.resolve(__dirname,'../podcast-insights');
     await page.locator('#reader').getByRole('button',{name:'保存选中引用与笔记',exact:true}).click();
     await page.waitForFunction(()=>document.getElementById('notice').textContent.includes('已保存'));
     assert.equal(dialogs.length,1);assert.equal(db.prepare('SELECT quote FROM notes').get().quote,'x'.repeat(100));
+    const other=await page.evaluate(()=>responses.find(r=>r.callId==='empty-1').result.episodes[0].id);
+    await page.evaluate(eid=>hostListener({type:'tool-call',tool:'podcast_import_transcript',args:{episode_id:eid,content:'Other episode evidence',format:'txt'},callId:'other-text'}),other);
+    await page.waitForFunction(()=>responses.some(r=>r.callId==='other-text'));
+    await page.getByRole('button',{name:'Synthetic episode',exact:true}).click();
+    await page.waitForFunction(()=>document.getElementById('episode-title').textContent==='Synthetic episode');
+    await page.locator('#query').fill('Other episode');await page.locator('#search button').click();
+    await page.waitForFunction(()=>document.querySelector('#reader blockquote')?.textContent==='Other episode evidence');
+    assert.equal(await page.locator('#episode-title').textContent(),'检索结果');assert.equal(await page.locator('#episode-actions').isVisible(),false);
+    assert.ok((await page.locator('#reader').textContent()).includes('empty.mp3'));
+    await page.locator('#reader').getByRole('button',{name:'在资料库中查看',exact:true}).click();
+    await page.waitForFunction(()=>document.getElementById('episode-title').textContent==='empty.mp3');assert.equal(await page.locator('#episode-actions').isVisible(),true);
+    await page.getByRole('button',{name:'Synthetic episode',exact:true}).click();await page.locator('#query').fill('');
     const output=process.env.PODCAST_SCREENSHOT_DIR || '/private/tmp/podcast-158-visual';fs.mkdirSync(output,{recursive:true});
     for(const language of ['zh-CN','en']){
       locale=language;

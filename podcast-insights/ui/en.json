@@ -80,9 +80,12 @@
     "QUOTE_MISMATCH": "Quote differs from original. Select an original passage.",
     "AAI_REJECTED": "Provider rejected submission. Check credentials or request parameters.",
     "XML_UNAVAILABLE": "XML parser unavailable. Update Cindy or import transcript text.",
-    "SOURCE_AUTH_REQUIRED": "Source requires authentication. Provide an accessible public RSS or transcript; an AssemblyAI key cannot authorize this source."
+    "SOURCE_AUTH_REQUIRED": "Source requires authentication. Provide an accessible public RSS or transcript; an AssemblyAI key cannot authorize this source.",
+    "SOURCE_PROVIDER_FORBIDDEN": "Source URLs cannot access the credentialed transcription API. Provide a public RSS or transcript URL.",
+    "EMPTY_TRANSCRIPT": "No speech transcript was returned. The cloud task has ended; review provider charges and use another authorized source."
   },
   "quoteTooLong": "Quote exceeds 1200 characters. Select a shorter passage; nothing was saved.",
   "excerptNotice": "Excerpt around the matching words; […] marks omitted source text. Open the library for the complete passage.",
-  "evidenceInLibrary": "The matching passage exceeds the card limit. Open the library to verify the complete source."
+  "evidenceInLibrary": "The matching passage exceeds the card limit. Open the library to verify the complete source.",
+  "searchResults": "Search results"
 }
