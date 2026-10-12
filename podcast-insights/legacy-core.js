@@ -122,7 +122,6 @@
       for (let i = 0; i < text.length; i += 12000) chunks.push({...r, text:text.slice(i, i + 12000)});
       return chunks;
     });
-    if (rows.length > 20000) fail('INVALID_TRANSCRIPT');
     return rows.map((r, index) => {
       const text = r.text,
         start = r.start == null ? null : +r.start,

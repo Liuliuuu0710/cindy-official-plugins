@@ -123,7 +123,6 @@
       for (let i = 0; i < text.length; i += 12000) chunks.push({...r, text:text.slice(i, i + 12000)});
       return chunks;
     });
-    if (rows.length > 20000) fail('INVALID_TRANSCRIPT');
     return rows.map((r, index) => {
       const text = r.text,
         start = r.start == null ? null : +r.start,
@@ -401,10 +400,16 @@
     if(full.length>limit){
       const offset=norm(full).indexOf(norm(needle));
       const boundary=target=>{let lo=0,hi=full.length;while(lo<hi){const mid=Math.floor((lo+hi)/2);if(norm(full.slice(0,mid)).length<target)lo=mid+1;else hi=mid;}return lo;};
-      const matchStart=Math.max(0,boundary(offset+1)-8);matchEnd=Math.min(full.length,boundary(offset+norm(needle).length)+8);
+      const exact=full.indexOf(needle);
+      const matchStart=exact>=0?exact:Math.max(0,boundary(offset+1)-8);matchEnd=exact>=0?exact+needle.length:Math.min(full.length,boundary(offset+norm(needle).length)+8);
       left=Math.max(0,matchStart-Math.min(80,Math.max(0,limit-(matchEnd-matchStart))));right=Math.min(full.length,left+limit);
     }
     return {text:full.slice(left,right),text_truncated:left>0||right<full.length,excerpt_start:left,match_truncated:right<matchEnd};
+  }
+  function budgetRows(rows,maxRows,maxBytes){
+    const out=[];let used=2;
+    for(const row of rows){const size=bytes(JSON.stringify(row))+1;if(out.length>=maxRows||used+size>maxBytes)break;out.push(row);used+=size;}
+    return out;
   }
   const isoDate = v => { const n=Date.parse(v); return Number.isFinite(n)?new Date(n).toISOString():''; };
   const feedUrl = value => { const u = new URL(L.url(value)); u.hash = ''; return u.href; };
@@ -473,7 +478,7 @@
     if (!show && !episode) L.fail('XYZ_PARSE_FAILED');
     return {title:show || episode.title,episodes:episode?[episode]:[]};
   }
-  const api={...L,bytes,norm,metadata,excerpt,isoDate,feedUrl,feed,segments,xyz,duration};
+  const api={...L,bytes,norm,metadata,excerpt,budgetRows,isoDate,feedUrl,feed,segments,xyz,duration};
   if (typeof module!=='undefined') module.exports=api; else root.PodcastCore=api;
 })(globalThis);
 
@@ -539,7 +544,7 @@
       if(!r?.ok || r.status<200 || r.status>=300 || r.truncated){const code=r?.status===401?(new URL(url).hostname==='api.assemblyai.com'?'AAI_KEY_MISSING':'SOURCE_AUTH_REQUIRED'):r?.status===403?'NETWORK_FORBIDDEN':'NETWORK_FAILED';throw Object.assign(new Error(code),{code,httpStatus:r?.status,httpResponseCompleted:r?.ok===true});}
       return r.body;
     }
-    async episode(eid){const e=(await this.rows('SELECT e.*,s.title AS show_title FROM episodes e JOIN shows s ON s.id=e.show_id WHERE e.id=?',[eid]))[0];if(!e)C.fail('EPISODE_NOT_FOUND');return e;}
+    async episode(eid){const e=(await this.rows('SELECT e.id,e.show_id,e.guid,e.title,e.published_at,e.duration_s,e.audio_bytes,e.audio_url,e.page_url,e.transcript_state,s.title AS show_title FROM episodes e JOIN shows s ON s.id=e.show_id WHERE e.id=?',[eid]))[0];if(!e)C.fail('EPISODE_NOT_FOUND');return e;}
     async ingest(feed,source,kind){
       C.metadata(feed);
       const url=source?C.feedUrl(source):null;
@@ -738,12 +743,16 @@
       if(tool==='podcast_library'){
         const limit=Math.max(1,Math.min(500,Number(a.limit)||100)),offset=Math.max(0,Number(a.offset)||0);
         const where=[],params=[];if(a.show_id){where.push('e.show_id=?');params.push(a.show_id);}if(a.transcript_state){where.push('e.transcript_state=?');params.push(a.transcript_state);}
-        const episodes=await this.rows('SELECT e.*,s.title AS show_title FROM episodes e JOIN shows s ON s.id=e.show_id'+(where.length?' WHERE '+where.join(' AND '):'')+' ORDER BY e.published_at DESC,e.id LIMIT ? OFFSET ?',[...params,limit,offset]);
-        const status=await this.io({op:'status'}),shows=await this.rows('SELECT * FROM shows ORDER BY title LIMIT 501'),jobs=await this.rows('SELECT * FROM jobs ORDER BY submitted_at DESC LIMIT 101');return {shows:shows.slice(0,500),shows_truncated:shows.length>500,episodes,next_offset:episodes.length===limit?offset+limit:null,used_bytes:status.usedBytes,jobs:jobs.slice(0,100),jobs_truncated:jobs.length>100};
+        const raw=await this.rows('SELECT e.id,e.show_id,substr(e.title,1,200) AS title,substr(s.title,1,100) AS show_title,e.published_at,e.duration_s,e.audio_bytes,e.transcript_state,(length(e.audio_url)>0) AS has_audio,(length(e.title)>200 OR length(s.title)>100) AS metadata_truncated FROM episodes e JOIN shows s ON s.id=e.show_id'+(where.length?' WHERE '+where.join(' AND '):'')+' ORDER BY e.published_at DESC,e.id LIMIT ? OFFSET ?',[...params,limit,offset]);
+        const episodes=C.budgetRows(raw,limit,20000),status=await this.io({op:'status'});
+        const rawShows=await this.rows('SELECT id,substr(title,1,200) AS title,substr(author,1,100) AS author,language,(length(title)>200 OR length(author)>100) AS metadata_truncated FROM shows ORDER BY title,id LIMIT 501');
+        const rawJobs=await this.rows('SELECT id,episode_id,provider,state,remote_id,est_usd,submitted_at,checked_at,error,card_id FROM jobs ORDER BY submitted_at DESC,id LIMIT 101');
+        const shows=C.budgetRows(rawShows,500,20000),jobs=C.budgetRows(rawJobs,100,18000);
+        return {episodes,next_offset:episodes.length<raw.length||raw.length===limit?offset+episodes.length:null,episodes_budget_limited:episodes.length<raw.length,shows,shows_truncated:shows.length<rawShows.length,jobs,jobs_truncated:jobs.length<rawJobs.length,used_bytes:status.usedBytes,max_output_bytes:60000};
       }
       if(tool==='podcast_read'){
         const e=await this.episode(a.episode_id);const limit=Math.max(1,Math.min(20000,Number(a.max_chars)||10000));let offset=Math.max(0,Number(a.offset)||0);
-        if(a.around_segment){const r=(await this.rows('SELECT g.idx FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE g.id=? AND t.episode_id=? AND t.is_active=1',[a.around_segment,e.id]))[0];if(!r)C.fail('SEGMENT_NOT_FOUND');offset=Math.max(0,r.idx-1);}
+        if(a.around_segment){const r=(await this.rows('SELECT g.idx FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE g.id=? AND t.episode_id=? AND t.is_active=1',[a.around_segment,e.id]))[0];if(!r)C.fail('SEGMENT_NOT_FOUND');offset=r.idx;}
         if(a.from_ms!=null){const r=(await this.rows('SELECT g.idx FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE t.episode_id=? AND t.is_active=1 AND g.start_ms>=? ORDER BY g.idx LIMIT 1',[e.id,a.from_ms]))[0];if(!r)return {episode:e,segments:[],next_offset:null};offset=r.idx;}
         const rows=await this.rows('SELECT g.* FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE t.episode_id=? AND t.is_active=1 AND g.idx>=? ORDER BY g.idx LIMIT 2000',[e.id,offset]);if(!rows.length && e.transcript_state!=='ready')C.fail('NO_TRANSCRIPT');
         const segments=[];let n=0;for(const raw of rows){const r={...raw};const charOffset=raw.idx===offset?Math.max(0,Number(a.char_offset)||0):0;r.text=r.text.slice(charOffset);if(n+r.text.length>limit){if(!segments.length)return {episode:e,segments:[{...r,text:r.text.slice(0,limit),text_truncated:true}],next_offset:r.idx,next_char_offset:charOffset+limit};break;}segments.push(r);n+=r.text.length;}
@@ -774,6 +783,12 @@
         for(let j of jobs){if(j.state==='submitting')j={...j,state:'unknown',error:'SUBMISSION_UNKNOWN'};try{results.push(await this.check(j));}catch(error){results.push({...j,errorCode:error.code || 'NETWORK_FAILED',recovery_incomplete:true});}}return {jobs:results};
       }
       C.fail('UNKNOWN_TOOL');
+    }
+    async notes(a={}){
+      const offset=Math.max(0,Number(a.offset)||0),limit=Math.max(1,Math.min(500,Number(a.limit)||100));
+      const rows=await this.rows('SELECT n.*,e.title,s.title AS show_title FROM notes n JOIN episodes e ON e.id=n.episode_id JOIN shows s ON s.id=e.show_id ORDER BY n.created_at DESC,n.id DESC LIMIT ? OFFSET ?',[limit,offset]);
+      const notes=C.budgetRows(rows,limit,58000);
+      return {notes,next_offset:notes.length<rows.length||rows.length===limit?offset+notes.length:null,budget_limited:notes.length<rows.length};
     }
     async remove(kind,value){
       const where=kind==='all'?'1=1':kind==='show'?'show_id=?':'id=?',params=kind==='all'?[]:[value];
@@ -857,7 +872,7 @@
       if(!(seg.text+(next?'\n'+next.text:'')).includes(quote))C.fail('QUOTE_MISMATCH');const e=await service.episode(seg.episode_id);
       await service.sql('INSERT INTO notes VALUES(?,?,?,?,?,?,?)',[crypto.randomUUID(),e.id,seg.id,quote,String(m.args.note || '').slice(0,5000),e.page_url,new Date().toISOString()]);return {saved:true};
     }
-    if(m.tool==='notes')return {notes:await service.rows('SELECT n.*,e.title,s.title AS show_title FROM notes n JOIN episodes e ON e.id=n.episode_id JOIN shows s ON s.id=e.show_id ORDER BY n.created_at DESC LIMIT 500')};
+    if(m.tool==='notes')return service.notes(m.args);
     if(m.tool==='export_notes'){
       if(!Array.isArray(m.args.ids)||m.args.ids.length<1||m.args.ids.length>100)C.fail('INVALID_INPUT');
       const notes=await service.rows('SELECT n.*,e.title,s.title AS show_title FROM notes n JOIN episodes e ON e.id=n.episode_id JOIN shows s ON s.id=e.show_id WHERE n.id IN ('+m.args.ids.map(()=>'?').join(',')+')',m.args.ids);

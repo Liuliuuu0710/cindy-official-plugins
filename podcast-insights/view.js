@@ -1,7 +1,7 @@
 (function(){
   'use strict';
   const $=id=>document.getElementById(id),channel=new BroadcastChannel('podcast-insights-v2'),pending=new Map();
-  let ui,show='',episode='',next=null,episodeOffset=null,nextChar=0,highlight='',busy=false,refreshPending=false;
+  let ui,show='',episode='',next=null,episodeOffset=null,notesNext=null,nextChar=0,highlight='',busy=false,refreshPending=false;
   const notice=s=>$('notice').textContent=s || '';
   function request(tool,args={}){const reqId=crypto.randomUUID();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{pending.delete(reqId);reject(new Error(ui.timeout));},120000);pending.set(reqId,{resolve,reject,timer});channel.postMessage({type:'request',reqId,tool,args});});}
   function connect(){const reqId=crypto.randomUUID();return new Promise((resolve,reject)=>{const send=()=>channel.postMessage({type:'ping',reqId});const repeat=setInterval(send,250);const timer=setTimeout(()=>{clearInterval(repeat);pending.delete(reqId);reject(new Error(ui.timeout));},15000);pending.set(reqId,{resolve:()=>{clearInterval(repeat);resolve();},reject,timer});send();});}
@@ -40,7 +40,7 @@
     if(offset===0&&charOffset===0)$('reader').replaceChildren();for(const s of r.segments)$('reader').append(renderSegment(s,r.episode));next=r.next_offset;nextChar=r.next_char_offset || 0;$('more').hidden=next==null;
     if(highlight)document.getElementById('segment-'+highlight)?.scrollIntoView({block:'center'});
   }
-  async function notes(){const r=await request('notes');$('notes').replaceChildren();for(const n of r.notes){const row=node('label');row.className='item';const cb=node('input');cb.type='checkbox';cb.value=n.id;row.append(cb,node('span',n.show_title+' · '+n.title),node('blockquote',n.quote),node('span',n.note));$('notes').append(row);}}
+  async function notes(append=false){const r=await request('notes',{offset:append?notesNext || 0:0});if(!append)$('notes').replaceChildren();notesNext=r.next_offset;$('more-notes').hidden=notesNext==null;for(const n of r.notes){const row=node('label');row.className='item';const cb=node('input');cb.type='checkbox';cb.value=n.id;row.append(cb,node('span',n.show_title+' · '+n.title),node('blockquote',n.quote),node('span',n.note));$('notes').append(row);}}
   channel.onmessage=event=>{const m=event.data;if(m.type==='response'||m.type==='pong'){const p=pending.get(m.reqId);if(!p)return;clearTimeout(p.timer);pending.delete(m.reqId);(m.type==='pong'||m.ok)?p.resolve(m.result):p.reject(new Error(m.message || ui.failed));}
     if(m.type==='changed'){if(busy)refreshPending=true;else act(()=>refresh());}
     if(m.type==='focus'){act(()=>read(m.episode_id,0,0,m.segment_id));}
@@ -51,7 +51,7 @@
     $('state').onchange=()=>act(()=>refresh());$('more-episodes').onclick=()=>act(()=>refresh(true));$('clear').onclick=()=>act(()=>confirmDelete('all',''));$('delete-episode').onclick=()=>act(()=>confirmDelete('episode',episode));
     $('cloud').onclick=()=>act(async()=>{const r=await request('cloud',{episode_id:episode});notice(r.message || ui.openTask);});
     $('file').onchange=()=>act(async()=>{const file=$('file').files[0];if(!file)return;if(file.size>5*1024*1024)throw new Error(ui.fileTooLarge);await request('podcast_import_transcript',{episode_id:episode,format:file.name.split('.').at(-1).toLowerCase(),content:await file.text()});$('file').value='';highlight='';await read(episode);});
-    $('more').onclick=()=>act(()=>read(episode,next,nextChar));$('export').onclick=()=>act(async()=>{const ids=Array.from($('notes').querySelectorAll('input:checked')).map(e=>e.value);if(!ids.length){notice(ui.selectNotes);return;}const r=await request('export_notes',{ids});notice(r.cancelled?ui.cancelled:ui.exported);});
+    $('more-notes').onclick=()=>act(()=>notes(true));$('more').onclick=()=>act(()=>read(episode,next,nextChar));$('export').onclick=()=>act(async()=>{const ids=Array.from($('notes').querySelectorAll('input:checked')).map(e=>e.value);if(!ids.length){notice(ui.selectNotes);return;}const r=await request('export_notes',{ids});notice(r.cancelled?ui.cancelled:ui.exported);});
     act(async()=>{const r=await fetch('/wake');if(!r.ok)throw new Error(ui.failed);await connect();await refresh();await notes();const cfg=await (await fetch('/kv')).json();if(cfg.selected){try{await read(cfg.selected.episode_id,0,0,cfg.selected.segment_id);}catch(e){notice(e.message);}}request('resume').catch(e=>notice(e.message));});
   });
 })();

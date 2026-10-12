@@ -17,10 +17,16 @@
     if(full.length>limit){
       const offset=norm(full).indexOf(norm(needle));
       const boundary=target=>{let lo=0,hi=full.length;while(lo<hi){const mid=Math.floor((lo+hi)/2);if(norm(full.slice(0,mid)).length<target)lo=mid+1;else hi=mid;}return lo;};
-      const matchStart=Math.max(0,boundary(offset+1)-8);matchEnd=Math.min(full.length,boundary(offset+norm(needle).length)+8);
+      const exact=full.indexOf(needle);
+      const matchStart=exact>=0?exact:Math.max(0,boundary(offset+1)-8);matchEnd=exact>=0?exact+needle.length:Math.min(full.length,boundary(offset+norm(needle).length)+8);
       left=Math.max(0,matchStart-Math.min(80,Math.max(0,limit-(matchEnd-matchStart))));right=Math.min(full.length,left+limit);
     }
     return {text:full.slice(left,right),text_truncated:left>0||right<full.length,excerpt_start:left,match_truncated:right<matchEnd};
+  }
+  function budgetRows(rows,maxRows,maxBytes){
+    const out=[];let used=2;
+    for(const row of rows){const size=bytes(JSON.stringify(row))+1;if(out.length>=maxRows||used+size>maxBytes)break;out.push(row);used+=size;}
+    return out;
   }
   const isoDate = v => { const n=Date.parse(v); return Number.isFinite(n)?new Date(n).toISOString():''; };
   const feedUrl = value => { const u = new URL(L.url(value)); u.hash = ''; return u.href; };
@@ -89,6 +95,6 @@
     if (!show && !episode) L.fail('XYZ_PARSE_FAILED');
     return {title:show || episode.title,episodes:episode?[episode]:[]};
   }
-  const api={...L,bytes,norm,metadata,excerpt,isoDate,feedUrl,feed,segments,xyz,duration};
+  const api={...L,bytes,norm,metadata,excerpt,budgetRows,isoDate,feedUrl,feed,segments,xyz,duration};
   if (typeof module!=='undefined') module.exports=api; else root.PodcastCore=api;
 })(globalThis);

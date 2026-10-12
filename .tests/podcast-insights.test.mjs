@@ -448,7 +448,7 @@ test('oversized source metadata is rejected before any show/episode write',async
     await assert.rejects(h.service.ingest({title:'Show',episodes:[{guid:'one',title:'x'.repeat(501)}]},'https://example.test/feed','rss'),/METADATA_FIELD_TOO_LONG/);
     assert.equal(h.db.prepare('SELECT count(*) n FROM shows').get().n,0);assert.equal(h.db.prepare('SELECT count(*) n FROM episodes').get().n,0);
     await h.service.ingest({title:'x'.repeat(500),author:'a'.repeat(300),language:'z'.repeat(64),episodes:[{guid:'one',title:'Episode'}]},'https://example.test/feed','rss');
-    assert.equal((await h.service.run('podcast_library')).episodes[0].show_title.length,500);
+    assert.equal(h.db.prepare('SELECT title FROM shows').get().title.length,500);assert.equal((await h.service.run('podcast_library')).episodes[0].show_title.length,100);
   }finally{h.close();}
 });
 
@@ -480,11 +480,62 @@ test('library marks fixed show/job snapshots and keeps episode pagination indepe
     const eid=await seed(h);const statements=[];
     for(let i=0;i<501;i++)statements.push({sql:'INSERT INTO shows VALUES(?,?,?,?,?,?,?,?,?)',params:['show-'+i,'https://example.test/feed/'+i,'Show '+i,'','','','rss','','']});
     for(let i=0;i<101;i++)statements.push({sql:'INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)',params:['job-'+i,eid,'assemblyai','failed','',null,String(i).padStart(4,'0'),'','','','https://audio.example.test/a.mp3']});
-    await h.service.batch(statements);const r=await h.service.run('podcast_library',{limit:1});assert.equal(r.shows.length,500);assert.equal(r.jobs.length,100);assert.equal(r.shows_truncated,true);assert.equal(r.jobs_truncated,true);assert.equal(r.next_offset,1);
-    const next=await h.service.run('podcast_library',{limit:1,offset:1});assert.equal(next.episodes.length,0);assert.equal(next.shows.length,500);assert.equal(next.jobs.length,100);
+    await h.service.batch(statements);const r=await h.service.run('podcast_library',{limit:1});assert.ok(r.shows.length>0&&r.shows.length<=500);assert.ok(r.jobs.length>0&&r.jobs.length<=100);assert.equal(r.shows_truncated,true);assert.equal(r.jobs_truncated,true);assert.equal(r.next_offset,1);
+    const next=await h.service.run('podcast_library',{limit:1,offset:1});assert.equal(next.episodes.length,0);assert.equal(next.shows.length,r.shows.length);assert.equal(next.jobs.length,r.jobs.length);
   }finally{h.close();}
 });
 
 test('source Accept supports RSS Atom HTML and subtitle content negotiation',async()=>{
   const h=harness({network:async a=>{for(const type of ['application/rss+xml','application/atom+xml','text/html','text/vtt','application/x-subrip'])assert.ok(a.headers.Accept.includes(type));return {ok:true,status:200,body:'Synthetic source'};}});try{await h.service.network('https://example.test/feed','source-call');assert.equal(h.calls.length,1);}finally{h.close();}
+});
+
+
+test('exact citation excerpt uses the later verbatim quote rather than earlier normalized lookalike',async()=>{
+  const h=harness();try{
+    const eid=await seed(h),quote='城市，绿地';await h.service.run('podcast_import_transcript',{episode_id:eid,format:'txt',content:'城市 绿地'+'x'.repeat(1500)+quote+'y'.repeat(2000)});
+    const r=await h.service.run('podcast_cite',{references:[{episode_id:eid,quote}]});assert.equal(r.citations[0].status,'exact');assert.ok(r.citations[0].text.includes(quote));assert.ok(!r.citations[0].text.includes('城市 绿地'));assert.ok(r.citations[0].excerpt_start>1000);
+    assert.ok(C.excerpt('x'.repeat(1500)+'城市 绿地','城市绿地',800).text.includes('城市 绿地'));
+  }finally{h.close();}
+});
+
+test('20000 source cues can expand beyond20000 chunks without losing long-cue text',()=>{
+  const cues=Array.from({length:20000},(_,i)=>({text:i===0?'x'.repeat(12001):'a',start:i,end:i+1}));const content=JSON.stringify(cues);assert.ok(C.bytes(content)<5*1024*1024);
+  const rows=C.segments(content,'json');assert.equal(rows.length,20001);assert.equal(rows.slice(0,2).map(r=>r.text).join(''),'x'.repeat(12001));assert.ok(rows.slice(0,2).every(r=>r.start_ms===0&&r.end_ms===1000));
+});
+
+test('cloud audio bounds are explicit in every language',()=>{
+  const manifest=JSON.parse(fs.readFileSync(new URL('../podcast-insights/ghost.json',import.meta.url),'utf8'));assert.match(manifest.tools.find(t=>t.name==='podcast_transcribe').description,/4 hours/);assert.match(manifest.tools.find(t=>t.name==='podcast_transcribe').description,/256 MiB/);
+  for(const lang of ['en','zh-CN','ja','ko']){const locale=JSON.parse(fs.readFileSync(new URL('../podcast-insights/locales/'+lang+'.json',import.meta.url),'utf8'));assert.match(locale.tools.podcast_transcribe.description,/4/);assert.match(locale.tools.podcast_transcribe.description,/256/);}
+});
+
+test('explicit business failure codes all have actionable English and Chinese messages',()=>{
+  const codes=new Set();for(const name of ['legacy-core.js','core.js','service.js','runtime.js']){const source=fs.readFileSync(new URL('../podcast-insights/'+name,import.meta.url),'utf8');for(const m of source.matchAll(/fail\(['"]([A-Z_]+)['"]/g))codes.add(m[1]);}
+  for(const lang of ['en','zh-CN']){const ui=JSON.parse(fs.readFileSync(new URL('../podcast-insights/ui/'+lang+'.json',import.meta.url),'utf8'));for(const code of codes)assert.ok(typeof ui.errors[code]==='string'&&ui.errors[code].length>10,lang+' missing remedy: '+code);}
+});
+
+test('library projects bounded summaries and paginates actual returned episodes for huge metadata',async()=>{
+  const h=harness();try{
+    await h.service.init();const url='https://example.test/transcript.vtt?data='+'x'.repeat(3900);
+    await h.service.ingest({title:'t'.repeat(500),author:'a'.repeat(300),episodes:Array.from({length:100},(_,i)=>({guid:'g'+i+'q'.repeat(3900),title:'e'.repeat(500)+String(i).slice(0,0),audio_url:'https://audio.example.test/a.mp3',page_url:url,transcripts:Array.from({length:18},()=>({url,type:'text/vtt'}))}))},'https://example.test/feed','rss');
+    let offset=0,total=0;for(let turn=0;turn<10;turn++){
+      const r=await h.service.run('podcast_library',{offset,limit:100});assert.ok(C.bytes(JSON.stringify(r))<=60000);assert.ok(r.episodes.length>0);total+=r.episodes.length;
+      for(const e of r.episodes){for(const key of ['remote_transcripts','guid','audio_url','page_url'])assert.equal(e[key],undefined);assert.ok(e.title.length<=200);assert.equal(e.has_audio,1);}
+      if(r.next_offset==null)break;assert.equal(r.next_offset,offset+r.episodes.length);offset=r.next_offset;
+    }assert.equal(total,100);
+  }finally{h.close();}
+});
+
+test('around_segment first page starts with its target after a long predecessor',async()=>{
+  const h=harness();try{
+    const eid=await seed(h);await h.service.run('podcast_import_transcript',{episode_id:eid,format:'json',content:JSON.stringify([{text:'x'.repeat(12000),start:1,end:2},{text:'Target evidence',start:3,end:4}])});const target=h.db.prepare('SELECT id FROM segments WHERE idx=1').get().id;
+    const r=await h.service.run('podcast_read',{episode_id:eid,around_segment:target});assert.equal(r.segments[0].id,target);assert.equal(r.segments[0].text,'Target evidence');
+  }finally{h.close();}
+});
+
+test('notes beyond500 remain reachable through stable cursors and full old-note content',async()=>{
+  const h=harness();try{
+    const eid=await seed(h);await h.service.batch(Array.from({length:501},(_,i)=>({sql:'INSERT INTO notes VALUES(?,?,?,?,?,?,?)',params:['n'+String(i).padStart(4,'0'),eid,'segment','quote '+i,'note '+i,'https://example.test/source',new Date(Date.UTC(2024,0,1)+i*1000).toISOString()]})));
+    const ids=new Set();let offset=0;for(let turn=0;turn<10;turn++){const r=await h.service.notes({offset});for(const n of r.notes){assert.ok(!ids.has(n.id));ids.add(n.id);}if(r.next_offset==null)break;assert.equal(r.next_offset,offset+r.notes.length);offset=r.next_offset;}
+    assert.equal(ids.size,501);assert.ok(ids.has('n0000'));assert.equal(h.db.prepare('SELECT quote FROM notes WHERE id=?').get('n0000').quote,'quote 0');
+  }finally{h.close();}
 });

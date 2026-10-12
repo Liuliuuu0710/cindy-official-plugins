@@ -99,6 +99,15 @@ const root=path.resolve(__dirname,'../podcast-insights');
     await page.waitForFunction(()=>document.querySelector('#reader small')?.textContent.includes('25:00:00'));
     assert.ok(!(await page.locator('#reader small').first().textContent()).includes('01:00:00'));
     await page.getByRole('button',{name:'Synthetic episode',exact:true}).click();await page.locator('#query').fill('');
+    const addNote=db.prepare('INSERT INTO notes VALUES(?,?,?,?,?,?,?)');
+    for(let i=0;i<501;i++)addNote.run('archived-'+i,eid,segment,'Archive quote '+i,'Archive note '+i,'https://example.test/source',new Date(Date.UTC(2024,0,1)+i*1000).toISOString());
+    await page.reload();await page.addScriptTag({url:'http://127.0.0.1:18765/main.js'});
+    await page.waitForFunction(()=>document.querySelectorAll('#notes input').length>=1);
+    await page.locator('#notes input').first().check();
+    for(let i=0;i<10;i++){if(!(await page.locator('#more-notes').isVisible()))break;const count=await page.locator('#notes input').count();await page.locator('#more-notes').click();await page.waitForFunction(count=>document.querySelectorAll('#notes input').length>count,count);}
+    assert.equal(await page.locator('#notes input').count(),502);assert.equal(await page.locator('#notes input').first().isChecked(),true);
+    await page.locator('#notes input[value="archived-0"]').check();assert.equal(await page.locator('#notes input[value="archived-0"]').isChecked(),true);
+    await page.getByRole('button',{name:'Synthetic episode',exact:true}).click();
     const output=process.env.PODCAST_SCREENSHOT_DIR || '/private/tmp/podcast-158-visual';fs.mkdirSync(output,{recursive:true});
     for(const language of ['zh-CN','en']){
       locale=language;
