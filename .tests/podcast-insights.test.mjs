@@ -20,7 +20,7 @@ function harness(options={}){
       if(a.op==='db.migrate'){if(version<a.targetVersion){for(const step of a.steps)for(const sql of step.sql)db.exec(sql);version=a.targetVersion;}return {ok:true};}
       if(a.op==='db.batch'){
         assert.ok(a.statements.length<=200,'Host batch limit exceeded');
-        db.exec('BEGIN');try{for(const s of a.statements)db.prepare(s.sql).run(...(s.params || []));db.exec('COMMIT');return {ok:true};}catch(e){db.exec('ROLLBACK');throw e;}
+        db.exec('BEGIN');try{for(const s of a.statements){options.beforeStatement?.(s);db.prepare(s.sql).run(...(s.params || []));}db.exec('COMMIT');return {ok:true};}catch(e){db.exec('ROLLBACK');throw e;}
       }
       if(a.op==='db.exec'){
         const s=db.prepare(a.sql);if(/^SELECT/i.test(a.sql))return {ok:true,rows:s.all(...a.params)};
@@ -275,4 +275,68 @@ test('restart restores submitting warning and reconciles with GET only',async()=
     assert.equal(status.jobs.length,1);assert.equal(status.jobs[0].state,'unknown');assert.equal(status.jobs[0].error,'SUBMISSION_UNKNOWN');assert.equal(status.jobs[0].recovery_incomplete,true);
     assert.ok(h.calls.every(a=>a.method==='GET'));assert.equal((await restarted.prepare(eid,'estimate-2')).job.id,r.job.id);
   }finally{h.close();}
+});
+
+
+test('direct citations use the matching speaker, timestamp and focus ID instead of predecessor',async()=>{
+  const h=harness();try{
+    const eid=await seed(h);await h.service.run('podcast_import_transcript',{episode_id:eid,format:'json',content:JSON.stringify([{text:'Alice opening.',speaker:'Alice',start:1,end:2},{text:'Bob says 城市，绿地。',speaker:'Bob',start:10,end:12}])});
+    const bob=h.db.prepare('SELECT id FROM segments WHERE idx=1').get().id;
+    const r=await h.service.run('podcast_cite',{references:[{episode_id:eid,quote:'Bob says 城市，绿地。'},{episode_id:eid,quote:'Bob says 城市 绿地'}]});
+    for(const c of r.citations){assert.equal(c.id,bob);assert.equal(c.speaker,'Bob');assert.equal(c.start_ms,10000);assert.ok(!c.text.includes('Alice'));}
+    const cross=await h.service.run('podcast_cite',{references:[{episode_id:eid,quote:'Alice opening.\nBob says'}]});assert.equal(cross.citations[0].status,'exact');assert.equal(cross.citations[0].speaker,'Alice');
+  }finally{h.close();}
+});
+
+test('prepared estimates refresh feed audio/price and changes after rendering require a new click',async()=>{
+  const h=harness();try{
+    const eid=await seed(h),first=await h.service.prepare(eid,'estimate-1');
+    await seed(h,{audio_url:'https://audio.example.test/two.mp3',duration_s:7200});
+    const refreshed=await h.service.prepare(eid,'estimate-2');assert.equal(refreshed.job.id,first.job.id);assert.equal(refreshed.job.audio_url,'https://audio.example.test/two.mp3');assert.equal(refreshed.job.est_usd,.46);
+    await assert.rejects(h.service.submitFromClick(first.job.id,click(first.job.id)),/USER_CLICK_REQUIRED/);
+    await seed(h,{audio_url:'https://audio.example.test/three.mp3',duration_s:1800});
+    const changed=await h.service.submitFromClick(first.job.id,click(first.job.id,{callId:'estimate-2'}));assert.equal(changed.job.state,'prepared');assert.equal(changed.requires_user_confirmation,true);assert.equal(changed.job.est_usd,.115);assert.equal(h.calls.length,0);
+    await h.service.submitFromClick(first.job.id,click(first.job.id,{callId:'progress-1',spawnCallId:'progress-2'}));
+    assert.equal(h.calls.length,1);assert.equal(JSON.parse(h.calls[0].body).audio_url,'https://audio.example.test/three.mp3');
+  }finally{h.close();}
+});
+
+test('claim transaction rolls back both states on second-statement failure before any POST',async()=>{
+  let fault=false;const h=harness({beforeStatement:s=>{if(fault&&s.sql.startsWith('UPDATE episodes'))throw new Error('Claim interrupted');}});try{
+    const eid=await seed(h),r=await h.service.prepare(eid,'estimate-1');fault=true;
+    await assert.rejects(h.service.submitFromClick(r.job.id,click(r.job.id)),/Claim interrupted/);
+    assert.equal(h.db.prepare('SELECT state FROM jobs').get().state,'prepared');assert.equal((await h.service.episode(eid)).transcript_state,'none');assert.equal(h.calls.length,0);
+    fault=false;await h.service.submitFromClick(r.job.id,click(r.job.id));assert.equal(h.calls.length,1);
+  }finally{h.close();}
+});
+
+test('provider terminal failure writes are atomic and a failed batch is recoverable',async()=>{
+  for(const reject of [false,true]){
+    let fault=false;const h=harness({beforeStatement:s=>{if(fault&&s.sql.startsWith('UPDATE episodes'))throw new Error('Failure interrupted');},network:async a=>({ok:true,status:reject?400:200,body:JSON.stringify(a.method==='POST'?{id:'remote-1'}:{id:'remote-1',status:'error'})})});
+    try{
+      const eid=await seed(h),r=await h.service.prepare(eid,'estimate-1');
+      if(reject){
+        // Claim succeeds; inject the fault only after the provider POST.
+        const network=h.host.fetch;h.host.fetch=async a=>{const result=await network(a);if(a.method==='POST')fault=true;return result;};
+        const result=await h.service.submitFromClick(r.job.id,click(r.job.id));assert.equal(result.job.state,'unknown');assert.equal(result.job.error,'SUBMISSION_UNKNOWN');assert.equal(h.db.prepare('SELECT state FROM jobs').get().state,'submitting');
+      }else{
+        await h.service.submitFromClick(r.job.id,click(r.job.id));fault=true;
+        const result=await h.service.run('podcast_status',{job_id:r.job.id});assert.equal(result.jobs[0].recovery_incomplete,true);assert.equal(h.db.prepare('SELECT state FROM jobs').get().state,'submitted');
+        assert.equal((await h.service.episode(eid)).transcript_state,'transcribing');
+        fault=false;assert.equal((await h.service.run('podcast_status',{job_id:r.job.id})).jobs[0].state,'failed');assert.equal((await h.service.episode(eid)).transcript_state,'failed');
+      }
+      assert.equal(h.calls.filter(a=>a.method==='POST').length,1);
+    }finally{h.close();}
+  }
+});
+
+test('publisher transcript selectors use latest:N or feed GUIDs and expose the contract',async()=>{
+  const feed=C.feed;C.feed=()=>({title:'Selector show',episodes:[{guid:'old-guid',title:'Old',published_at:'2025-01-01',transcripts:[{url:'https://example.test/old.txt',type:'text/plain'}]},{guid:'new-guid',title:'New',published_at:'2025-01-02',transcripts:[{url:'https://example.test/new.txt',type:'text/plain'}]}]});
+  const h=harness({network:async()=>({ok:true,status:200,body:'Publisher transcript'})});try{
+    const r=await h.service.run('podcast_import',{url:'https://example.test/feed',episodes:'latest:1'},'import-1');assert.equal(r.transcripts.length,1);assert.equal((await h.service.episode(r.transcripts[0].episode_id)).guid,'new-guid');
+    const old=await h.service.run('podcast_import',{url:'https://example.test/feed',episodes:['old-guid']},'import-2');assert.equal((await h.service.episode(old.transcripts[0].episode_id)).guid,'old-guid');
+    for(const episodes of ['other:3','latest:0','latest:51'])await assert.rejects(h.service.run('podcast_import',{url:'https://example.test/feed',episodes},'import-bad'),/INVALID_INPUT/);
+    const manifest=JSON.parse(fs.readFileSync(new URL('../podcast-insights/ghost.json',import.meta.url),'utf8'));assert.match(manifest.tools[0].parameters.properties.episodes.description,/latest:N.*GUID.*not library/);
+    for(const lang of ['en','zh-CN','ja','ko']){const locale=JSON.parse(fs.readFileSync(new URL('../podcast-insights/locales/'+lang+'.json',import.meta.url),'utf8'));assert.match(locale.tools.podcast_import.description,/latest:N/);assert.match(locale.tools.podcast_import.description,/GUID/);}
+  }finally{C.feed=feed;h.close();}
 });

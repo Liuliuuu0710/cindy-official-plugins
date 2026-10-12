@@ -565,7 +565,7 @@
       feed=C.feed(await this.network(source,callId),source);const result=await this.ingest(feed,source,kind);
       let selected;
       if(Array.isArray(a.episodes)) selected=result.episodes.filter(e=>a.episodes.includes(e.guid));
-      else {const n=Number((a.episodes || 'latest:3').split(':')[1]);if(!Number.isInteger(n)||n<1||n>50)C.fail('INVALID_INPUT');selected=[...result.episodes].sort((a,b)=>(Date.parse(b.published_at)||0)-(Date.parse(a.published_at)||0)).slice(0,n);}
+      else {const selector=a.episodes ?? 'latest:3';if(typeof selector!=='string'||!/^latest:[0-9]+$/.test(selector))C.fail('INVALID_INPUT');const n=Number(selector.split(':')[1]);if(!Number.isInteger(n)||n<1||n>50)C.fail('INVALID_INPUT');selected=[...result.episodes].sort((a,b)=>(Date.parse(b.published_at)||0)-(Date.parse(a.published_at)||0)).slice(0,n);}
       const transcripts=[];
       for(const e of selected){
         if(!e.transcripts?.length)continue;
@@ -583,8 +583,9 @@
         // Locate normalized matches in SQL; then consider each candidate with its immediate neighbor.
         const escaped=needle.replace(/[\\%_]/g,'\\$&');
         const candidates=await this.rows("SELECT g.* FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE t.episode_id=? AND t.is_active=1 AND (g.norm LIKE ? ESCAPE '\\' OR (g.norm || COALESCE((SELECT n.norm FROM segments n WHERE n.transcript_id=g.transcript_id AND n.idx=g.idx+1),'')) LIKE ? ESCAPE '\\') ORDER BY g.idx LIMIT 100",[e.id,'%'+escaped+'%','%'+escaped+'%']);
-        let found=null;
-        for(const g of candidates){const n=(await this.rows('SELECT * FROM segments WHERE transcript_id=? AND idx=?',[g.transcript_id,g.idx+1]))[0];const combined=g.text+(n?'\n'+n.text:'');const singleExact=g.text.includes(quote),singleNorm=g.norm.includes(needle);if(singleExact||singleNorm||combined.includes(quote)||C.norm(combined).includes(needle)){found={...g,text:singleExact||singleNorm?g.text:combined,end_ms:singleExact||singleNorm?g.end_ms:n?.end_ms ?? g.end_ms,status:singleExact||combined.includes(quote)?'exact':'normalized'};break;}}
+        let found=(await this.rows("SELECT g.* FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE t.episode_id=? AND t.is_active=1 AND g.norm LIKE ? ESCAPE '\\' ORDER BY g.idx LIMIT 1",[e.id,'%'+escaped+'%']))[0];
+        if(found)found={...found,status:found.text.includes(quote)?'exact':'normalized'};
+        for(const g of found?[]:candidates){const n=(await this.rows('SELECT * FROM segments WHERE transcript_id=? AND idx=?',[g.transcript_id,g.idx+1]))[0];const combined=g.text+(n?'\n'+n.text:'');const singleExact=g.text.includes(quote),singleNorm=g.norm.includes(needle);if(singleExact||singleNorm||combined.includes(quote)||C.norm(combined).includes(needle)){found={...g,text:singleExact||singleNorm?g.text:combined,end_ms:singleExact||singleNorm?g.end_ms:n?.end_ms ?? g.end_ms,status:singleExact||combined.includes(quote)?'exact':'normalized'};break;}}
         results.push(found?{...found,episode_id:e.id,episode_title:e.title,show_title:e.show_title,page_url:e.page_url,quote,interpretation_verified:false}:{episode_id:e.id,quote,status:'not_found'});
       }return {citations:results,interpretation_verified:false};
     }
@@ -592,7 +593,14 @@
       const e=await this.episode(eid);if(!e.audio_url)C.fail('AUDIO_URL_REQUIRED');
       if(e.duration_s>14400 || e.audio_bytes>256*1024*1024)C.fail('AUDIO_TOO_LARGE');
       if(!(await this.host.credentialsStatus()))C.fail('AAI_KEY_MISSING');
-      const existing=(await this.rows("SELECT * FROM jobs WHERE episode_id=? AND state IN ('prepared','submitting','submitted','unknown') ORDER BY submitted_at DESC LIMIT 1",[eid]))[0];if(existing){if(existing.state==='prepared'&&cardId){await this.sql('UPDATE jobs SET card_id=? WHERE id=?',[cardId,existing.id]);existing.card_id=cardId;}return {job:existing,episode:e,requires_user_confirmation:existing.state==='prepared'};}
+      const existing=(await this.rows("SELECT * FROM jobs WHERE episode_id=? AND state IN ('prepared','submitting','submitted','unknown') ORDER BY submitted_at DESC LIMIT 1",[eid]))[0];if(existing){
+        if(existing.state==='prepared'){
+          const est=e.duration_s==null?null:e.duration_s/3600*0.23;
+          await this.sql("UPDATE jobs SET audio_url=?,est_usd=?,card_id=? WHERE id=? AND state='prepared'",[e.audio_url,est,cardId || existing.card_id,existing.id]);
+          Object.assign(existing,{audio_url:e.audio_url,est_usd:est,card_id:cardId || existing.card_id});
+        }
+        return {job:existing,episode:e,requires_user_confirmation:existing.state==='prepared'};
+      }
       const job={id:id(),episode_id:eid,provider:'assemblyai',state:'prepared',remote_id:'',est_usd:e.duration_s==null?null:e.duration_s/3600*0.23,submitted_at:'',checked_at:'',error:'',card_id:cardId,audio_url:e.audio_url};
       await this.sql('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)',Object.values(job));return {job,episode:e,requires_user_confirmation:true,rate_usd_per_hour:0.23,estimate_only:true};
     }
@@ -603,9 +611,16 @@
       if(j.card_id!==event.callId)C.fail('USER_CLICK_REQUIRED');
       if(j.state!=='prepared')return {job:j,already_submitted:true};
       if(!(await this.host.credentialsStatus()))C.fail('AAI_KEY_MISSING');
-      await this.sql("UPDATE episodes SET transcript_state=CASE WHEN transcript_state='ready' THEN 'ready' ELSE 'transcribing' END WHERE id=?",[j.episode_id]);
-      const submittedAt=now(),cardId=event.spawnCallId || event.callId;
-      const claimed=await this.sql("UPDATE jobs SET state='submitting',submitted_at=?,card_id=? WHERE id=? AND state='prepared'",[submittedAt,cardId,jid]);if(claimed.changes!==1)C.fail('JOB_EXISTS');
+      const e=await this.episode(j.episode_id),est=e.duration_s==null?null:e.duration_s/3600*0.23;
+      // A changed source/price requires a freshly rendered estimate and another click.
+      if(e.audio_url!==j.audio_url || est!==j.est_usd)return this.prepare(j.episode_id,event.spawnCallId || event.callId);
+      if(e.duration_s>14400 || e.audio_bytes>256*1024*1024)C.fail('AUDIO_TOO_LARGE');
+      const submittedAt=now(),cardId=event.spawnCallId || event.callId,claim=id();
+      await this.batch([
+        {sql:"UPDATE jobs SET state='submitting',submitted_at=?,card_id=?,checked_at=? WHERE id=? AND state='prepared'",params:[submittedAt,cardId,claim,jid]},
+        {sql:"UPDATE episodes SET transcript_state=CASE WHEN transcript_state='ready' THEN 'ready' ELSE 'transcribing' END WHERE id=? AND EXISTS (SELECT 1 FROM jobs WHERE id=? AND state='submitting' AND checked_at=?)",params:[j.episode_id,jid,claim]},
+      ]);
+      const claimed=(await this.rows('SELECT checked_at FROM jobs WHERE id=?',[jid]))[0];if(claimed?.checked_at!==claim)C.fail('JOB_EXISTS');
       Object.assign(j,{state:'submitting',submitted_at:submittedAt,card_id:cardId});
       try{
         const r=JSON.parse(await this.network('https://api.assemblyai.com/v2/transcript',null,{audio_url:j.audio_url,speech_models:['universal-3-5-pro','universal-2'],language_detection:true,speaker_labels:true}));
@@ -616,8 +631,11 @@
         const rejected=error.httpStatus>=400 && error.httpStatus<500;
         Object.assign(j,{state:rejected?'failed':'unknown',error:rejected?'AAI_REJECTED':'SUBMISSION_UNKNOWN'});
         try{
-          await this.sql('UPDATE jobs SET state=?,error=? WHERE id=?',[j.state,j.error,jid]);
-          if(rejected)await this.sql("UPDATE episodes SET transcript_state=CASE WHEN transcript_state='ready' THEN 'ready' ELSE 'failed' END WHERE id=?",[j.episode_id]);
+          if(rejected)await this.batch([
+            {sql:'UPDATE jobs SET state=?,error=? WHERE id=?',params:[j.state,j.error,jid]},
+            {sql:"UPDATE episodes SET transcript_state=CASE WHEN transcript_state='ready' THEN 'ready' ELSE 'failed' END WHERE id=?",params:[j.episode_id]},
+          ]);
+          else await this.sql('UPDATE jobs SET state=?,error=? WHERE id=?',[j.state,j.error,jid]);
         }catch{
           // The provider may have accepted a paid job. Never let a second local
           // write failure turn that outcome into an ordinary retryable error.
@@ -648,7 +666,10 @@
         await this.store(j.episode_id,C.segments(JSON.stringify(segs.map(s=>({text:s.text,start:s.start==null?null:s.start/1000,end:s.end==null?null:s.end/1000,speaker:s.speaker || ''}))),'json'),'assemblyai','json','',j.id);
         await this.sql("UPDATE jobs SET state='completed',checked_at=?,error='' WHERE id=?",[now(),j.id]);
       }else if(r.status==='error'){
-        await this.sql("UPDATE jobs SET state='failed',checked_at=?,error='AAI_FETCH_FAILED' WHERE id=?",[now(),j.id]);await this.sql("UPDATE episodes SET transcript_state=CASE WHEN transcript_state='ready' THEN 'ready' ELSE 'failed' END WHERE id=?",[j.episode_id]);
+        await this.batch([
+          {sql:"UPDATE jobs SET state='failed',checked_at=?,error='AAI_FETCH_FAILED' WHERE id=?",params:[now(),j.id]},
+          {sql:"UPDATE episodes SET transcript_state=CASE WHEN transcript_state='ready' THEN 'ready' ELSE 'failed' END WHERE id=?",params:[j.episode_id]},
+        ]);
       }else if(!['queued','processing'].includes(r.status))C.fail('INVALID_RESPONSE');
       else await this.sql('UPDATE jobs SET checked_at=? WHERE id=?',[now(),j.id]);
       return (await this.rows('SELECT * FROM jobs WHERE id=?',[j.id]))[0];

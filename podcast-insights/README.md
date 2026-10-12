@@ -17,3 +17,5 @@ Review fixes in0.2.1: interruption-safe legacy migration, reset reader state whe
 0.2.2 fixes: search crosses artificial cuts between adjacent text blocks sharing their source interval. Quotes longer than1200 characters are rejected with an actionable message; neither selected quotes nor whole displayed passages are silently truncated.
 
 0.2.3 fixes: citation cards display matching source context with explicit omission marks and a library link for complete evidence; source links declare card.externalLinks. A local persistence failure after cloud submission still returns an unknown outcome and a do-not-resubmit warning. Interrupted submitting jobs enter status reconciliation, including after restart.
+
+0.2.4 fixes: citations prefer directly matching segments before boundary-spanning context, preserving the actual speaker/time/focus ID. Prepared estimates refresh current audio and price; changes after display require another confirmation. Cloud claim and failure transitions atomically update job/episode states. episodes selects publisher transcripts via latest:N (1-50) or feed GUIDs, not library episode IDs.
