@@ -258,7 +258,7 @@ test('citation reaches segments beyond the source-cue split expansion boundary',
 test('cloud estimates and status never return audio URLs and status checks use bounded concurrency',async()=>{
   let active=0,maxActive=0;const h=harness({network:async a=>{active++;maxActive=Math.max(maxActive,active);await new Promise(resolve=>setTimeout(resolve,2));active--;return {ok:true,status:200,body:JSON.stringify({id:a.url.split('/').pop(),status:'queued'})};}});
   try{
-    const eid=await seed(h),estimate=await h.service.prepare(eid,'estimate-private');assert.equal(estimate.job.audio_url,undefined);assert.equal(estimate.episode.audio_url,undefined);
+    const eid=await seed(h,{guid:'https://audio.example.test/one.mp3?token=secret'}),estimate=await h.service.prepare(eid,'estimate-private');assert.equal(estimate.job.audio_url,undefined);assert.equal(estimate.episode.audio_url,undefined);assert.equal(estimate.episode.guid,undefined);assert.equal(JSON.stringify(estimate).includes('token=secret'),false);
     const insert=h.db.prepare('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)');for(let i=0;i<100;i++)insert.run('job-'+i,eid,'assemblyai','submitted','remote-'+i,null,new Date().toISOString(),'', '', 'slot-'+i,'https://audio.example.test/'+('x'.repeat(3900))+i+'.mp3');
     const result=await h.service.run('podcast_status',{});assert.ok(maxActive>1&&maxActive<=4);assert.equal(result.jobs.length,100);assert.equal(result.jobs.some(j=>j.audio_url!==undefined),false);assert.equal(result.results_truncated,false);assert.ok(C.bytes(JSON.stringify(result))<=60000);
   }finally{h.close();}
@@ -629,4 +629,26 @@ test('note backend rejects5001 chars without writing and preserves all5000 valid
     const rejected=await request('n'.repeat(5001));assert.equal(rejected.ok,false);assert.equal(rejected.errorCode,'NOTE_TOO_LONG');assert.equal(h.db.prepare('SELECT count(*) n FROM notes').get().n,0);
     assert.equal((await request('n'.repeat(5000))).ok,true);assert.equal(h.db.prepare('SELECT note FROM notes').get().note,'n'.repeat(5000));
   }finally{h.close();}
+});
+
+test('cloud status continues past the first100 active jobs with a stable cursor',async()=>{
+  const h=harness({network:async a=>({ok:true,status:200,body:JSON.stringify({id:a.url.split('/').pop(),status:'queued'})})});
+  try{
+    const eid=await seed(h),insert=h.db.prepare('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)');
+    for(let i=0;i<105;i++)insert.run('status-job-'+i,eid,'assemblyai','submitted','remote-'+i,null,new Date(2025,0,1,0,0,i).toISOString(),'','','slot-'+i,'https://audio.example.test/'+i+'.mp3');
+    const first=await h.service.run('podcast_status',{});assert.equal(first.jobs.length,100);assert.equal(first.jobs_omitted,5);assert.equal(first.next_offset,100);assert.equal(first.results_truncated,true);
+    const second=await h.service.run('podcast_status',{offset:first.next_offset});assert.equal(second.jobs.length,5);assert.equal(second.jobs_omitted,0);assert.equal(second.next_offset,null);assert.equal(second.results_truncated,false);
+  }finally{h.close();}
+});
+
+test('publisher import uses bounded concurrency and tries alternate transcript sources',async()=>{
+  const original=C.feed;let active=0,maxActive=0;const h=harness({network:async a=>{
+    if(a.url==='https://example.test/feed')return {ok:true,status:200,body:'synthetic'};
+    active++;maxActive=Math.max(maxActive,active);await new Promise(resolve=>setTimeout(resolve,3));active--;
+    if(a.url.endsWith('.bad.txt'))return {ok:true,status:404,body:''};
+    return {ok:true,status:200,body:'Publisher evidence'};
+  }});
+  C.feed=()=>({title:'Fallback show',episodes:Array.from({length:8},(_,i)=>({guid:'fallback-'+i,title:'Episode '+i,published_at:new Date(Date.UTC(2025,0,1)+i*1000).toISOString(),transcripts:[{url:'https://example.test/'+i+'.bad.txt',type:'text/plain'},{url:'https://example.test/'+i+'.good.txt',type:'text/plain'}]}))});
+  try{const r=await h.service.run('podcast_import',{url:'https://example.test/feed',episodes:'latest:8'},'fallback-import');assert.equal(r.transcripts.length,8);assert.ok(maxActive>1&&maxActive<=4);assert.equal(h.calls.filter(a=>a.url.endsWith('.bad.txt')).length,8);assert.equal(h.calls.filter(a=>a.url.endsWith('.good.txt')).length,8);}
+  finally{C.feed=original;h.close();}
 });

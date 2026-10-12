@@ -62,7 +62,7 @@
     }
     async episode(eid){const e=(await this.rows('SELECT e.id,e.show_id,e.guid,e.title,e.published_at,e.duration_s,e.audio_bytes,e.audio_url,e.page_url,e.transcript_state,s.title AS show_title FROM episodes e JOIN shows s ON s.id=e.show_id WHERE e.id=?',[eid]))[0];if(!e)C.fail('EPISODE_NOT_FOUND');return e;}
     publicJob(j){if(!j)return j;const {audio_url,...safe}=j;return safe;}
-    publicEpisode(e){if(!e)return e;const {audio_url,...safe}=e;return safe;}
+    publicEpisode(e){if(!e)return e;const {id,show_id,title,published_at,duration_s,audio_bytes,transcript_state,show_title}=e;return {id,show_id,title,published_at,duration_s,audio_bytes,transcript_state,show_title};}
     async ingest(feed,source,kind){
       C.metadata(feed);
       const url=source?C.feedUrl(source):null;
@@ -126,12 +126,13 @@
       let selected;
       if(Array.isArray(a.episodes)) selected=result.episodes.filter(e=>a.episodes.includes(e.guid));
       else {const selector=a.episodes ?? 'latest:3';const n=Number(selector.slice(7));selected=[...result.episodes].sort((a,b)=>(Date.parse(b.published_at)||0)-(Date.parse(a.published_at)||0)).slice(0,n);}
-      const transcripts=[];
-      for(const e of selected){
-        if(!e.transcripts?.length)continue;
-        try{const t=e.transcripts[0], f=/json/i.test(t.type)?'json':/vtt/i.test(t.type)?'vtt':/subrip|srt/i.test(t.type)?'srt':/html/i.test(t.type)?'html':'txt';transcripts.push(await this.store(e.id,C.segments(await this.network(t.url,callId),f),'publisher',f,t.url));}
-        catch(error){await this.sql("UPDATE episodes SET transcript_state=CASE WHEN transcript_state='ready' THEN transcript_state ELSE 'failed' END WHERE id=?",[e.id]);transcripts.push({episode_id:e.id,errorCode:error.code || 'NETWORK_FAILED'});}
-      }
+      const transcriptResults=Array(selected.length);let nextTranscript=0;
+      const transcriptWorker=async()=>{while(true){const index=nextTranscript++;if(index>=selected.length)return;const e=selected[index];if(!e.transcripts?.length)continue;let lastError;
+        for(const t of e.transcripts){try{const f=/json/i.test(t.type)?'json':/vtt/i.test(t.type)?'vtt':/subrip|srt/i.test(t.type)?'srt':/html/i.test(t.type)?'html':'txt';transcriptResults[index]=await this.store(e.id,C.segments(await this.network(t.url,callId),f),'publisher',f,t.url);lastError=undefined;break;}catch(error){lastError=error;}}
+        if(lastError){await this.sql("UPDATE episodes SET transcript_state=CASE WHEN transcript_state='ready' THEN 'ready' ELSE 'failed' END WHERE id=?",[e.id]);transcriptResults[index]={episode_id:e.id,errorCode:lastError.code || 'NETWORK_FAILED'};}
+      }};
+      await Promise.all(Array.from({length:Math.min(4,selected.length)},transcriptWorker));
+      const transcripts=transcriptResults.filter(Boolean);
       return {...result,episodes:result.episodes.map(e=>({id:e.id,guid:e.guid,title:e.title})),transcripts};
     }
     importReceipt(r){
@@ -335,13 +336,17 @@
       if(tool==='podcast_cite')return this.cite(a);
       if(tool==='podcast_transcribe')return this.prepare(a.episode_id,callId || '');
       if(tool==='podcast_status'){
-        const jobs=await this.rows("SELECT * FROM jobs WHERE "+(a.job_id?'id=?':"state IN ('claiming','submitting','submitted','unknown')")+' LIMIT 100',a.job_id?[a.job_id]:[]);
-        const checked=Array(jobs.length);let next=0;
-        const worker=async()=>{while(true){const index=next++;if(index>=jobs.length)return;let j=jobs[index];if(j.state==='submitting')j={...j,state:'unknown',error:'SUBMISSION_UNKNOWN'};try{checked[index]=await this.check(j);}catch(error){checked[index]={...j,errorCode:error.code || 'NETWORK_FAILED',recovery_incomplete:true};}}};
-        await Promise.all(Array.from({length:Math.min(4,jobs.length)},worker));
+        const offset=Number(a.offset)||0,limit=Number(a.limit)||100;if(!Number.isInteger(offset)||offset<0||!Number.isInteger(limit)||limit<1||limit>100)C.fail('INVALID_INPUT');
+        const active="state IN ('claiming','submitting','submitted','unknown')";let total=null;
+        if(!a.job_id)total=Number((await this.rows('SELECT count(*) AS count FROM jobs WHERE '+active))[0]?.count || 0);
+        const jobs=await this.rows('SELECT * FROM jobs WHERE '+(a.job_id?'id=?':active)+' ORDER BY submitted_at DESC,id'+(a.job_id?'':' LIMIT ? OFFSET ?'),a.job_id?[a.job_id]:[limit+1,offset]);
+        const page=a.job_id?jobs:jobs.slice(0,limit),hasMore=!a.job_id&&jobs.length>limit;
+        const checked=Array(page.length);let next=0;
+        const worker=async()=>{while(true){const index=next++;if(index>=page.length)return;let j=page[index];if(j.state==='submitting')j={...j,state:'unknown',error:'SUBMISSION_UNKNOWN'};try{checked[index]=await this.check(j);}catch(error){checked[index]={...j,errorCode:error.code || 'NETWORK_FAILED',recovery_incomplete:true};}}};
+        await Promise.all(Array.from({length:Math.min(4,page.length)},worker));
         const results=[];let outputTruncated=false;const maxOutputBytes=60000,outputBudget=59000;
         for(const result of checked){const safe=this.publicJob(result),candidate=[...results,safe];if(C.bytes(JSON.stringify({jobs:candidate,max_output_bytes:maxOutputBytes,results_truncated:false}))>outputBudget){outputTruncated=true;break;}results.push(safe);}
-        return {jobs:results,jobs_omitted:jobs.length-results.length,results_truncated:outputTruncated||results.length<jobs.length,max_output_bytes:maxOutputBytes};
+        const more=hasMore||results.length<page.length;return {jobs:results,jobs_omitted:a.job_id?0:Math.max(0,total-offset-results.length),next_offset:more?offset+results.length:null,results_truncated:outputTruncated||more,max_output_bytes:maxOutputBytes};
       }
       C.fail('UNKNOWN_TOOL');
     }

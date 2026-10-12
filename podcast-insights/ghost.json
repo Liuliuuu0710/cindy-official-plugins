@@ -5,7 +5,7 @@
   "name": "Podcast Insights",
   "description": "Import podcasts and transcripts, verify original quotes, and compare views with evidence. Optional user-confirmed paid cloud transcription.",
   "whenToUse": "Podcast transcripts, summaries, content questions, cross-show viewpoints, original quotes, speakers and timestamps. Searches imported material only.",
-  "version": "0.2.12",
+  "version": "0.2.13",
   "entry": "main.js",
   "icon": "assets/podcast-icon.jpg",
   "launch": "on-demand",
@@ -241,6 +241,15 @@
         "properties": {
           "job_id": {
             "type": "string"
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
           }
         },
         "required": [],

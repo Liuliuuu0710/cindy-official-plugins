@@ -38,3 +38,5 @@ Additional0.2.5 fixes: source retrieval refuses the credentialed AssemblyAI API 
 0.2.11 fixes: citation search no longer imposes a 20000-row cap; it reaches the full active transcript after source-cue splitting, including the final legal segment.
 
 0.2.12 fixes: cloud estimate and status responses omit full audio URLs until the user confirms; status checks use bounded concurrency and a 60000-byte response budget.
+
+0.2.13 fixes: cloud estimate projections use an explicit safe field list; status supports stable offset/limit continuation; publisher transcript retrieval uses four-way concurrency and tries alternate transcript sources after failures.
