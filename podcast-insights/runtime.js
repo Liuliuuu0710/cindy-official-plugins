@@ -1,6 +1,8 @@
 (function(){
   'use strict';
-  const C=globalThis.PodcastCore, service=new PodcastService({library:a=>cindy.library(a),fetch:a=>cindy.fetch(a),credentialsStatus:async()=>{const r=await fetch('/secrets');if(!r.ok)C.fail('SETTINGS_UNAVAILABLE');return (await r.json()).some(x=>x.key==='assemblyai_key'&&x.saved);}});
+  const C=globalThis.PodcastCore;
+  const requireHost=()=>{if(typeof cindy.library!=='function'||typeof cindy.fetch!=='function')C.fail('CLIENT_UPGRADE_REQUIRED');};
+  const service=new PodcastService({library:a=>{requireHost();return cindy.library(a);},fetch:a=>{requireHost();return cindy.fetch(a);},credentialsStatus:async()=>{const r=await fetch('/secrets');if(!r.ok)C.fail('SETTINGS_UNAVAILABLE');return (await r.json()).some(x=>x.key==='assemblyai_key'&&x.saved);}});
   let zh=false,ui={},queue=Promise.resolve();
   const ready=cindy.request({kind:'app-context'}).then(async r=>{zh=r.context?.locale==='zh-CN';ui=await (await fetch('/ui/'+(zh?'zh-CN':'en')+'.json')).json();}).catch(()=>{});
   const channel=new BroadcastChannel('podcast-insights-v2');
@@ -41,19 +43,37 @@
   let timer=null;
   const polling=new Map();
   function schedule(){if(timer||!polling.size)return;const maxPolls=Math.max(...Array.from(polling.values(),entry=>entry.polls));timer=setTimeout(()=>{timer=null;enqueue(async()=>{
-    const now=Date.now();
-    for(const [jid,entry] of polling){
-      if(entry.polls>=MAX_POLLS||now-entry.startedAt>=MAX_POLL_MS){polling.delete(jid);continue;}
-      entry.polls++;
-      try{const j=(await service.run('podcast_status',{job_id:jid})).jobs[0];if(!j||['completed','failed','prepared'].includes(j.state)){polling.delete(jid);}if(j)await sendCard(entry.slot,{job:j},['submitting','submitted','unknown'].includes(j.state)?'working':'done');}catch{polling.delete(jid);}
-    }
+    const deadline=Date.now()+60000,entries=Array.from(polling);let next=0;
+    const worker=async()=>{while(next<entries.length&&Date.now()<deadline){
+      const [jid,entry]=entries[next++];
+      if(entry.polls>=MAX_POLLS||Date.now()-entry.startedAt>=MAX_POLL_MS){polling.delete(jid);continue;}
+      entry.polls++;polling.delete(jid);polling.set(jid,entry);
+      try{const j=(await service.run('podcast_status',{job_id:jid},undefined,{deadline})).jobs[0];if(!j||['completed','failed','prepared'].includes(j.state))polling.delete(jid);if(j)await sendCard(entry.slot,{job:j},['submitting','submitted','unknown'].includes(j.state)?'working':'done');}catch{}
+    }};
+    await Promise.allSettled(Array.from({length:Math.min(4,entries.length)},worker));
     channel.postMessage({type:'changed'});schedule();
   });},Math.min(60000,15000*2**Math.min(maxPolls,2)));}
   const remember=jobs=>{for(const j of jobs || [])if(['submitting','submitted','unknown'].includes(j.state)&&j.card_id){const entry=polling.get(j.id);if(entry)entry.slot=j.card_id;else polling.set(j.id,{slot:j.card_id,startedAt:Date.now(),polls:0});}schedule();};
+  let resuming=null;
+  function resume(){
+    if(resuming)return resuming;
+    resuming=(async()=>{
+      let cursor,result;
+      do{
+        result=await enqueue(async()=>{
+          await ready;
+          const page=await service.run('podcast_status',cursor?{cursor}:{},undefined,{deadline:Date.now()+60000});
+          remember(page.jobs);channel.postMessage({type:'changed'});return page;
+        });
+        cursor=result.next_cursor;
+      }while(cursor);
+      return {ok:true,result};
+    })().catch(error).finally(()=>{resuming=null;});
+    return resuming;
+  }
   const requests=new Map();
   async function uiRequest(m){
     if(['podcast_library','podcast_read','podcast_search','podcast_import_transcript'].includes(m.tool))return service.run(m.tool,m.args);
-    if(m.tool==='resume'){const r=await service.run('podcast_status',{});remember(r.jobs);return r;}
     if(m.tool==='import_link' || m.tool==='cloud'){
       if(!cindy.tasks?.capabilities)C.fail('TASKS_UNAVAILABLE');
       const caps=await cindy.tasks.capabilities();if(!caps.operations?.includes('create')||!caps.operations?.includes('send'))C.fail('TASKS_UNAVAILABLE');
@@ -85,7 +105,7 @@
     const m=event.data;if(m?.type==='ping'){channel.postMessage({type:'pong',reqId:m.reqId});return;}if(!m||m.type!=='request'||typeof m.reqId!=='string'||m.reqId.length>100)return;
     if(!requests.has(m.reqId)){
       if(requests.size>=100)requests.delete(requests.keys().next().value);
-      requests.set(m.reqId,enqueue(async()=>{await ready;try{await service.init();return {ok:true,result:await uiRequest(m)};}catch(e){return error(e);}}));
+      requests.set(m.reqId,m.tool==='resume'?resume():enqueue(async()=>{await ready;try{await service.init();return {ok:true,result:await uiRequest(m)};}catch(e){return error(e);}}));
     }
     requests.get(m.reqId).then(r=>channel.postMessage({type:'response',reqId:m.reqId,...r}));
   };

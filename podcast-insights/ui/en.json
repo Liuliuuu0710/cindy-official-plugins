@@ -111,7 +111,9 @@
     "INVALID_BRIEF": "Brief format is invalid. Supply a structured brief with its source references.",
     "MISSING_EVIDENCE": "Evidence is missing. Read the source and verify the quote before saving the brief.",
     "NEED_TWO_SHOWS": "Comparison requires evidence from two distinct shows. Import another show or label single-show scope.",
-    "NOTE_TOO_LONG": "Note exceeds5000 characters. Shorten it before saving; nothing was saved."
+    "NOTE_TOO_LONG": "Note exceeds5000 characters. Shorten it before saving; nothing was saved.",
+    "CLIENT_UPGRADE_REQUIRED": "Upgrade Cindy to a stable or Beta version 0.1.103 or newer with Library and managed network support, then reopen this plugin.",
+    "STATUS_BUDGET_EXHAUSTED": "This status check reached its network time budget. Pending card jobs continue in the next poll; reopen the library to resume later."
   },
   "quoteTooLong": "Quote exceeds 1200 characters. Select a shorter passage; nothing was saved.",
   "excerptNotice": "Excerpt around the matching words; […] marks omitted source text. Open the library for the complete passage.",

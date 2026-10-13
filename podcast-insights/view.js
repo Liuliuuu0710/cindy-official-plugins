@@ -1,7 +1,7 @@
 (function(){
   'use strict';
   const $=id=>document.getElementById(id),channel=new BroadcastChannel('podcast-insights-v2'),pending=new Map();
-  let ui,show='',episode='',next=null,episodeOffset=null,notesNext=null,nextChar=0,highlight='',busy=false,refreshPending=false;
+  let ui,show='',episode='',next=null,episodeOffset=null,notesNext=null,nextChar=0,highlight='',busy=false,refreshPending=false,readerNeedsRetry=false;
   const notice=s=>$('notice').textContent=s || '';
   function request(tool,args={}){const reqId=crypto.randomUUID();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{pending.delete(reqId);reject(new Error(ui.timeout));},120000);pending.set(reqId,{resolve,reject,timer});channel.postMessage({type:'request',reqId,tool,args});});}
   function connect(){const reqId=crypto.randomUUID();return new Promise((resolve,reject)=>{const send=()=>channel.postMessage({type:'ping',reqId});const repeat=setInterval(send,250);const timer=setTimeout(()=>{clearInterval(repeat);pending.delete(reqId);reject(new Error(ui.timeout));},15000);pending.set(reqId,{resolve:()=>{clearInterval(repeat);resolve();},reject,timer});send();});}
@@ -17,6 +17,7 @@
     $('space').textContent=ui.space+': '+(r.used_bytes/1024/1024).toFixed(1)+' MB';
     for(const e of r.episodes){const row=node('div');row.className='item';row.append(button(e.title,async()=>{$('episode-title').textContent=e.title;await read(e.id);}),node('small',ui[e.transcript_state] || e.transcript_state));$('episodes').append(row);}
     if(!r.episodes.length&&!append)$('episodes').append(node('p',ui.empty));episodeOffset=r.next_offset;$('more-episodes').hidden=episodeOffset==null;
+    if(!append&&episode&&readerNeedsRetry)await read(episode);
   }
   function renderSegment(s,e){
     const block=node('div');block.className='item'+(highlight===s.id?' selected':'');block.id='segment-'+s.id;
@@ -36,7 +37,7 @@
   }
   async function read(eid,offset=0,charOffset=0,focusSegment=''){
     if(episode!==eid || (offset===0&&charOffset===0)){highlight=focusSegment;next=null;nextChar=0;$('more').hidden=true;$('reader').replaceChildren();notice('');}
-    episode=eid;$('episode-actions').hidden=false;const r=await request('podcast_read',{episode_id:eid,offset,char_offset:charOffset,...(highlight&&offset===0&&charOffset===0?{around_segment:highlight}:{})});episode=eid;$('episode-title').textContent=r.episode.title;$('episode-actions').hidden=false;
+    episode=eid;readerNeedsRetry=true;$('episode-actions').hidden=false;const r=await request('podcast_read',{episode_id:eid,offset,char_offset:charOffset,...(highlight&&offset===0&&charOffset===0?{around_segment:highlight}:{})});readerNeedsRetry=false;episode=eid;$('episode-title').textContent=r.episode.title;$('episode-actions').hidden=false;
     if(offset===0&&charOffset===0)$('reader').replaceChildren();for(const s of r.segments)$('reader').append(renderSegment(s,r.episode));next=r.next_offset;nextChar=r.next_char_offset || 0;$('more').hidden=next==null;
     if(highlight)document.getElementById('segment-'+highlight)?.scrollIntoView({block:'center'});
   }

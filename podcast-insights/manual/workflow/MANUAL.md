@@ -37,3 +37,11 @@ Metadata exceeding title500/author300/language64 chars, GUID/URL4000, date128 or
 日本語：ローカルジョブはcursor=next_cursorで継続し、終了状態への遷移で未処理を飛ばさない。プロバイダー照合は直近100件のみ。公開元字幕は全体120秒/100試行、未完了IDとnot_checked/import_budget_exhaustedを返し、失敗時も全ワーカー終了を待つ。
 
 한국어: 로컬 작업은 cursor=next_cursor로 계속 조회하여 완료 상태 전환 시 누락하지 않습니다. 제공자 대조는 최근100개로 제한됩니다. 게시자 전사는 전체120초/100회 시도, 미완료ID와 not_checked/import_budget_exhausted를 반환하며 실패 시에도 모든 작업 종료를 기다립니다.
+
+0.2.16: Library recovery follows every local status page and refreshes after each page, yielding to queued actions between pages. Recovery pages and polling rounds use four workers and a shared60-second network deadline; requests use the remaining time and all workers settle before releasing the queue. Storage/card delivery can take additional time. Unchecked card jobs rotate to the front of the next poll; each job retains its29-minute/40-check limit. Reading exposes only selected episode metadata and a source page link, omitting audio URLs and GUIDs. Missing Library/network APIs return CLIENT_UPGRADE_REQUIRED with upgrade instructions.
+
+0.2.16：资料库恢复逐页续查本地任务，每页完成后刷新，并在页间让排队操作执行。恢复页及每轮轮询使用4路并发和共享60秒网络期限，请求超时随剩余时间收缩，全部 worker 结束后才释放队列；存储和卡片发送可能另需时间。未检查的卡片任务优先进入下一轮，每个任务保留29分钟/40次检查上限。读取只返回选定的单集元数据和来源页面链接，不返回音频URL及GUID。缺少资料库/网络API时返回CLIENT_UPGRADE_REQUIRED及升级说明。
+
+0.2.16：ライブラリ復旧は全ローカルページを巡回し、各ページ後に更新して待機中の操作へ処理を譲ります。復旧ページとポーリング各回は4並列、共有60秒のネットワーク期限を使用し、残り時間をタイムアウトに反映します。全ワーカー終了後にキューを解放し、保存やカード送信には追加時間が必要な場合があります。未確認ジョブは次回優先、各ジョブは29分/40回まで。読み取りは選択したメタデータと出典ページのみで音声URLやGUIDを含みません。Library/ネットワークAPI不足はCLIENT_UPGRADE_REQUIREDと更新案内を返します。
+
+0.2.16: 라이브러리 복구는 모든 로컬 페이지를 조회하고 매 페이지 후 새로 고치며 대기 중인 작업에 실행 기회를 줍니다. 복구 페이지와 각 폴링은4개 동시 작업과 공유60초 네트워크 기한을 사용하며 남은 시간으로 요청 제한을 줄입니다. 모든 작업 종료 후 큐를 해제하며 저장과 카드 전송에는 추가 시간이 걸릴 수 있습니다. 미확인 작업은 다음 회차에 우선 처리하고 작업별29분/40회 제한을 유지합니다. 읽기에는 선택한 메타데이터와 출처 페이지만 포함하고 오디오URL과GUID는 제외합니다. Library/네트워크API가 없으면 CLIENT_UPGRADE_REQUIRED와 업그레이드 안내를 반환합니다.

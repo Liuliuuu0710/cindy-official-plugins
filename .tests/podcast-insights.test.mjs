@@ -37,6 +37,23 @@ async function seed(h,overrides={}){
   const r=await h.service.ingest({title:'Synthetic show',episodes:[{guid:'episode-1',title:'Synthetic episode',audio_url:'https://audio.example.test/one.mp3',page_url:'https://example.test/episode',duration_s:3600,audio_bytes:10000,transcripts:[],...overrides}]},'https://example.test/feed','rss');return r.episodes[0].id;
 }
 const click=(jid,extra={})=>({type:'event',name:'card-action',actionId:'transcribe:'+jid,userActionToken:'host-issued-test-token',callId:'estimate-1',spawnCallId:'progress-1',...extra});
+const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r;});return {promise,resolve};};
+function runtimeHarness(h,missingCapability){
+  let listener,channel;const messages=[],waiters=new Map(),timers=[];
+  const ui=JSON.parse(fs.readFileSync(new URL('../podcast-insights/ui/en.json',import.meta.url),'utf8'));
+  const ctx={PodcastCore:C,PodcastService:missingCapability?Service:class{constructor(){return h.service;}},crypto:globalThis.crypto,Date,
+    fetch:async()=>({ok:true,json:async()=>ui}),
+    BroadcastChannel:class{constructor(){channel=this;}postMessage(m){messages.push(m);if(m.type==='response')waiters.get(m.reqId)?.resolve(m);}},
+    setInterval:()=>0,clearInterval(){},setTimeout:(f,ms)=>{timers.push({f,ms});return timers.length;},
+    cindy:{library:h.host.library,fetch:h.host.fetch,request:async()=>({context:{locale:'en'}}),onHostMessage:f=>{listener=f;},send:async m=>{messages.push(m);if(m.type==='tool-result')waiters.get(m.callId)?.resolve(m);}},
+  };
+  if(missingCapability)delete ctx.cindy[missingCapability];
+  vm.runInNewContext(fs.readFileSync(new URL('../podcast-insights/runtime.js',import.meta.url),'utf8'),ctx);
+  return {messages,timers,
+    call:(tool,args,callId)=>{const done=deferred();waiters.set(callId,done);listener({type:'tool-call',tool,args,callId});return done.promise;},
+    request:(tool,args,reqId)=>{const done=deferred();waiters.set(reqId,done);channel.onmessage({data:{type:'request',tool,args,reqId}});return done.promise;},
+  };
+}
 test('long TXT, MD and JSON split without invented internal timestamps',()=>{
   const text='a'.repeat(25001);
   for(const format of ['txt','md','json']){
@@ -705,4 +722,191 @@ test('status and publisher budgets are disclosed in the manifest and all four lo
   const status=manifest.tools.find(t=>t.name==='podcast_status');assert.equal(status.parameters.properties.cursor.maxLength,8192);assert.match(status.description,/cursor=next_cursor/);assert.match(status.description,/local cursors do not extend/);
   for(const lang of ['en','zh-CN','ja','ko']){const locale=JSON.parse(fs.readFileSync(new URL('../podcast-insights/locales/'+lang+'.json',import.meta.url),'utf8'));assert.match(locale.tools.podcast_status.description,/cursor=next_cursor/);assert.match(locale.tools.podcast_status.description,/100/);assert.doesNotMatch(locale.tools.podcast_status.description,/offset=next_offset/);assert.match(locale.tools.podcast_import.description,/120/);assert.match(locale.tools.podcast_import.description,/100/);assert.match(locale.tools.podcast_import.description,/not_checked/);}
   const h=harness();try{const j=h.service.publicJob({id:'job',state:'submitted',audio_url:'private',future_internal_url:'private',errorCode:'NETWORK_FAILED',recovery_incomplete:true});assert.equal(j.future_internal_url,undefined);assert.equal(j.audio_url,undefined);assert.equal(j.errorCode,'NETWORK_FAILED');assert.equal(j.recovery_incomplete,true);}finally{h.close();}
+});
+
+test('status cursor preserves timestamp ordering and leaves new submissions for the next scan',async()=>{
+  const h=harness({network:async a=>({ok:true,status:200,body:JSON.stringify({id:a.url.split('/').pop(),status:'error'})})});
+  try{
+    const eid=await seed(h),insert=h.db.prepare('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)');
+    const add=(jid,stamp)=>insert.run(jid,eid,'assemblyai','submitted','remote-'+jid,null,stamp,'','','card','https://audio.example.test/one.mp3');
+    for(let i=0;i<9;i++)add('ordered-'+i,new Date(Date.UTC(2025,0,1)+Math.floor(i/3)*1000).toISOString());
+    const expected=h.db.prepare('SELECT id FROM jobs ORDER BY submitted_at DESC,id ASC').all().map(j=>j.id);
+    const first=await h.service.run('podcast_status',{limit:2});add('new-arrival','2025-02-01T00:00:00.000Z');
+    const ids=first.jobs.map(j=>j.id);let cursor=first.next_cursor;
+    for(let turn=0;cursor&&turn<10;turn++){const r=await h.service.run('podcast_status',{cursor,limit:2});ids.push(...r.jobs.map(j=>j.id));cursor=r.next_cursor;}
+    assert.equal(cursor,null);assert.deepEqual(ids,expected);assert.equal(new Set(ids).size,9);
+    const fresh=await h.service.run('podcast_status',{});assert.deepEqual(fresh.jobs.map(j=>j.id),['new-arrival']);assert.equal(h.calls.length,10);assert.ok(h.calls.every(a=>a.method==='GET'));
+  }finally{h.close();}
+});
+
+test('status reserves byte budget before checking and returns every terminal result exactly once',async()=>{
+  const h=harness({network:async a=>({ok:true,status:200,body:JSON.stringify({id:a.url.split('/').pop(),status:'error'})})});
+  try{
+    const eid=await seed(h),insert=h.db.prepare('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)');
+    for(let i=0;i<45;i++)insert.run('large-status-'+String(i).padStart(2,'0'),eid,'assemblyai','submitted','large-remote-'+i,null,'2025-01-01T00:00:00.000Z','','','card-'+i+'界'.repeat(1200),'https://audio.example.test/private.mp3?key=synthetic');
+    const ids=new Set();let cursor;
+    for(let page=0;page<20;page++){
+      const before=h.calls.length,r=await h.service.run('podcast_status',cursor?{cursor}:{});assert.ok(r.jobs.length>0&&r.jobs.length<45);assert.ok(C.bytes(JSON.stringify(r))<=60000);
+      assert.equal(h.calls.length-before,r.jobs.length,'No terminal job may be checked then dropped from its receipt');
+      for(const j of r.jobs){assert.equal(j.state,'failed');assert.equal(j.audio_url,undefined);assert.ok(!ids.has(j.id));ids.add(j.id);}
+      assert.equal(r.jobs_omitted,45-ids.size);cursor=r.next_cursor;if(!cursor)break;
+    }
+    assert.equal(cursor,null);assert.equal(ids.size,45);assert.equal(h.db.prepare("SELECT count(*) n FROM jobs WHERE state='failed'").get().n,45);
+  }finally{h.close();}
+});
+
+test('one status network or persistence failure does not prevent sibling checks or duplicate submission',async()=>{
+  let failPersistence=true,failNetwork=true;const h=harness({network:async a=>{const remote=a.url.split('/').pop();if(failNetwork&&remote==='fault-remote-0')throw Object.assign(new Error('Synthetic transport failure'),{code:'NETWORK_FAILED'});return {ok:true,status:200,body:JSON.stringify({id:remote,status:'queued'})};}});
+  try{
+    const eid=await seed(h),insert=h.db.prepare('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)');
+    for(let i=0;i<6;i++)insert.run('fault-status-'+i,eid,'assemblyai','submitted','fault-remote-'+i,null,'2025-01-01T00:00:00.000Z','','','slot-'+i,'https://audio.example.test/a.mp3');
+    const library=h.host.library;h.host.library=async a=>{if(failPersistence&&a.op==='db.exec'&&a.sql.startsWith('UPDATE jobs SET checked_at=')&&a.params.includes('fault-status-1'))throw Object.assign(new Error('Synthetic disk failure'),{code:'LIBRARY_UNAVAILABLE'});return library(a);};
+    const first=await h.service.run('podcast_status',{});assert.equal(first.jobs.length,6);assert.equal(h.calls.length,6);
+    for(const [id,code]of [['fault-status-0','NETWORK_FAILED'],['fault-status-1','LIBRARY_UNAVAILABLE']]){const j=first.jobs.find(j=>j.id===id);assert.equal(j.errorCode,code);assert.equal(j.recovery_incomplete,true);assert.equal(j.state,'submitted');}
+    assert.equal(first.jobs.filter(j=>!j.errorCode).length,4);failPersistence=false;failNetwork=false;
+    const recovered=await h.service.run('podcast_status',{job_id:'fault-status-1'});assert.equal(recovered.jobs[0].remote_id,'fault-remote-1');assert.equal(recovered.jobs[0].errorCode,undefined);assert.ok(h.calls.every(a=>a.method==='GET'));
+  }finally{h.close();}
+});
+
+test('local status continuation cannot extend the provider recent100 reconciliation window',async()=>{
+  const h=harness({network:async a=>{assert.equal(a.url,'https://api.assemblyai.com/v2/transcript?limit=100');return {ok:true,status:200,body:JSON.stringify({transcripts:Array.from({length:100},(_,i)=>({id:'recent-'+i,audio_url:'https://audio.example.test/one.mp3',created:'2025-02-01T00:00:00.000Z'}))})};}});
+  try{
+    const eid=await seed(h),insert=h.db.prepare('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)');
+    for(let i=0;i<5;i++)insert.run('old-unknown-'+i,eid,'assemblyai','unknown','',null,'2025-01-01T00:00:00.000Z','','SUBMISSION_UNKNOWN','slot-'+i,'https://audio.example.test/one.mp3');
+    let cursor;const seen=new Set();
+    for(let turn=0;turn<5;turn++){const r=await h.service.run('podcast_status',{limit:2,...(cursor?{cursor}:{})});for(const j of r.jobs){assert.equal(j.state,'unknown');assert.equal(j.remote_id,'');assert.equal(j.recovery_incomplete,true);assert.ok(!seen.has(j.id));seen.add(j.id);}cursor=r.next_cursor;if(!cursor)break;}
+    assert.equal(seen.size,5);assert.equal(h.calls.length,5);assert.ok(h.calls.every(a=>a.method==='GET'));assert.equal(h.db.prepare("SELECT count(*) n FROM jobs WHERE state='unknown' AND remote_id=''").get().n,5);
+  }finally{h.close();}
+});
+
+test('runtime waits for all publisher workers before failing the tool and advancing its queue',async()=>{
+  const original=C.feed,gate=deferred(),failureReached=deferred();let active=0,failed,queued;
+  const h=harness({network:async a=>{if(a.url.endsWith('/feed'))return {ok:true,status:200,body:'synthetic'};if(a.url.endsWith('/3.txt'))return {ok:true,status:404,body:''};active++;await gate.promise;active--;return {ok:true,status:200,body:'Sibling evidence'};}});
+  C.feed=()=>({title:'Queue show',episodes:Array.from({length:4},(_,i)=>({guid:'queue-'+i,title:'Episode '+i,published_at:new Date(Date.UTC(2025,0,1)+i*1000).toISOString(),transcripts:[{url:'https://example.test/'+i+'.txt',type:'text/plain'}]}))});
+  const library=h.host.library;h.host.library=async a=>{if(a.op==='db.exec'&&a.sql.includes("ELSE 'failed' END")){failureReached.resolve();throw Object.assign(new Error('Synthetic disk failure'),{code:'LIBRARY_UNAVAILABLE'});}return library(a);};
+  try{
+    const runtime=runtimeHarness(h);failed=runtime.call('podcast_import',{url:'https://example.test/feed',episodes:'latest:4'},'worker-call');queued=runtime.call('podcast_library',{},'next-call');
+    await failureReached.promise;await new Promise(resolve=>setImmediate(resolve));assert.equal(active,3);assert.equal(runtime.messages.filter(m=>m.type==='tool-result').length,0);
+    gate.resolve();const result=await failed,next=await queued;assert.equal(active,0);assert.equal(result.ok,false);assert.equal(result.errorCode,'LIBRARY_UNAVAILABLE');assert.equal(next.ok,true);
+    assert.deepEqual(runtime.messages.filter(m=>m.type==='tool-result').map(m=>m.callId),['worker-call','next-call']);assert.equal(h.db.prepare("SELECT count(*) n FROM episodes WHERE transcript_state='ready'").get().n,3);
+  }finally{gate.resolve();await Promise.allSettled([failed,queued].filter(Boolean));C.feed=original;h.close();}
+});
+
+test('publisher deadline is shared across workers and retains pre-existing ready evidence',async t=>{
+  const original=C.feed;let clock=0;t.mock.method(Date,'now',()=>clock);
+  const h=harness({network:async a=>{if(a.url.endsWith('/feed'))return {ok:true,status:200,body:'synthetic'};clock+=40000;return {ok:true,status:404,body:''};}});
+  try{
+    const eid=await seed(h);await h.service.run('podcast_import_transcript',{episode_id:eid,format:'txt',content:'Previously verified evidence'});const old=h.db.prepare('SELECT id FROM transcripts WHERE is_active=1').get().id;
+    C.feed=()=>({title:'Deadline show',episodes:Array.from({length:6},(_,i)=>({guid:i===0?'episode-1':'deadline-'+i,title:'Episode '+i,transcripts:Array.from({length:20},(_,j)=>({url:'https://example.test/'+i+'/'+j+'.txt',type:'text/plain'}))}))});
+    const r=await h.service.run('podcast_import',{url:'https://example.test/feed',episodes:'latest:6'},'shared-deadline');assert.equal(h.calls.length,4,'The shared deadline must stop all workers from starting more fetches');assert.equal(r.transcripts.length,6);assert.ok(r.transcripts.every(t=>t.not_checked&&t.reason==='import_budget_exhausted'));
+    assert.deepEqual(h.calls.slice(1).map(a=>a.timeoutMs),[60000,60000,40000]);assert.equal(r.transcripts.reduce((sum,t)=>sum+t.attempts,0),3);assert.equal(h.db.prepare('SELECT id FROM transcripts WHERE is_active=1').get().id,old);assert.equal((await h.service.episode(eid)).transcript_state,'ready');
+  }finally{C.feed=original;h.close();}
+});
+
+test('publisher retry selects only budget-incomplete GUIDs and leaves successful versions unchanged',async()=>{
+  const original=C.feed;let retry=false;
+  const h=harness({network:async a=>({ok:true,status:a.url.endsWith('/feed')||retry||a.url.includes('/good-')?200:404,body:'Publisher evidence'})});
+  C.feed=()=>({title:'Retry show',episodes:Array.from({length:5},(_,i)=>({guid:'retry-guid-'+i,title:'Episode '+i,transcripts:Array.from({length:i<2?1:50},(_,j)=>({url:'https://example.test/'+(i<2?'good-':'bad-')+i+'/'+j+'.txt',type:'text/plain'}))}))});
+  try{
+    const first=await h.service.run('podcast_import',{url:'https://example.test/feed',episodes:'latest:5'},'budget-first');
+    assert.equal(h.calls.length,101,'One feed request plus at most100 shared transcript attempts');const complete=first.transcripts.filter(t=>t.transcript_id),incomplete=first.transcripts.filter(t=>t.not_checked);assert.equal(complete.length,2);assert.equal(incomplete.length,3);
+    const guids=incomplete.map(t=>h.db.prepare('SELECT guid FROM episodes WHERE id=?').get(t.episode_id).guid),before=h.calls.length;retry=true;
+    const second=await h.service.run('podcast_import',{url:'https://example.test/feed',episodes:guids},'budget-retry');assert.equal(second.transcripts.length,3);assert.ok(second.transcripts.every(t=>t.transcript_id));assert.equal(h.calls.length-before,4);
+    assert.ok(h.calls.slice(before+1).every(a=>a.url.includes('/bad-')));
+    for(const t of complete)assert.equal(h.db.prepare('SELECT id FROM transcripts WHERE episode_id=? AND is_active=1').get(t.episode_id).id,t.transcript_id);assert.equal(h.db.prepare('SELECT count(*) n FROM transcripts WHERE is_active=1').get().n,5);
+  }finally{C.feed=original;h.close();}
+});
+
+test('publisher fallback after a store failure preserves old evidence until the alternate commits',async()=>{
+  const original=C.feed;let shouldFail=false,eid,old;const h=harness({beforeStatement:s=>{if(shouldFail&&s.sql.startsWith('INSERT INTO segments')){shouldFail=false;throw Object.assign(new Error('Synthetic first-store failure'),{code:'LIBRARY_UNAVAILABLE'});}},network:async a=>{if(a.url.endsWith('/alternate.txt'))assert.equal(h.db.prepare('SELECT id FROM transcripts WHERE episode_id=? AND is_active=1').get(eid).id,old);return {ok:true,status:200,body:'Replacement publisher evidence'};}});
+  try{
+    eid=await seed(h);await h.service.run('podcast_import_transcript',{episode_id:eid,format:'txt',content:'Original evidence'});old=h.db.prepare('SELECT id FROM transcripts WHERE is_active=1').get().id;
+    C.feed=()=>({title:'Store fallback',episodes:[{guid:'episode-1',title:'Episode',transcripts:[{url:'https://example.test/first.txt',type:'text/plain'},{url:'https://example.test/alternate.txt',type:'text/plain'}]}]});shouldFail=true;
+    const r=await h.service.run('podcast_import',{url:'https://example.test/feed'},'store-fallback');assert.equal(r.transcripts.length,1);assert.ok(r.transcripts[0].transcript_id);assert.notEqual(r.transcripts[0].transcript_id,old);assert.equal(h.calls.length,3);
+    assert.equal(h.db.prepare('SELECT count(*) n FROM transcripts WHERE is_active=1').get().n,1);assert.equal(h.db.prepare('SELECT is_active FROM transcripts WHERE id=?').get(old).is_active,0);assert.equal(h.db.prepare('SELECT text FROM segments WHERE transcript_id=?').get(old).text,'Original evidence');
+  }finally{C.feed=original;h.close();}
+});
+
+test('multibyte import receipts and GUID continuation preserve all stored episodes within byte budgets',async()=>{
+  const original=C.feed;const h=harness({network:async()=>({ok:true,status:200,body:'synthetic'})});
+  C.feed=()=>({title:'节目'.repeat(200),episodes:Array.from({length:60},(_,i)=>({guid:'集-'+i+'界'.repeat(2500),title:'正文'.repeat(200),transcripts:[]}))});
+  try{
+    const imported=await h.service.run('podcast_import',{url:'https://example.test/feed',episodes:[]},'multibyte');assert.ok(C.bytes(JSON.stringify(imported))<=60000);assert.equal(imported.episode_count,60);assert.ok(imported.episodes_omitted>0);
+    let offset=0;const ids=new Set();
+    for(let page=0;page<70;page++){const r=await h.service.run('podcast_library',{...imported.continuation.args,offset});assert.ok(C.bytes(JSON.stringify(r))<=60000);for(const e of r.episodes){assert.ok(!ids.has(e.id));ids.add(e.id);assert.equal(e.guid,h.db.prepare('SELECT guid FROM episodes WHERE id=?').get(e.id).guid);}if(r.next_offset==null)break;assert.ok(r.next_offset>offset);offset=r.next_offset;}
+    assert.equal(ids.size,60);assert.equal(h.db.prepare('SELECT count(*) n FROM episodes').get().n,60);
+  }finally{C.feed=original;h.close();}
+});
+
+test('runtime library resume reaches every pending job across status pages',async()=>{
+  const h=harness({network:async a=>({ok:true,status:200,body:JSON.stringify({id:a.url.split('/').pop(),status:'queued'})})});
+  try{
+    const eid=await seed(h),insert=h.db.prepare('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)');
+    for(let i=0;i<105;i++)insert.run('resume-'+String(i).padStart(3,'0'),eid,'assemblyai','submitted','resume-remote-'+i,null,'2025-01-01T00:00:00.000Z','','','resume-slot-'+i,'https://audio.example.test/one.mp3');
+    const runtime=runtimeHarness(h),reply=await runtime.request('resume',{},'resume-all');assert.equal(reply.ok,true);
+    assert.equal(new Set(h.calls.map(a=>a.url)).size,105,'The library caller must follow next_cursor, not stop at its first page');
+    assert.equal(h.db.prepare("SELECT count(*) n FROM jobs WHERE checked_at<>''").get().n,105);assert.ok(h.calls.every(a=>a.method==='GET'));
+  }finally{h.close();}
+});
+
+test('runtime resume refreshes completed evidence and yields between pages',async()=>{
+  let runtime,queuedRead;const h=harness({network:async a=>{if(!queuedRead)queuedRead=runtime.request('podcast_library',{},'interleaved-read');return {ok:true,status:200,body:JSON.stringify({id:a.url.split('/').pop(),status:'completed',utterances:[{text:'Recovered evidence',start:0,end:1000}]})};}});
+  try{
+    const eid=await seed(h),insert=h.db.prepare('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)');
+    for(let i=0;i<105;i++)insert.run('refresh-'+String(i).padStart(3,'0'),eid,'assemblyai','submitted','refresh-remote-'+i,null,'2025-01-01T00:00:00.000Z','','','slot-'+i,'https://audio.example.test/one.mp3');
+    runtime=runtimeHarness(h);assert.equal((await runtime.request('resume',{},'refresh-all')).ok,true);await queuedRead;
+    assert.equal(h.db.prepare("SELECT count(*) n FROM jobs WHERE state='completed'").get().n,105);
+    assert.ok(runtime.messages.filter(m=>m.type==='changed').length>=2);
+    assert.equal(runtime.messages.filter(m=>m.type==='response')[0].reqId,'interleaved-read');
+    assert.equal((await h.service.run('podcast_read',{episode_id:eid})).segments[0].text,'Recovered evidence');
+  }finally{h.close();}
+});
+
+test('internal status deadline defers later network stages',async t=>{
+  let clock=0;t.mock.method(Date,'now',()=>clock);
+  const h=harness({network:async()=>{clock+=40000;return {ok:true,status:200,body:JSON.stringify({id:'deadline-remote',status:'completed',utterances:[]})};}});
+  try{
+    const eid=await seed(h);h.db.prepare('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)').run('deadline-job',eid,'assemblyai','submitted','deadline-remote',null,'2025-01-01T00:00:00.000Z','','','slot','https://audio.example.test/one.mp3');
+    const r=await h.service.run('podcast_status',{job_id:'deadline-job'},undefined,{deadline:30000});assert.equal(h.calls.length,1);assert.equal(h.calls[0].timeoutMs,30000);assert.equal(r.jobs[0].recovery_incomplete,true);assert.equal(r.jobs[0].state,'submitted');
+  }finally{h.close();}
+});
+
+test('runtime polling shares a deadline, runs four workers and rotates deferred jobs',async t=>{
+  let clock=0,slow=false,active=0,peak=0;const barrier=deferred();t.mock.method(Date,'now',()=>clock);
+  const h=harness({network:async a=>{if(slow){active++;peak=Math.max(peak,active);await barrier.promise;clock=60000;active--;}return {ok:true,status:200,body:JSON.stringify({id:a.url.split('/').pop(),status:'queued'})};}});
+  try{
+    const eid=await seed(h),insert=h.db.prepare('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)');
+    for(let i=0;i<9;i++)insert.run('poll-'+i,eid,'assemblyai','submitted','poll-remote-'+i,null,'2025-01-01T00:00:00.000Z','','','slot-'+i,'https://audio.example.test/one.mp3');
+    const runtime=runtimeHarness(h);await runtime.request('resume',{},'poll-resume');h.calls.length=0;slow=true;
+    runtime.timers.shift().f();
+    await new Promise(resolve=>setImmediate(resolve));
+    const concurrent=peak;barrier.resolve();await runtime.request('podcast_library',{},'after-poll');
+    assert.equal(concurrent,4);assert.equal(active,0);assert.equal(h.calls.length,4);assert.ok(h.calls.every(a=>a.timeoutMs<=60000));
+    slow=false;h.calls.length=0;runtime.timers.shift().f();await runtime.request('podcast_library',{},'after-next-poll');
+    assert.match(h.calls[0].url,/poll-remote-4$/);assert.equal(new Set(h.calls.map(a=>a.url)).size,9);
+    clock=29*60*1000;h.calls.length=0;runtime.timers.shift().f();await runtime.request('podcast_library',{},'expired-polls');assert.equal(h.calls.length,0);assert.equal(runtime.timers.length,0);
+  }finally{barrier.resolve();h.close();}
+});
+
+
+test('read projections omit audio and URL GUID on full partial and empty pages',async()=>{
+  const h=harness();try{
+    const secret='https://audio.example.test/one.mp3?signature=synthetic-private';
+    const eid=await seed(h,{audio_url:secret,guid:secret});await h.service.run('podcast_import_transcript',{episode_id:eid,format:'json',content:JSON.stringify([{text:'Complete evidence',start:1,end:2}])});
+    const original=h.service.episode.bind(h.service);h.service.episode=async id=>({...await original(id),future_internal:'synthetic-private'});
+    for(const args of [{},{max_chars:3},{from_ms:999999}]){
+      const r=await h.service.run('podcast_read',{episode_id:eid,...args});assert.equal(r.episode.id,eid);assert.equal(r.episode.page_url,'https://example.test/episode');
+      assert.equal(r.episode.audio_url,undefined);assert.equal(r.episode.guid,undefined);assert.equal(r.episode.future_internal,undefined);assert.ok(!JSON.stringify(r).includes('synthetic-private'));
+    }
+  }finally{h.close();}
+});
+
+test('missing Host APIs produce actionable upgrade errors for tools and library resume',async()=>{
+  for(const missing of ['library','fetch']){
+    const h=harness();try{
+      const runtime=runtimeHarness(h,missing),tool=await runtime.call('podcast_library',{},'old-host-tool'),resume=await runtime.request('resume',{},'old-host-resume');
+      for(const r of [tool,resume]){assert.equal(r.ok,false);assert.equal(r.errorCode,'CLIENT_UPGRADE_REQUIRED');assert.match(r.message,/upgrade/i);}
+      assert.equal(h.calls.length,0);assert.equal(h.db.prepare("SELECT count(*) n FROM sqlite_master WHERE name='jobs'").get().n,0);
+    }finally{h.close();}
+  }
 });

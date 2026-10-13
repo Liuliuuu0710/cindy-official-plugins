@@ -61,6 +61,20 @@ const root=path.resolve(__dirname,'../podcast-insights');
     await page.waitForFunction(()=>responses.some(r=>r.callId==='missing-key'));
     const failed=await page.evaluate(()=>responses.find(r=>r.callId==='missing-key'));
     assert.equal(failed.ok,false);assert.equal(failed.errorCode,'AAI_KEY_MISSING');
+    const recoveredId=await page.evaluate(()=>responses.find(r=>r.callId==='empty-1').result.episodes[0].id);
+    db.prepare("UPDATE episodes SET transcript_state='transcribing' WHERE id=?").run(recoveredId);
+    db.prepare('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)').run('browser-resume',recoveredId,'assemblyai','submitted','browser-remote',null,'2025-01-01T00:00:00.000Z','','','browser-slot','https://audio.example.test/empty.mp3');
+    await page.locator('#episodes').getByRole('button',{name:'empty.mp3',exact:true}).click();
+    await page.waitForFunction(()=>document.getElementById('notice').textContent.includes('转录'));
+    const recovered=await page.evaluate(async()=>{
+      const original=cindy.fetch;cindy.fetch=async a=>a.url.includes('/v2/transcript/')?{ok:true,status:200,body:JSON.stringify({id:'browser-remote',status:'completed',utterances:[{text:'Recovered browser evidence',start:0,end:1000}]})}:original(a);
+      const channel=new BroadcastChannel('podcast-insights-v2');
+      try{return await new Promise(resolve=>{channel.onmessage=e=>{if(e.data.type==='response'&&e.data.reqId==='browser-resume')resolve(e.data);};channel.postMessage({type:'request',tool:'resume',args:{},reqId:'browser-resume'});});}finally{channel.close();cindy.fetch=original;}
+    });assert.equal(recovered.ok,true);
+    await page.waitForFunction(()=>document.querySelector('#reader blockquote')?.textContent==='Recovered browser evidence');
+    assert.equal(db.prepare('SELECT state FROM jobs WHERE id=?').get('browser-resume').state,'completed');
+    await page.getByRole('button',{name:'Synthetic episode',exact:true}).click();
+    await page.locator('#reader blockquote').first().waitFor();
     const parser=await page.evaluate(()=>{
       const xml='<feed xmlns="http://www.w3.org/2005/Atom" xmlns:podcast="https://podcastindex.org/namespace/1.0"><title>Atom</title><entry><id>id-1</id><title>Entry</title><link rel="enclosure" href="https://audio.example.test/a.mp3"/><podcast:transcript type="text/plain" url="https://example.test/a.txt"/><podcast:transcript type="text/vtt" url="https://example.test/a.vtt"/></entry></feed>';
       const f=PodcastCore.feed(xml,'https://example.test/feed');return {title:f.title,url:f.episodes[0].audio_url,first:f.episodes[0].transcripts[0].type};
