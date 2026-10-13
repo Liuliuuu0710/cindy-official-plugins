@@ -48,3 +48,5 @@ Additional0.2.5 fixes: source retrieval refuses the credentialed AssemblyAI API 
 0.2.17 closes legacy cardless recovery, consecutive-cue citation and Unicode-splitting gaps. Read/search/cite share safe source-link projection; full citation output is limited to60000 bytes with explicit reference continuation. Reader refresh follows active transcript versions while preserving loaded pages after unrelated refreshes and failed continuation.
 
 0.2.18: Full response max60000 bytes; Unicode-safe continuation (one astral character may exceed max_chars=1). Supported HTML decodes semicolon-terminated named character references once. Ambiguous overlapping unknown jobs stay unknown; remote IDs are atomically claimed by one local job.
+
+0.2.19: JSON: array or {segments:[...]}; text (alias body), start/end (aliases startTime/endTime) in seconds, not milliseconds; optional speaker. HTML excludes comments, nested templates and raw-text containers; not a general page-visibility/CSS extractor.

@@ -158,6 +158,27 @@
       };
     });
   }
+  function visibleTranscriptHtml(content) {
+    const tokens = /<!--[\s\S]*?(?:-->|$)|<\/?([a-z][a-z0-9:-]*)\b(?:[^"'<>]|"[^"]*"|'[^']*')*>/gi;
+    const pieces = [];
+    let offset = 0, templateDepth = 0, match;
+    while ((match = tokens.exec(content))) {
+      if (!templateDepth) pieces.push(content.slice(offset, match.index));
+      offset = tokens.lastIndex;
+      if (!match[1]) continue;
+      const name = match[1].toLowerCase(), closing = match[0].startsWith('</');
+      if (name === 'template') {
+        templateDepth = closing ? Math.max(0, templateDepth - 1) : templateDepth + 1;
+      } else if (!closing && /^(script|style|textarea|title|xmp|iframe|noembed|noframes|noscript)$/.test(name)) {
+        const end = new RegExp('</' + name + '\\s*>', 'gi');
+        end.lastIndex = offset;
+        offset = end.exec(content) ? end.lastIndex : content.length;
+        tokens.lastIndex = offset;
+      } else if (!templateDepth) pieces.push(match[0]);
+    }
+    if (!templateDepth) pieces.push(content.slice(offset));
+    return pieces.join('');
+  }
   function transcript(content, format) {
     string(content, 5 * 1024 * 1024);
     if (format === "json") {
@@ -178,14 +199,11 @@
       );
     if (format === "html") {
       // Conservative adapter for cite/p transcript pages. Never infer missing timing.
-      if (!/<cite\b/i.test(content) || !/<p\b/i.test(content))
+      const stripped = visibleTranscriptHtml(content);
+      if (!/<cite\b/i.test(stripped) || !/<p\b/i.test(stripped))
         fail("UNSUPPORTED_HTML_TRANSCRIPT");
       const rows = [];
       let speaker = null;
-      const stripped = content.replace(
-        /<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi,
-        "",
-      );
       for (const m of stripped.matchAll(
         /<(cite|p)\b[^>]*>([\s\S]*?)<\/\1>/gi,
       )) {

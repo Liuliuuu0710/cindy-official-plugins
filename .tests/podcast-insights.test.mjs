@@ -4,6 +4,58 @@ import { createRequire } from 'node:module';
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import vm from 'node:vm';
+
+test('manifest tool contracts match the English locale',()=>{
+  const manifest=JSON.parse(fs.readFileSync(new URL('../podcast-insights/ghost.json',import.meta.url)));
+  const english=JSON.parse(fs.readFileSync(new URL('../podcast-insights/locales/en.json',import.meta.url)));
+  for(const tool of manifest.tools)assert.equal(tool.description,english.tools[tool.name].description,tool.name);
+});
+test('JSON transcript contracts declare shape and seconds at the tool boundary',()=>{
+  const manifest=JSON.parse(fs.readFileSync(new URL('../podcast-insights/ghost.json',import.meta.url)));
+  const tool=manifest.tools.find(tool=>tool.name==='podcast_import_transcript');
+  assert.match(tool.parameters.properties.content.description || '',/seconds/);
+  for(const [locale,unit] of [['en',/seconds/],['zh-CN',/秒/],['ja',/秒/],['ko',/초/]]){
+    const text=JSON.parse(fs.readFileSync(new URL('../podcast-insights/locales/'+locale+'.json',import.meta.url))).tools.podcast_import_transcript.description;
+    assert.match(text,unit);for(const field of ['segments','startTime','endTime'])assert.ok(text.includes(field));
+  }
+});
+test('JSON seconds and aliases survive import read search and citation',async()=>{
+  const harnessState=harness();try{const episodeId=await seed(harnessState);
+    for(const content of [JSON.stringify([{text:'Timing boundary',start:1.25,end:2.5}]),JSON.stringify({segments:[{body:'Timing boundary',startTime:1.25,endTime:2.5}]})]){
+      await harnessState.service.run('podcast_import_transcript',{episode_id:episodeId,format:'json',content});
+      const read=await harnessState.service.run('podcast_read',{episode_id:episodeId});
+      assert.equal(read.segments[0].start_ms,1250);assert.equal(read.segments[0].end_ms,2500);
+      assert.equal((await harnessState.service.run('podcast_search',{query:'Timing boundary'})).evidence.length,1);
+      assert.equal((await harnessState.service.run('podcast_cite',{references:[{episode_id:episodeId,quote:'Timing boundary'}]})).citations[0].status,'exact');
+    }
+  }finally{harnessState.close();}
+});
+test('HTML excludes comments nested templates and raw text from evidence',async()=>{
+  const harnessState=harness();try{const episodeId=await seed(harnessState);
+    const hidden=[
+      '<!-- <cite>Wrong</cite><p>Hidden evidence</p> -->',
+      '<template><template><p>Hidden evidence</p></template><p>Hidden evidence</p></template>',
+      '<template title="a > b"><script>"</template>"</script><p>Hidden evidence</p></template>',
+      '<script><!-- <p>Hidden evidence</p></script>',
+      '<style><p>Hidden evidence</p></style>',
+      '<textarea><p>Hidden evidence</p></textarea>',
+      '<title><p>Hidden evidence</p></title>',
+      '<!-- <p>Hidden evidence</p>',
+      '<template><p>Hidden evidence</p>',
+      '<script><p>Hidden evidence</p>'
+    ];
+    for(const fragment of hidden){
+      await harnessState.service.run('podcast_import_transcript',{episode_id:episodeId,format:'html',content:'<cite>Alice</cite><p>Visible evidence &lt;p&gt;literal&lt;/p&gt;</p>'+fragment});
+      const read=await harnessState.service.run('podcast_read',{episode_id:episodeId});
+      assert.equal(read.segments.map(row=>row.text).join(''),'Visible evidence <p>literal</p>',fragment);
+      assert.equal((await harnessState.service.run('podcast_search',{query:'Hidden evidence'})).evidence.length,0,fragment);
+      assert.equal((await harnessState.service.run('podcast_cite',{references:[{episode_id:episodeId,quote:'Hidden evidence'}]})).citations[0].status,'not_found',fragment);
+      assert.equal((await harnessState.service.run('podcast_cite',{references:[{episode_id:episodeId,quote:'Visible evidence <p>literal</p>'}]})).citations[0].status,'exact');
+    }
+    const rows=C.segments('<cite>Alice</cite><p>Before</p><template><template>hidden</template>hidden</template><p>After</p>','html');
+    assert.equal(rows.map(row=>row.text).join(''),'Before\nAfter');
+  }finally{harnessState.close();}
+});
 const require=createRequire(import.meta.url);
 const C=require('../podcast-insights/core.js');
 const Service=require('../podcast-insights/service.js');

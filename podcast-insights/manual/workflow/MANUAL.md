@@ -62,3 +62,11 @@ Metadata exceeding title500/author300/language64 chars, GUID/URL4000, date128 or
 0.2.18 (ja): 応答全体は60000バイト以内。Unicode文字を分断せず継続します（max_chars=1では補助文字1個に2コード単位を使用可能）。 対応HTMLのセミコロンで終わる名前付き文字参照を1回だけ復号します。 不明ジョブの時間窓が重なる場合は帰属を推測せず、遠隔IDを原子的に確保して重複を防ぎます。
 
 0.2.18 (ko): 전체 응답은60000바이트 이내이며 Unicode 문자를 나누지 않습니다(max_chars=1에서는 보충 문자가2코드 단위를 사용할 수 있음). 지원 HTML의 세미콜론으로 끝나는 이름 문자 참조를 한 번만 디코딩합니다. 불명 작업의 시간 범위가 겹치면 소유자를 추측하지 않으며 원격ID를 원자적으로 확보하여 중복을 방지합니다.
+
+0.2.19 (en): JSON: array or {segments:[...]}; text (alias body), start/end (aliases startTime/endTime) in seconds, not milliseconds; optional speaker. HTML excludes comments, nested templates and raw-text containers; not a general page-visibility/CSS extractor.
+
+0.2.19 (zh-CN): JSON：数组或 {segments:[...]}；text（别名 body），start/end（别名 startTime/endTime）单位为秒，不是毫秒；speaker 可选。HTML 排除注释、嵌套 template 和原始文本容器，不是通用页面可见性/CSS 提取器。
+
+0.2.19 (ja): JSON：配列または {segments:[...]}。text（別名 body）、start/end（別名 startTime/endTime）は秒単位で、ミリ秒ではありません。speaker は任意。HTML はコメント、入れ子の template、raw-text 要素を除外します。一般的なページ可視性/CSS 抽出器ではありません。
+
+0.2.19 (ko): JSON: 배열 또는 {segments:[...]}; text(별칭 body), start/end(별칭 startTime/endTime)는 밀리초가 아닌 초 단위이며 speaker는 선택 사항입니다. HTML 주석, 중첩 template, raw-text 컨테이너를 제외하며 일반적인 페이지 가시성/CSS 추출기가 아닙니다.
