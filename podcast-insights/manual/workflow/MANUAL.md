@@ -54,3 +54,11 @@ Metadata exceeding title500/author300/language64 chars, GUID/URL4000, date128 or
 0.2.17：引用は連続する複数cueに対応し、検索窓は引用長で制限します。重複メタデータ込みの応答は60000バイト以内。citations_omitted/next_reference_indexで残りを示し、references.slice(next_reference_index)で継続。次のreference_indexは0からです。読取/検索/引用は音声URLと同じ出典リンクを返しません。カードなし旧ジョブも各40回/29分以内で再確認し、架空カードや音声再送信は行いません。Unicodeサロゲートペアを分割しません。閲覧中の転録IDが変われば再読込し、無関係な更新では追加読込失敗後も本文と強調表示を保ち、同じ追加読込ボタンで再試行できます。
 
 0.2.17: 인용은 연속된 여러cue를 지원하고 검색 창은 인용 길이로 제한합니다. 반복 메타데이터 포함 응답은60000바이트 이내입니다. citations_omitted/next_reference_index로 남은 항목을 표시하며 references.slice(next_reference_index)로 계속 조회합니다. 다음 요청의reference_index는0부터입니다. 읽기/검색/인용은 오디오URL과 같은 출처 링크를 반환하지 않습니다. 카드 없는 이전 작업도 작업별40회/29분 한도로 재확인하며 가짜 카드나 오디오 재제출은 없습니다. Unicode 서로게이트 쌍을 분할하지 않습니다. 활성 전사ID가 바뀌면 다시 읽고, 관련 없는 갱신은 추가 읽기 실패 후에도 본문과 강조를 보존합니다. 기존 더 보기 버튼으로 재시도할 수 있습니다.
+
+0.2.18 (en): Full response max60000 bytes; Unicode-safe continuation (one astral character may exceed max_chars=1). Supported HTML decodes semicolon-terminated named character references once. Ambiguous overlapping unknown jobs stay unknown; remote IDs are atomically claimed by one local job.
+
+0.2.18 (zh-CN): 完整回执最多60000字节；续读保留完整Unicode字符（max_chars=1时单个补充平面字符可占2个代码单元）。 支持的HTML会单次解码以分号结尾的命名字符引用。 多个未知任务的时间窗口重叠时不猜归属；原子认领远端ID，避免重复占用。
+
+0.2.18 (ja): 応答全体は60000バイト以内。Unicode文字を分断せず継続します（max_chars=1では補助文字1個に2コード単位を使用可能）。 対応HTMLのセミコロンで終わる名前付き文字参照を1回だけ復号します。 不明ジョブの時間窓が重なる場合は帰属を推測せず、遠隔IDを原子的に確保して重複を防ぎます。
+
+0.2.18 (ko): 전체 응답은60000바이트 이내이며 Unicode 문자를 나누지 않습니다(max_chars=1에서는 보충 문자가2코드 단위를 사용할 수 있음). 지원 HTML의 세미콜론으로 끝나는 이름 문자 참조를 한 번만 디코딩합니다. 불명 작업의 시간 범위가 겹치면 소유자를 추측하지 않으며 원격ID를 원자적으로 확보하여 중복을 방지합니다.

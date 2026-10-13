@@ -294,8 +294,14 @@
         const submitted=Date.parse(j.submitted_at);
         const matches=(r.transcripts || []).filter(t=>{const created=Date.parse(t.created);return t.audio_url===j.audio_url && Number.isFinite(submitted) && created>=submitted-5000 && created<=submitted+65000;});
         if(matches.length!==1)return {...j,recovery_incomplete:true};
-        j.remote_id=matches[0].id;if(!/^[a-zA-Z0-9_-]{1,100}$/.test(j.remote_id))C.fail('INVALID_INPUT');
-        await this.sql("UPDATE jobs SET remote_id=?,state='submitted',error='' WHERE id=?",[j.remote_id,j.id]);
+        const remoteId=matches[0].id;if(!/^[a-zA-Z0-9_-]{1,100}$/.test(remoteId))C.fail('INVALID_INPUT');
+        // Atomic claim: existing owners and overlapping uncertain local submissions
+        // make attribution unsafe. Never guess which episode incurred the charge.
+        const created=new Date(matches[0].created).toISOString();
+        await this.sql("UPDATE jobs SET remote_id=?,state='submitted',error='' WHERE id=? AND COALESCE(remote_id,'')='' AND state IN ('unknown','submitting') AND NOT EXISTS (SELECT 1 FROM jobs other WHERE other.id<>? AND other.provider=? AND (other.remote_id=? OR (COALESCE(other.remote_id,'')='' AND other.state IN ('unknown','submitting') AND other.audio_url=? AND julianday(?) BETWEEN julianday(other.submitted_at)-5.0/86400 AND julianday(other.submitted_at)+65.0/86400)))",[remoteId,j.id,j.id,j.provider,remoteId,j.audio_url,created]);
+        const claimed=(await this.rows('SELECT * FROM jobs WHERE id=?',[j.id]))[0];
+        if(!claimed?.remote_id)return {...j,recovery_incomplete:true};
+        j=claimed;
       }
       const r=JSON.parse(await fetchStatus('https://api.assemblyai.com/v2/transcript/'+j.remote_id));
       if(r.id!==j.remote_id)C.fail('INVALID_RESPONSE');
@@ -334,8 +340,30 @@
         if(a.around_segment){const r=(await this.rows('SELECT g.idx FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE g.id=? AND t.episode_id=? AND t.is_active=1',[a.around_segment,e.id]))[0];if(!r)C.fail('SEGMENT_NOT_FOUND');offset=r.idx;}
         if(a.from_ms!=null){const r=(await this.rows('SELECT g.idx FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE t.episode_id=? AND t.is_active=1 AND g.start_ms>=? ORDER BY g.idx LIMIT 1',[e.id,a.from_ms]))[0];if(!r)return {episode:e,segments:[],next_offset:null};offset=r.idx;}
         const rows=await this.rows('SELECT g.id,g.transcript_id,g.idx,g.text,g.speaker,g.start_ms,g.end_ms FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE t.episode_id=? AND t.is_active=1 AND g.idx>=? ORDER BY g.idx LIMIT 2000',[e.id,offset]);if(!rows.length && e.transcript_state!=='ready')C.fail('NO_TRANSCRIPT');
-        const segments=[];let n=0;for(const raw of rows){const r={...raw};const charOffset=raw.idx===offset?Math.max(0,Number(a.char_offset)||0):0;r.text=r.text.slice(charOffset);if(n+r.text.length>limit){if(!segments.length)return {episode:e,segments:[{...r,text:r.text.slice(0,limit),text_truncated:true}],next_offset:r.idx,next_char_offset:charOffset+limit};break;}segments.push(r);n+=r.text.length;}
-        return {episode:e,segments,next_offset:segments.length<rows.length||rows.length===2000?offset+segments.length:null};
+        const segments=[];let n=0,next_offset=null,next_char_offset;
+        for(const raw of rows){
+          const charOffset=raw.idx===offset?Math.max(0,Math.floor(Number(a.char_offset)||0)):0;
+          const remaining=raw.text.slice(charOffset);
+          if(segments.length&&remaining.length>Math.floor(limit)-n){next_offset=raw.idx;break;}
+          let take=Math.min(remaining.length,Math.floor(limit)-n);
+          if(take<=0){next_offset=raw.idx;break;}
+          if(take<remaining.length && /[\uD800-\uDBFF]/.test(remaining[take-1]) && /[\uDC00-\uDFFF]/.test(remaining[take]))take--;
+          // A max_chars of one still needs to make progress over an astral character.
+          if(!take){if(segments.length){next_offset=raw.idx;break;}take=2;}
+          const rowFor=count=>({...raw,text:remaining.slice(0,count),...(count<remaining.length?{text_truncated:true}:{})});
+          const fits=count=>C.bytes(JSON.stringify({episode:e,segments:[...segments,rowFor(count)]}))<=59000;
+          if(!fits(take)){
+            if(segments.length){next_offset=raw.idx;break;}
+            let low=0,high=take;while(low<high){const mid=Math.ceil((low+high)/2);if(fits(mid))low=mid;else high=mid-1;}take=low;
+            if(take<remaining.length&&/[\uD800-\uDBFF]/.test(remaining[take-1])&&/[\uDC00-\uDFFF]/.test(remaining[take]))take--;
+            if(!take)C.fail('INVALID_INPUT');
+          }
+          const r=rowFor(take);
+          segments.push(r);n+=r.text.length;
+          if(take<remaining.length){next_offset=raw.idx;next_char_offset=charOffset+take;break;}
+        }
+        if(next_offset===null&&rows.length===2000)next_offset=rows.at(-1).idx+1;
+        return {episode:e,segments,next_offset,...(next_char_offset===undefined?{}:{next_char_offset}),max_output_bytes:60000};
       }
       if(tool==='podcast_search'){
         const q=C.norm(C.string(a.query,300));if(!q)C.fail('INVALID_QUERY');

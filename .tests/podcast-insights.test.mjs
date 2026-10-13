@@ -996,3 +996,48 @@ test('normalized citation windows retain empty cues but never cross transcript i
     assert.equal(h.service.findAcross(rows,'ONE TWO THREE',true),null);
   }finally{h.close();}
 });
+
+test('read bounds serialized tiny-cue pages and visits every cue once',async()=>{
+  const h=harness();try{const eid=await seed(h);await h.service.store(eid,C.segments(JSON.stringify(Array.from({length:2100},(_,i)=>({text:i%2?'中':'"',speaker:'S',start:i}))), 'json'),'user','json');
+    let offset=0,seen=[];for(let page=0;page<100;page++){const r=await h.service.run('podcast_read',{episode_id:eid,offset});assert.ok(Buffer.byteLength(JSON.stringify(r))<=60000);seen.push(...r.segments.map(s=>s.idx));if(r.next_offset===null)break;assert.ok(r.next_offset>offset);offset=r.next_offset;}
+    assert.deepEqual(seen,Array.from({length:2100},(_,i)=>i));
+  }finally{h.close();}
+});
+test('read Unicode cuts preserve complete code points even at max_chars one',async()=>{
+  const h=harness();try{const eid=await seed(h);for(const [text,max_chars] of [['a'.repeat(9999)+'😀end',10000],['😀😀x',1]]){await h.service.store(eid,C.segments(text,'txt'),'user','txt');let offset=0,char_offset=0,parts=[];
+    for(let page=0;page<20;page++){const r=await h.service.run('podcast_read',{episode_id:eid,offset,char_offset,max_chars});for(const s of r.segments){assert.equal(s.text.isWellFormed(),true);assert.ok(s.text.length);parts.push(s.text);}if(r.next_offset===null)break;offset=r.next_offset;char_offset=r.next_char_offset||0;}assert.equal(parts.join(''),text);
+  }}finally{h.close();}
+});
+test('HTML named entities decode once without executing or retaining script/style',()=>{
+  const rows=C.segments('<cite>Alice&colon;</cite><p>Alice&nbsp;said&mdash;hello &NotEqualTilde; &amp;nbsp; &#128512;</p><script><p>BAD</p></script><style><p>BAD</p></style>','html');
+  assert.equal(rows.length,1);assert.equal(rows[0].speaker,'Alice');assert.equal(rows[0].text,'Alice\u00a0said—hello ≂̸ &nbsp; 😀');
+});
+test('unknown recovery refuses ambiguous local owners and already claimed remote IDs',async()=>{
+  const created=new Date().toISOString();const h=harness({network:async a=>({ok:true,status:200,body:JSON.stringify(a.url.includes('?')?{transcripts:[{id:'only-remote',audio_url:'https://audio.example.test/one.mp3',created}]}:{id:'only-remote',status:'queued'})})});
+  try{const eid=await seed(h);const other=await seed(h,{guid:'second'});const insert=h.db.prepare('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)');for(const [jid,e] of [['ambiguous-a',eid],['ambiguous-b',other]])insert.run(jid,e,'assemblyai','unknown','',null,created,'','SUBMISSION_UNKNOWN','','https://audio.example.test/one.mp3');
+    const r=await h.service.run('podcast_status',{});assert.ok(r.jobs.every(j=>j.state==='unknown'&&j.remote_id===''));assert.ok(h.calls.every(c=>c.method==='GET'&&c.url.includes('?')));
+    h.db.prepare("UPDATE jobs SET state='completed',remote_id='only-remote' WHERE id='ambiguous-a'").run();const b=(await h.service.run('podcast_status',{job_id:'ambiguous-b'})).jobs[0];assert.equal(b.state,'unknown');assert.equal(b.remote_id,'');
+  }finally{h.close();}
+});
+
+test('read byte budget splits heavily escaped text without losing continuation',async()=>{
+  const h=harness();try{const eid=await seed(h,{title:'中'.repeat(500),page_url:'https://example.test/'+ 'x'.repeat(3900)});const text='\u0001'.repeat(12000);await h.service.store(eid,C.segments(text,'txt'),'user','txt');let offset=0,char_offset=0,parts=[];
+    for(let p=0;p<10;p++){const r=await h.service.run('podcast_read',{episode_id:eid,offset,char_offset,max_chars:20000});assert.ok(Buffer.byteLength(JSON.stringify(r))<=60000);assert.ok(r.segments.length);parts.push(...r.segments.map(s=>s.text));if(r.next_offset===null)break;offset=r.next_offset;char_offset=r.next_char_offset||0;}assert.equal(parts.join(''),text);
+  }finally{h.close();}
+});
+test('unambiguous unknown recovery adopts one remote and repeated parallel checks keep its owner',async()=>{
+  const created=new Date().toISOString();const h=harness({network:async a=>({ok:true,status:200,body:JSON.stringify(a.url.includes('?')?{transcripts:[{id:'unique-remote',audio_url:'https://audio.example.test/one.mp3',created}]}:{id:'unique-remote',status:'queued'})})});
+  try{const eid=await seed(h);h.db.prepare('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)').run('unique-local',eid,'assemblyai','unknown','',null,created,'','SUBMISSION_UNKNOWN','','https://audio.example.test/one.mp3');const job=h.db.prepare('SELECT * FROM jobs').get();const results=await Promise.all([h.service.check({...job}),h.service.check({...job})]);assert.ok(results.every(j=>j.state==='submitted'&&j.remote_id==='unique-remote'));assert.equal(h.db.prepare("SELECT count(*) n FROM jobs WHERE remote_id='unique-remote'").get().n,1);assert.ok(h.calls.every(c=>c.method==='GET'));
+  }finally{h.close();}
+});
+
+test('remote owner appearing before atomic claim prevents adoption',async()=>{
+  const created=new Date().toISOString();const h=harness({network:async()=>({ok:true,status:200,body:JSON.stringify({transcripts:[{id:'race-remote',audio_url:'https://audio.example.test/one.mp3',created}]})})});
+  try{const eid=await seed(h);const insert=h.db.prepare('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)');insert.run('candidate',eid,'assemblyai','unknown','',null,created,'','','','https://audio.example.test/one.mp3');const original=h.service.sql.bind(h.service);let injected=false;
+    h.service.sql=async(sql,params)=>{if(sql.startsWith("UPDATE jobs SET remote_id=")&&!injected){injected=true;insert.run('existing-owner',eid,'assemblyai','completed','race-remote',null,created,'','','','https://audio.example.test/one.mp3');}return original(sql,params);};
+    const result=await h.service.check(h.db.prepare("SELECT * FROM jobs WHERE id='candidate'").get());assert.equal(injected,true);assert.equal(result.state,'unknown');assert.equal(result.remote_id,'');assert.equal(h.db.prepare("SELECT count(*) n FROM jobs WHERE remote_id='race-remote'").get().n,1);assert.equal(h.calls.length,1);
+  }finally{h.close();}
+});
+test('decoded HTML visible text is searchable and citable',async()=>{
+  const h=harness();try{const eid=await seed(h);await h.service.run('podcast_import_transcript',{episode_id:eid,format:'html',content:'<cite>Alice</cite><p>Alice&nbsp;said&mdash;hello</p>'});const q='Alice said—hello';assert.equal((await h.service.run('podcast_search',{query:q})).evidence.length,1);assert.equal((await h.service.run('podcast_cite',{references:[{episode_id:eid,quote:q}]})).citations[0].status,'normalized');}finally{h.close();}
+});
