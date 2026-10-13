@@ -260,7 +260,9 @@ test('cloud estimates and status never return audio URLs and status checks use b
   try{
     const eid=await seed(h,{guid:'https://audio.example.test/one.mp3?token=secret'}),estimate=await h.service.prepare(eid,'estimate-private');assert.equal(estimate.job.audio_url,undefined);assert.equal(estimate.episode.audio_url,undefined);assert.equal(estimate.episode.guid,undefined);assert.equal(JSON.stringify(estimate).includes('token=secret'),false);
     const insert=h.db.prepare('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)');for(let i=0;i<100;i++)insert.run('job-'+i,eid,'assemblyai','submitted','remote-'+i,null,new Date().toISOString(),'', '', 'slot-'+i,'https://audio.example.test/'+('x'.repeat(3900))+i+'.mp3');
-    const result=await h.service.run('podcast_status',{});assert.ok(maxActive>1&&maxActive<=4);assert.equal(result.jobs.length,100);assert.equal(result.jobs.some(j=>j.audio_url!==undefined),false);assert.equal(result.results_truncated,false);assert.ok(C.bytes(JSON.stringify(result))<=60000);
+    const ids=new Set();let cursor;
+    do{const result=await h.service.run('podcast_status',cursor?{cursor}:{});assert.ok(result.jobs.length>0);assert.equal(result.jobs.some(j=>j.audio_url!==undefined),false);assert.ok(C.bytes(JSON.stringify(result))<=60000);for(const job of result.jobs){assert.ok(!ids.has(job.id));ids.add(job.id);}cursor=result.next_cursor;if(!cursor)assert.equal(result.results_truncated,false);}while(cursor);
+    assert.ok(maxActive>1&&maxActive<=4);assert.equal(ids.size,100);assert.equal(h.calls.length,100);
   }finally{h.close();}
 });
 
@@ -631,13 +633,21 @@ test('note backend rejects5001 chars without writing and preserves all5000 valid
   }finally{h.close();}
 });
 
-test('cloud status continues past the first100 active jobs with a stable cursor',async()=>{
-  const h=harness({network:async a=>({ok:true,status:200,body:JSON.stringify({id:a.url.split('/').pop(),status:'queued'})})});
+test('cloud status keyset reaches every job as completed failed and claiming rows leave the active set',async()=>{
+  const h=harness({network:async a=>{const id=a.url.split('/').pop();return {ok:true,status:200,body:JSON.stringify({id,status:id==='remote-001'?'completed':Number(id.slice(7))<10?'error':'queued',utterances:[{text:'Evidence',start:0,end:1000}]})};}});
   try{
     const eid=await seed(h),insert=h.db.prepare('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)');
-    for(let i=0;i<105;i++)insert.run('status-job-'+i,eid,'assemblyai','submitted','remote-'+i,null,new Date(2025,0,1,0,0,i).toISOString(),'','','slot-'+i,'https://audio.example.test/'+i+'.mp3');
-    const first=await h.service.run('podcast_status',{});assert.equal(first.jobs.length,100);assert.equal(first.jobs_omitted,5);assert.equal(first.next_offset,100);assert.equal(first.results_truncated,true);
-    const second=await h.service.run('podcast_status',{offset:first.next_offset});assert.equal(second.jobs.length,5);assert.equal(second.jobs_omitted,0);assert.equal(second.next_offset,null);assert.equal(second.results_truncated,false);
+    for(let i=0;i<105;i++){const key=String(i).padStart(3,'0');insert.run('status-job-'+key,eid,'assemblyai',i===0?'claiming':'submitted','remote-'+key,null,'2025-01-01T00:00:00.000Z','claim',i===0?JSON.stringify({state:'none',card_id:'old-slot'}):'','slot-'+i,'https://audio.example.test/'+i+'.mp3');}
+    const seen=new Set();let cursor;
+    for(let turn=0;turn<20;turn++){
+      const r=await h.service.run('podcast_status',cursor?{cursor}:{});assert.ok(r.jobs.length>0&&r.jobs.length<=100);assert.ok(C.bytes(JSON.stringify(r))<=60000);assert.equal(r.next_offset,null);
+      for(const job of r.jobs){assert.ok(!seen.has(job.id));seen.add(job.id);assert.equal(job.audio_url,undefined);}
+      assert.equal(r.jobs_omitted,105-seen.size);
+      if(!r.next_cursor){assert.equal(r.results_truncated,false);break;}assert.equal(r.results_truncated,true);cursor=r.next_cursor;
+    }
+    assert.equal(seen.size,105);assert.equal(h.calls.length,104);assert.equal(h.db.prepare('SELECT state FROM jobs WHERE id=?').get('status-job-000').state,'prepared');assert.equal(h.db.prepare('SELECT state FROM jobs WHERE id=?').get('status-job-001').state,'completed');assert.equal(h.db.prepare('SELECT state FROM jobs WHERE id=?').get('status-job-002').state,'failed');
+    for(const cursor of ['bad','[]',JSON.stringify([1,'job'])])await assert.rejects(h.service.run('podcast_status',{cursor}),/INVALID_INPUT/);
+    await assert.rejects(h.service.run('podcast_status',{cursor,offset:1}),/INVALID_INPUT/);
   }finally{h.close();}
 });
 
@@ -651,4 +661,48 @@ test('publisher import uses bounded concurrency and tries alternate transcript s
   C.feed=()=>({title:'Fallback show',episodes:Array.from({length:8},(_,i)=>({guid:'fallback-'+i,title:'Episode '+i,published_at:new Date(Date.UTC(2025,0,1)+i*1000).toISOString(),transcripts:[{url:'https://example.test/'+i+'.bad.txt',type:'text/plain'},{url:'https://example.test/'+i+'.good.txt',type:'text/plain'}]}))});
   try{const r=await h.service.run('podcast_import',{url:'https://example.test/feed',episodes:'latest:8'},'fallback-import');assert.equal(r.transcripts.length,8);assert.ok(maxActive>1&&maxActive<=4);assert.equal(h.calls.filter(a=>a.url.endsWith('.bad.txt')).length,8);assert.equal(h.calls.filter(a=>a.url.endsWith('.good.txt')).length,8);}
   finally{C.feed=original;h.close();}
+});
+
+test('publisher import waits for all sibling I/O before surfacing a state-write failure',async()=>{
+  const original=C.feed;let release,reportFailure,active=0,settled=false;
+  const gate=new Promise(resolve=>{release=resolve;}),failed=new Promise(resolve=>{reportFailure=resolve;});
+  const h=harness({network:async a=>{
+    if(a.url.endsWith('/feed'))return {ok:true,status:200,body:'synthetic'};
+    if(a.url.endsWith('/3.txt'))return {ok:true,status:404,body:''};
+    active++;await gate;active--;return {ok:true,status:200,body:'Publisher evidence'};
+  }});
+  C.feed=()=>({title:'Failure show',episodes:Array.from({length:4},(_,i)=>({guid:'fault-'+i,title:'Episode '+i,published_at:new Date(Date.UTC(2025,0,1)+i*1000).toISOString(),transcripts:[{url:'https://example.test/'+i+'.txt',type:'text/plain'}]}))});
+  const library=h.host.library;h.host.library=async a=>{if(a.op==='db.exec'&&a.sql.includes("ELSE 'failed' END")){reportFailure();throw Object.assign(new Error('state write failed'),{code:'LIBRARY_UNAVAILABLE'});}return library(a);};
+  try{
+    const pending=h.service.run('podcast_import',{url:'https://example.test/feed',episodes:'latest:4'},'live-source-call').then(r=>{settled=true;return r;},e=>{settled=true;throw e;});
+    await failed;await new Promise(resolve=>setImmediate(resolve));assert.equal(settled,false);assert.equal(active,3);
+    release();await assert.rejects(pending,/state write failed/);assert.equal(active,0);assert.equal(h.db.prepare("SELECT count(*) n FROM episodes WHERE transcript_state='ready'").get().n,3);
+  }finally{release();C.feed=original;h.close();}
+});
+
+test('publisher fallback has a shared100-attempt budget and reports every incomplete episode',async()=>{
+  const original=C.feed;const h=harness({network:async a=>({ok:true,status:a.url.endsWith('/feed')?200:404,body:'synthetic'})});
+  C.feed=()=>({title:'Budget show',episodes:Array.from({length:50},(_,i)=>({guid:'budget-'+i,title:'Episode '+i,transcripts:Array.from({length:50},(_,j)=>({url:'https://example.test/'+i+'/'+j+'.txt',type:'text/plain'}))}))});
+  try{
+    const r=await h.service.run('podcast_import',{url:'https://example.test/feed',episodes:'latest:50'},'budget-call');
+    assert.equal(h.calls.length,101);assert.equal(r.transcripts.length,50);assert.equal(r.transcripts_omitted,0);
+    for(const result of r.transcripts){assert.equal(result.not_checked,true);assert.equal(result.reason,'import_budget_exhausted');}
+    assert.equal(r.transcripts.reduce((sum,r)=>sum+r.attempts,0),100);assert.equal(h.db.prepare("SELECT count(*) n FROM episodes WHERE transcript_state='remote_available'").get().n,50);
+  }finally{C.feed=original;h.close();}
+});
+
+test('publisher fetch timeouts shrink to the shared deadline without starting late requests',async t=>{
+  const original=C.feed;let clock=0;t.mock.method(Date,'now',()=>clock);
+  const h=harness({network:async a=>{if(a.url.endsWith('/feed'))return {ok:true,status:200,body:'synthetic'};clock+=50000;return {ok:true,status:404,body:''};}});
+  C.feed=()=>({title:'Deadline show',episodes:[{guid:'deadline',title:'Episode',transcripts:Array.from({length:5},(_,i)=>({url:'https://example.test/'+i+'.txt',type:'text/plain'}))}]});
+  try{
+    const r=await h.service.run('podcast_import',{url:'https://example.test/feed'},'deadline-call');assert.deepEqual(h.calls.slice(1).map(a=>a.timeoutMs),[60000,60000,20000]);assert.equal(r.transcripts[0].not_checked,true);assert.equal(r.transcripts[0].attempts,3);
+  }finally{C.feed=original;h.close();}
+});
+
+test('status and publisher budgets are disclosed in the manifest and all four locales',()=>{
+  const manifest=JSON.parse(fs.readFileSync(new URL('../podcast-insights/ghost.json',import.meta.url),'utf8'));
+  const status=manifest.tools.find(t=>t.name==='podcast_status');assert.equal(status.parameters.properties.cursor.maxLength,8192);assert.match(status.description,/cursor=next_cursor/);assert.match(status.description,/local cursors do not extend/);
+  for(const lang of ['en','zh-CN','ja','ko']){const locale=JSON.parse(fs.readFileSync(new URL('../podcast-insights/locales/'+lang+'.json',import.meta.url),'utf8'));assert.match(locale.tools.podcast_status.description,/cursor=next_cursor/);assert.match(locale.tools.podcast_status.description,/100/);assert.doesNotMatch(locale.tools.podcast_status.description,/offset=next_offset/);assert.match(locale.tools.podcast_import.description,/120/);assert.match(locale.tools.podcast_import.description,/100/);assert.match(locale.tools.podcast_import.description,/not_checked/);}
+  const h=harness();try{const j=h.service.publicJob({id:'job',state:'submitted',audio_url:'private',future_internal_url:'private',errorCode:'NETWORK_FAILED',recovery_incomplete:true});assert.equal(j.future_internal_url,undefined);assert.equal(j.audio_url,undefined);assert.equal(j.errorCode,'NETWORK_FAILED');assert.equal(j.recovery_incomplete,true);}finally{h.close();}
 });
