@@ -27,3 +27,5 @@ Metadata exceeding title500/author300/language64 chars, GUID/URL4000, date128 or
 0.2.12: Cloud estimates and status responses omit full audio URLs before confirmation. Status checks use bounded concurrency and a60000-byte response budget.
 
 0.2.13: Cloud estimate projections use an explicit safe field list. Status supports stable offset/limit continuation. Publisher transcript retrieval uses four-way concurrency and tries alternate transcript sources after failures.
+
+0.2.14: The English manifest description matches the localized status pagination contract.
