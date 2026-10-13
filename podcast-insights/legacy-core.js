@@ -119,7 +119,11 @@
     // interval for each chunk; never invent timing within an utterance.
     rows = rows.flatMap(r => {
       const text = string(r.text, 5 * 1024 * 1024), chunks = [];
-      for (let i = 0; i < text.length; i += 12000) chunks.push({...r, text:text.slice(i, i + 12000)});
+      for (let i = 0; i < text.length;) {
+        let end = Math.min(text.length, i + 12000);
+        if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1]) && /[\uDC00-\uDFFF]/.test(text[end])) end--;
+        chunks.push({...r, text:text.slice(i, end)});i = end;
+      }
       return chunks;
     });
     return rows.map((r, index) => {

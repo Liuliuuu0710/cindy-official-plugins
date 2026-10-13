@@ -48,12 +48,12 @@
       const [jid,entry]=entries[next++];
       if(entry.polls>=MAX_POLLS||Date.now()-entry.startedAt>=MAX_POLL_MS){polling.delete(jid);continue;}
       entry.polls++;polling.delete(jid);polling.set(jid,entry);
-      try{const j=(await service.run('podcast_status',{job_id:jid},undefined,{deadline})).jobs[0];if(!j||['completed','failed','prepared'].includes(j.state))polling.delete(jid);if(j)await sendCard(entry.slot,{job:j},['submitting','submitted','unknown'].includes(j.state)?'working':'done');}catch{}
+      try{const j=(await service.run('podcast_status',{job_id:jid},undefined,{deadline})).jobs[0];if(!j||['completed','failed','prepared'].includes(j.state))polling.delete(jid);if(j&&entry.slot)await sendCard(entry.slot,{job:j},['submitting','submitted','unknown'].includes(j.state)?'working':'done');}catch{}
     }};
     await Promise.allSettled(Array.from({length:Math.min(4,entries.length)},worker));
     channel.postMessage({type:'changed'});schedule();
   });},Math.min(60000,15000*2**Math.min(maxPolls,2)));}
-  const remember=jobs=>{for(const j of jobs || [])if(['submitting','submitted','unknown'].includes(j.state)&&j.card_id){const entry=polling.get(j.id);if(entry)entry.slot=j.card_id;else polling.set(j.id,{slot:j.card_id,startedAt:Date.now(),polls:0});}schedule();};
+  const remember=jobs=>{for(const j of jobs || [])if(['submitting','submitted','unknown'].includes(j.state)){const entry=polling.get(j.id);if(entry)entry.slot=j.card_id;else polling.set(j.id,{slot:j.card_id,startedAt:Date.now(),polls:0});}schedule();};
   let resuming=null;
   function resume(){
     if(resuming)return resuming;
@@ -90,7 +90,7 @@
       const quote=C.string(m.args.quote,1200),next=(await service.rows('SELECT text FROM segments WHERE transcript_id=? AND idx=?',[seg.transcript_id,seg.idx+1]))[0];
       if(!(seg.text+(next?'\n'+next.text:'')).includes(quote))C.fail('QUOTE_MISMATCH');const e=await service.episode(seg.episode_id);
       const note=m.args.note ?? '';if(typeof note!=='string')C.fail('INVALID_INPUT');if(note.length>5000)C.fail('NOTE_TOO_LONG');
-      await service.sql('INSERT INTO notes VALUES(?,?,?,?,?,?,?)',[crypto.randomUUID(),e.id,seg.id,quote,note,e.page_url,new Date().toISOString()]);return {saved:true};
+      await service.sql('INSERT INTO notes VALUES(?,?,?,?,?,?,?)',[crypto.randomUUID(),e.id,seg.id,quote,note,service.publicSource(e).page_url,new Date().toISOString()]);return {saved:true};
     }
     if(m.tool==='notes')return service.notes(m.args);
     if(m.tool==='export_notes'){

@@ -910,3 +910,89 @@ test('missing Host APIs produce actionable upgrade errors for tools and library 
     }finally{h.close();}
   }
 });
+
+test('all evidence routes omit an audio URL aliased as the page link',async()=>{
+  const h=harness();try{
+    const url='https://audio.example.test/private.mp3?sig=synthetic-alias';
+    const eid=await seed(h,{audio_url:url,page_url:url});
+    await h.service.run('podcast_import_transcript',{episode_id:eid,content:'Boundary evidence',format:'txt'});
+    for(const [tool,args] of [['podcast_read',{episode_id:eid}],['podcast_search',{query:'Boundary'}],['podcast_cite',{references:[{episode_id:eid,quote:'Boundary evidence'}]}]]){
+      const runtime=runtimeHarness(h),result=await runtime.call(tool,args,'safe-'+tool);assert.equal(result.ok,true);assert.ok(!JSON.stringify(runtime.messages).includes('synthetic-alias'),tool);
+    }
+  }finally{h.close();}
+});
+
+test('citation matches arbitrary consecutive cues and preserves exact priority and span timing',async()=>{
+  const h=harness();try{
+    const eid=await seed(h);
+    await h.service.run('podcast_import_transcript',{episode_id:eid,format:'json',content:JSON.stringify(['ＯＮＥ','two','three','one','two','three'].map((text,i)=>({text,start:i,end:i+1}))) });
+    const r=await h.service.run('podcast_cite',{references:[{episode_id:eid,quote:'one\ntwo\nthree'},{episode_id:eid,quote:'ONE TWO THREE'}]});
+    assert.equal(r.citations[0].status,'exact');assert.equal(r.citations[0].start_ms,3000);assert.equal(r.citations[0].end_ms,6000);
+    assert.equal(r.citations[1].status,'normalized');assert.equal(r.citations[1].start_ms,0);assert.equal(r.citations[1].end_ms,3000);
+    await h.service.run('podcast_import_transcript',{episode_id:eid,format:'json',content:JSON.stringify(Array.from({length:80},(_,i)=>({text:String(i),start:i,end:i+1}))) });
+    const many=await h.service.run('podcast_cite',{references:[{episode_id:eid,quote:Array.from({length:80},(_,i)=>String(i)).join('\n')}]});assert.equal(many.citations[0].status,'exact');assert.equal(many.citations[0].end_ms,80000);
+  }finally{h.close();}
+});
+
+test('citation window never crosses missing indices or transcript versions',async()=>{
+  const h=harness();try{
+    const eid=await seed(h);await h.service.run('podcast_import_transcript',{episode_id:eid,format:'json',content:JSON.stringify(['one','gap','two','three'].map((text,i)=>({text,start:i,end:i+1})))});
+    h.db.prepare('DELETE FROM segments WHERE idx=1').run();
+    const r=await h.service.run('podcast_cite',{references:[{episode_id:eid,quote:'one two three'}]});assert.equal(r.citations[0].status,'not_found');
+  }finally{h.close();}
+});
+
+test('citation whole response bounds repeated multibyte metadata and exposes continuation',async()=>{
+  const h=harness();try{
+    const eid=await seed(h,{title:'中'.repeat(500),page_url:'https://example.test/'+('x'.repeat(3900))});
+    h.db.prepare('UPDATE shows SET title=?').run('文'.repeat(500));
+    await h.service.run('podcast_import_transcript',{episode_id:eid,content:'Quote evidence',format:'txt'});
+    const refs=Array.from({length:20},()=>({episode_id:eid,quote:'Quote evidence'}));let processed=0;
+    while(processed<refs.length){
+      const r=await h.service.run('podcast_cite',{references:refs.slice(processed)});
+      assert.ok(Buffer.byteLength(JSON.stringify(r))<=60000);assert.equal(r.max_output_bytes,60000);assert.ok(r.citations.length>0);
+      processed+=r.citations.length;
+      assert.equal(r.citations_omitted,refs.length-processed);
+      assert.equal(r.next_reference_index,processed<refs.length?r.citations.length:null);
+    }
+    assert.equal(processed,20);
+  }finally{h.close();}
+});
+
+test('transcript splitting retains supplementary Unicode through SQLite and citation',async()=>{
+  const h=harness();try{
+    const text='a'.repeat(11999)+'😀'+'b'.repeat(12000)+'𠮷';
+    for(const format of ['txt','md','json']){
+      const rows=C.segments(format==='json'?JSON.stringify([{text}]):text,format);
+      assert.ok(rows.every(r=>r.text.isWellFormed()));assert.equal(rows.map(r=>r.text).join(''),text);
+    }
+    const eid=await seed(h);await h.service.run('podcast_import_transcript',{episode_id:eid,content:text,format:'txt'});
+    assert.equal((await h.service.segmentRows(eid)).map(r=>r.text).join(''),text);
+    assert.equal((await h.service.run('podcast_cite',{references:[{episode_id:eid,quote:'😀'}]})).citations[0].status,'exact');
+  }finally{h.close();}
+});
+
+test('cardless legacy jobs skipped by resume budget keep bounded background recovery',async t=>{
+  let clock=0,slow=true;t.mock.method(Date,'now',()=>clock);
+  const h=harness({network:async a=>{if(slow)clock+=60000;return {ok:true,status:200,body:JSON.stringify({id:a.url.split('/').pop(),status:slow?'queued':'completed',utterances:[{text:'Recovered',start:0,end:1000}]})};}});
+  try{
+    const eid=await seed(h),insert=h.db.prepare('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)');
+    for(let i=0;i<6;i++)insert.run('cardless-'+i,eid,'assemblyai','submitted','legacy-'+i,null,'2025-01-01T00:00:00.000Z','','','','https://audio.example.test/one.mp3');
+    const runtime=runtimeHarness(h);await runtime.request('resume',{},'cardless-resume');
+    assert.ok(runtime.timers.length>0,'Skipped legacy jobs need a recovery timer');slow=false;
+    runtime.timers.shift().f();await runtime.request('podcast_library',{},'after-cardless-poll');
+    assert.equal(h.db.prepare("SELECT count(*) n FROM jobs WHERE state='completed'").get().n,6);
+    assert.equal(runtime.messages.filter(m=>m.type==='card-update').length,0);assert.equal(runtime.timers.length,0);assert.ok(h.calls.every(c=>c.method==='GET'));
+  }finally{h.close();}
+});
+
+
+test('normalized citation windows retain empty cues but never cross transcript identities',async()=>{
+  const h=harness();try{
+    const eid=await seed(h),cues=['one',...Array(300).fill('!!!'),'two','three'];
+    await h.service.run('podcast_import_transcript',{episode_id:eid,format:'json',content:JSON.stringify(cues.map((text,i)=>({text,start:i,end:i+1}))) });
+    const r=await h.service.run('podcast_cite',{references:[{episode_id:eid,quote:'ONE TWO THREE'}]});assert.equal(r.citations[0].status,'normalized');assert.equal(r.citations[0].end_ms,303000);
+    const rows=await h.service.segmentRows(eid);rows[301].transcript_id='different-version';
+    assert.equal(h.service.findAcross(rows,'ONE TWO THREE',true),null);
+  }finally{h.close();}
+});

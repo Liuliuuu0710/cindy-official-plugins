@@ -6,7 +6,7 @@ const {chromium}=require(process.env.PODCAST_PLAYWRIGHT_PATH || 'playwright-core
 const root=path.resolve(__dirname,'../podcast-insights');
 (async()=>{
   const browser=await chromium.launch({executablePath:process.env.PODCAST_CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
-  const db=new DatabaseSync(':memory:');let version=0,locale='zh-CN';const errors=[];
+  const db=new DatabaseSync(':memory:');let version=0,locale='zh-CN';const errors=[];let failReaderOnce=false;
   try{
     const page=await browser.newPage({viewport:{width:1200,height:900}});page.on('pageerror',e=>errors.push(e.message));
     await page.exposeFunction('testLibrary',a=>{
@@ -14,7 +14,7 @@ const root=path.resolve(__dirname,'../podcast-insights');
       if(a.op==='read')return {ok:false,errorCode:'NOT_FOUND'};
       if(a.op==='db.open'||a.op==='db.backup')return {ok:true};
       if(a.op==='db.migrate'){if(!version){for(const step of a.steps)for(const sql of step.sql)db.exec(sql);version=1;}return {ok:true};}
-      if(a.op==='db.exec'){const stmt=db.prepare(a.sql);return /^SELECT/i.test(a.sql)?{ok:true,rows:stmt.all(...a.params)}:{ok:true,...stmt.run(...a.params),lastInsertRowid:0};}
+      if(a.op==='db.exec'){if(failReaderOnce&&a.sql.startsWith('SELECT g.id,g.transcript_id')){failReaderOnce=false;return {ok:false,errorCode:'LIBRARY_UNAVAILABLE'};}const stmt=db.prepare(a.sql);return /^SELECT/i.test(a.sql)?{ok:true,rows:stmt.all(...a.params)}:{ok:true,...stmt.run(...a.params),lastInsertRowid:0};}
       if(a.op==='db.batch'){db.exec('BEGIN');try{for(const s of a.statements)db.prepare(s.sql).run(...(s.params || []));db.exec('COMMIT');return {ok:true};}catch(e){db.exec('ROLLBACK');throw e;}}
       return {ok:false,errorCode:'UNKNOWN_OP'};
     });
@@ -29,7 +29,8 @@ const root=path.resolve(__dirname,'../podcast-insights');
       const ext=path.extname(file);return route.fulfill({body:fs.readFileSync(file),contentType:ext==='.html'?'text/html':ext==='.css'?'text/css':ext==='.json'?'application/json':'text/javascript'});
     });
     await page.addInitScript(()=>{
-      window.responses=[];window.cards=[];
+      window.responses=[];window.cards=[];window.uiReads=[];
+      const seen=new Map(),monitor=new BroadcastChannel('podcast-insights-v2');monitor.onmessage=({data:m})=>{if(m.type==='request')seen.set(m.reqId,m);if(m.type==='response'&&seen.get(m.reqId)?.tool==='podcast_read')uiReads.push({args:seen.get(m.reqId).args,result:m});};
       window.cindy={library:a=>window.testLibrary(a),request:async()=>({context:{locale:document.documentElement.lang || 'zh-CN'}}),send:async m=>{if(m.type==='tool-result')responses.push(m);if(m.type==='card-update')cards.push(m);},onHostMessage:f=>window.hostListener=f,
         fetch:async a=>({ok:true,status:200,body:a.url.endsWith('.vtt')?'WEBVTT\n\n00:00:01.000 --> 00:00:03.000\n城市绿地很重要。\n\n00:00:04.000 --> 00:00:06.000\nGreen spaces matter.':'<rss xmlns:podcast="https://podcastindex.org/namespace/1.0"><channel><title>Synthetic show</title><item><title>Synthetic episode</title><guid>one</guid><link>https://example.test/episode</link><enclosure url="https://audio.example.test/one.mp3"/><podcast:transcript url="https://example.test/one.vtt" type="text/vtt"/></item></channel></rss>'})};
     });
@@ -139,6 +140,29 @@ const root=path.resolve(__dirname,'../podcast-insights');
       }
     }
     await page.setViewportSize({width:360,height:800});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    // A successful reader must follow active-version changes without reselecting.
+    await page.evaluate(eid=>hostListener({type:'tool-call',tool:'podcast_import_transcript',args:{episode_id:eid,content:'New active evidence',format:'txt'},callId:'active-refresh'}),eid);
+    await page.waitForFunction(()=>responses.some(r=>r.callId==='active-refresh'));
+    await page.waitForFunction(()=>document.querySelector('#reader blockquote')?.textContent==='New active evidence',null,{timeout:2000}).catch(()=>errors.push('active transcript did not refresh'));
+    // Explicit selection also establishes the same starting point on the old implementation.
+    await page.getByRole('button',{name:'Synthetic episode',exact:true}).click();
+    await page.evaluate(eid=>hostListener({type:'tool-call',tool:'podcast_import_transcript',args:{episode_id:eid,content:'z'.repeat(40000),format:'txt'},callId:'paging-refresh'}),eid);
+    await page.waitForFunction(()=>responses.some(r=>r.callId==='paging-refresh'));
+    await page.getByRole('button',{name:'Synthetic episode',exact:true}).click();
+    await page.waitForFunction(()=>document.querySelector('#reader blockquote')?.textContent.startsWith('zzz'));
+    const activeSegment=db.prepare('SELECT g.id FROM segments g JOIN transcripts t ON t.id=g.transcript_id WHERE t.episode_id=? AND t.is_active=1 ORDER BY g.idx LIMIT 1').get(eid).id;
+    await page.evaluate(({eid,id})=>{const c=new BroadcastChannel('podcast-insights-v2');c.postMessage({type:'focus',episode_id:eid,segment_id:id});c.close();},{eid,id:activeSegment});
+    await page.locator('#reader .selected').first().waitFor();
+    await page.locator('#more').click();await page.waitForFunction(()=>Array.from(document.querySelectorAll('#reader blockquote')).reduce((n,e)=>n+e.textContent.length,0)>10000);
+    const beforeRetry=await page.locator('#reader').textContent(),beforeHighlight=await page.locator('#reader .selected').count();failReaderOnce=true;
+    await page.locator('#more').click();await page.waitForFunction(()=>uiReads.at(-1)?.result.ok===false);
+    const reads=await page.evaluate(()=>uiReads.length);
+    await page.evaluate(()=>{const c=new BroadcastChannel('podcast-insights-v2');c.postMessage({type:'changed'});c.close();});
+    await page.waitForFunction(n=>uiReads.length>n,reads);
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    if(await page.locator('#reader').textContent()!==beforeRetry)errors.push('failed continuation reset the reader on unrelated refresh');
+    assert.equal(await page.locator('#reader .selected').count(),beforeHighlight);
+    await page.locator('#more').click();await page.waitForFunction(()=>Array.from(document.querySelectorAll('#reader blockquote')).reduce((n,e)=>n+e.textContent.length,0)===22000);
     assert.deepEqual(errors,[]);console.log('Browser checks passed: RSS/Atom DOMParser, transcript import, citation, reader, en/zh-CN × light/dark, narrow layout');
   }finally{db.close();await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
