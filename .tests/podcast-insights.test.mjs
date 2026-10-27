@@ -693,11 +693,11 @@ test('one-character reader pages do not leak or repeat full internal norm',async
 test('note backend rejects5001 chars without writing and preserves all5000 valid chars',async()=>{
   const h=harness();try{
     const eid=await seed(h);await h.service.run('podcast_import_transcript',{episode_id:eid,format:'txt',content:'Original quote'});const segment=h.db.prepare('SELECT id FROM segments').get().id;
-    let channel,deliver;const ui=JSON.parse(fs.readFileSync(new URL('../podcast-insights/ui/en.json',import.meta.url),'utf8'));
-    const ctx={PodcastCore:C,PodcastService:class{constructor(){return h.service;}},fetch:async()=>{if(failUi)throw new Error('Synthetic UI load failure');return {ok:true,json:async()=>ui};},BroadcastChannel:class{constructor(){channel=this;}postMessage(m){if(m.type==='response')deliver(m);}},setInterval,clearInterval,setTimeout,Date,crypto:globalThis.crypto,cindy:{request:async()=>({context:{locale:'en'}}),onHostMessage(){},send:async()=>{}}};
+    let channel,deliver,uiLoaded=false;const ui=JSON.parse(fs.readFileSync(new URL('../podcast-insights/ui/en.json',import.meta.url),'utf8'));
+    const ctx={PodcastCore:C,PodcastService:class{constructor(){return h.service;}},fetch:async()=>({ok:true,json:async()=>{uiLoaded=true;return ui;}}),BroadcastChannel:class{constructor(){channel=this;}postMessage(m){if(m.type==='response')deliver(m);}},setInterval,clearInterval,setTimeout,Date,crypto:globalThis.crypto,cindy:{request:async()=>({context:{locale:'en'}}),onHostMessage(){},send:async()=>{}}};
     vm.runInNewContext(fs.readFileSync(new URL('../podcast-insights/runtime.js',import.meta.url),'utf8'),ctx);
     const request=note=>new Promise(resolve=>{deliver=resolve;channel.onmessage({data:{type:'request',reqId:globalThis.crypto.randomUUID(),tool:'note',args:{segment_id:segment,quote:'Original quote',note}}});});
-    const rejected=await request('n'.repeat(5001));assert.equal(rejected.ok,false);assert.equal(rejected.errorCode,'NOTE_TOO_LONG');assert.equal(h.db.prepare('SELECT count(*) n FROM notes').get().n,0);
+    const rejected=await request('n'.repeat(5001));assert.equal(uiLoaded,true,'note requests must exercise normal UI locale loading');assert.equal(rejected.ok,false);assert.equal(rejected.errorCode,'NOTE_TOO_LONG');assert.equal(h.db.prepare('SELECT count(*) n FROM notes').get().n,0);
     assert.equal((await request('n'.repeat(5000))).ok,true);assert.equal(h.db.prepare('SELECT note FROM notes').get().note,'n'.repeat(5000));
   }finally{h.close();}
 });
