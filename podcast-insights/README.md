@@ -52,3 +52,5 @@ Additional0.2.5 fixes: source retrieval refuses the credentialed AssemblyAI API 
 0.2.19: JSON: array or {segments:[...]}; text (alias body), start/end (aliases startTime/endTime) in seconds, not milliseconds; optional speaker. HTML excludes comments, nested templates and raw-text containers; not a general page-visibility/CSS extractor.
 
 0.2.20: HTML evidence uses the pinned parse5 standard parser; excludes plaintext/raw-text/template contexts without executing scripts or fetching resources. WebVTT cue entities decode once. Publisher retries retain active cloud status; continuation restarts on transcript-version changes; deletion refreshes notes. Progress cards show current recovery errors. Restart reclaims only incomplete inactive user/publisher versions, retaining completed history, active and cloud versions. Parser provenance: THIRD-PARTY-LICENSES.txt.
+
+0.2.21: Unknown-job cards retain a safe default recovery hint when UI localization initialization fails.

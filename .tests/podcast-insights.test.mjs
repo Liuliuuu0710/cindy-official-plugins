@@ -90,11 +90,11 @@ async function seed(h,overrides={}){
 }
 const click=(jid,extra={})=>({type:'event',name:'card-action',actionId:'transcribe:'+jid,userActionToken:'host-issued-test-token',callId:'estimate-1',spawnCallId:'progress-1',...extra});
 const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r;});return {promise,resolve};};
-function runtimeHarness(h,missingCapability){
+function runtimeHarness(h,missingCapability,failUi=false){
   let listener,channel;const messages=[],waiters=new Map(),timers=[];
   const ui=JSON.parse(fs.readFileSync(new URL('../podcast-insights/ui/en.json',import.meta.url),'utf8'));
   const ctx={PodcastCore:C,PodcastService:missingCapability?Service:class{constructor(){return h.service;}},crypto:globalThis.crypto,Date,
-    fetch:async()=>({ok:true,json:async()=>ui}),
+    fetch:async()=>{if(failUi)throw new Error('Synthetic UI load failure');return {ok:true,json:async()=>ui};},
     BroadcastChannel:class{constructor(){channel=this;}postMessage(m){messages.push(m);if(m.type==='response')waiters.get(m.reqId)?.resolve(m);}},
     setInterval:()=>0,clearInterval(){},setTimeout:(f,ms)=>{timers.push({f,ms});return timers.length;},
     cindy:{library:h.host.library,fetch:h.host.fetch,request:async()=>({context:{locale:'en'}}),onHostMessage:f=>{listener=f;},send:async m=>{messages.push(m);if(m.type==='tool-result')waiters.get(m.callId)?.resolve(m);}},
@@ -694,7 +694,7 @@ test('note backend rejects5001 chars without writing and preserves all5000 valid
   const h=harness();try{
     const eid=await seed(h);await h.service.run('podcast_import_transcript',{episode_id:eid,format:'txt',content:'Original quote'});const segment=h.db.prepare('SELECT id FROM segments').get().id;
     let channel,deliver;const ui=JSON.parse(fs.readFileSync(new URL('../podcast-insights/ui/en.json',import.meta.url),'utf8'));
-    const ctx={PodcastCore:C,PodcastService:class{constructor(){return h.service;}},fetch:async()=>({ok:true,json:async()=>ui}),BroadcastChannel:class{constructor(){channel=this;}postMessage(m){if(m.type==='response')deliver(m);}},setInterval,clearInterval,setTimeout,Date,crypto:globalThis.crypto,cindy:{request:async()=>({context:{locale:'en'}}),onHostMessage(){},send:async()=>{}}};
+    const ctx={PodcastCore:C,PodcastService:class{constructor(){return h.service;}},fetch:async()=>{if(failUi)throw new Error('Synthetic UI load failure');return {ok:true,json:async()=>ui};},BroadcastChannel:class{constructor(){channel=this;}postMessage(m){if(m.type==='response')deliver(m);}},setInterval,clearInterval,setTimeout,Date,crypto:globalThis.crypto,cindy:{request:async()=>({context:{locale:'en'}}),onHostMessage(){},send:async()=>{}}};
     vm.runInNewContext(fs.readFileSync(new URL('../podcast-insights/runtime.js',import.meta.url),'utf8'),ctx);
     const request=note=>new Promise(resolve=>{deliver=resolve;channel.onmessage({data:{type:'request',reqId:globalThis.crypto.randomUUID(),tool:'note',args:{segment_id:segment,quote:'Original quote',note}}});});
     const rejected=await request('n'.repeat(5001));assert.equal(rejected.ok,false);assert.equal(rejected.errorCode,'NOTE_TOO_LONG');assert.equal(h.db.prepare('SELECT count(*) n FROM notes').get().n,0);
@@ -1147,5 +1147,15 @@ test('cloud progress cards show current localized errors and unknown recovery gu
     const poll=runtime.timers.find(t=>t.ms>=15000);assert.ok(poll);poll.f();
     for(let i=0;i<30&&!runtime.messages.some(m=>m.type==='card-update'&&m.callId==='progress-slot');i++)await new Promise(resolve=>setImmediate(resolve));
     const card=runtime.messages.find(m=>m.type==='card-update'&&m.callId==='progress-slot');assert.ok(card);assert.match(card.html,/Check connection and provider status/);assert.match(card.html,/do not resubmit/);
+  }finally{h.close();}
+});
+
+test('unknown progress cards survive failed UI localization initialization',async()=>{
+  const h=harness();try{const runtime=runtimeHarness(h,undefined,true);await runtime.call('podcast_library',{},'failed-ui-start');
+    h.service.run=async()=>({jobs:[{id:'failed-ui-job',state:'unknown',card_id:'failed-ui-slot',recovery_incomplete:true}]});
+    await runtime.request('resume',{},'failed-ui-resume');
+    const poll=runtime.timers.find(t=>t.ms>=15000);assert.ok(poll);poll.f();
+    for(let i=0;i<30&&!runtime.messages.some(m=>m.type==='card-update'&&m.callId==='failed-ui-slot');i++)await new Promise(resolve=>setImmediate(resolve));
+    const card=runtime.messages.find(m=>m.type==='card-update'&&m.callId==='failed-ui-slot');assert.ok(card);assert.match(card.html,/Check provider jobs; do not resubmit/);
   }finally{h.close();}
 });
