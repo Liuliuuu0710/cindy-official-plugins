@@ -1093,3 +1093,59 @@ test('remote owner appearing before atomic claim prevents adoption',async()=>{
 test('decoded HTML visible text is searchable and citable',async()=>{
   const h=harness();try{const eid=await seed(h);await h.service.run('podcast_import_transcript',{episode_id:eid,format:'html',content:'<cite>Alice</cite><p>Alice&nbsp;said&mdash;hello</p>'});const q='Alice said—hello';assert.equal((await h.service.run('podcast_search',{query:q})).evidence.length,1);assert.equal((await h.service.run('podcast_cite',{references:[{episode_id:eid,quote:q}]})).citations[0].status,'normalized');}finally{h.close();}
 });
+
+
+test('HTML tokenizer never turns plaintext or escaped script context into evidence',()=>{
+  for(const hidden of [
+    '<plaintext><cite>Wrong</cite><p>Hidden evidence</p>',
+    '<script><!--<script></script><cite>Wrong</cite><p>Hidden evidence</p></script>',
+    '<xmp><cite>Wrong</cite><p>Hidden evidence</p></xmp>',
+    '<textarea><cite>Wrong</cite><p>Hidden evidence</p></textarea>',
+  ]){
+    const rows=C.segments('<cite>Alice</cite><p>Visible evidence</p>'+hidden,'html');
+    assert.equal(rows.map(r=>r.text).join(''),'Visible evidence',hidden);
+    assert.equal(rows[0].speaker,'Alice');
+  }
+  assert.throws(()=>C.segments('<plaintext><cite>Wrong</cite><p>Hidden evidence</p>','html'),{code:'UNSUPPORTED_HTML_TRANSCRIPT'});
+});
+test('WebVTT named entities retain visible text and one decoding pass',async()=>{
+  const h=harness();try{const eid=await seed(h);
+    await h.service.run('podcast_import_transcript',{episode_id:eid,format:'vtt',content:'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n<v Alice>Alice&nbsp;said&lrm; hello&rlm; &amp;nbsp; &bogus;</v>'});
+    const read=await h.service.run('podcast_read',{episode_id:eid});
+    assert.equal(read.segments[0].text,'Alice\u00a0said\u200e hello\u200f &nbsp; &bogus;');
+    assert.equal((await h.service.run('podcast_search',{query:'Alice said'})).evidence.length,1);
+    assert.equal((await h.service.run('podcast_cite',{references:[{episode_id:eid,quote:'Alice said'}]})).citations[0].status,'normalized');
+  }finally{h.close();}
+});
+test('failed publisher retries preserve an active paid transcription',async()=>{
+  const h=harness({network:async a=>({ok:true,status:a.url.includes('fail.vtt')?503:200,body:''})});try{const eid=await seed(h);const created=new Date().toISOString();
+    h.db.prepare("UPDATE episodes SET transcript_state='transcribing' WHERE id=?").run(eid);
+    h.db.prepare('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?)').run('active-publisher',eid,'assemblyai','submitted','paid-existing',null,created,'','','','https://audio.example.test/one.mp3');
+    const feed={title:'Synthetic show',episodes:[{guid:'episode-1',title:'Synthetic episode',audio_url:'https://audio.example.test/one.mp3',transcripts:[{url:'https://example.test/fail.vtt',type:'text/vtt'}]}]};
+    const original=C.feed;C.feed=()=>feed;try{await h.service.run('podcast_import',{url:'https://example.test/feed'},'retry');}finally{C.feed=original;}
+    assert.equal(h.db.prepare('SELECT transcript_state FROM episodes WHERE id=?').get(eid).transcript_state,'transcribing');
+    assert.ok(h.calls.every(c=>c.method==='GET'));
+  }finally{h.close();}
+});
+test('restart reclaims only incomplete non-cloud inactive transcript versions',async()=>{
+  const h=harness();try{const eid=await seed(h);await h.service.store(eid,C.segments('Retained original','txt'),'user','txt','','retained');
+    const insert=h.db.prepare('INSERT INTO transcripts VALUES(?,?,?,?,?,?,?,?)');
+    for(const [tid,source,active] of [['partial-user','user',0],['partial-publisher','publisher',0],['partial-cloud','assemblyai',0],['active-without-marker','user',1]]){
+      insert.run(tid,eid,source,'txt','','','',active);
+      h.db.prepare('INSERT INTO segments VALUES(?,?,?,?,?,?,?,?)').run(tid+'-s',tid,0,null,null,'','partial','partial');
+    }
+    const recovered=new Service(h.host);await recovered.init();
+    for(const tid of ['partial-user','partial-publisher']){assert.equal(h.db.prepare('SELECT count(*) n FROM transcripts WHERE id=?').get(tid).n,0);assert.equal(h.db.prepare('SELECT count(*) n FROM segments WHERE transcript_id=?').get(tid).n,0);}
+    for(const tid of ['retained','partial-cloud','active-without-marker'])assert.equal(h.db.prepare('SELECT count(*) n FROM transcripts WHERE id=?').get(tid).n,1);
+  }finally{h.close();}
+});
+
+test('cloud progress cards show current localized errors and unknown recovery guidance',async()=>{
+  const h=harness();try{const runtime=runtimeHarness(h);await runtime.call('podcast_library',{},'start-progress');
+    h.service.run=async()=>({jobs:[{id:'progress-errors',state:'unknown',card_id:'progress-slot',errorCode:'NETWORK_FAILED',recovery_incomplete:true}]});
+    await runtime.request('resume',{},'resume-progress');
+    const poll=runtime.timers.find(t=>t.ms>=15000);assert.ok(poll);poll.f();
+    for(let i=0;i<30&&!runtime.messages.some(m=>m.type==='card-update'&&m.callId==='progress-slot');i++)await new Promise(resolve=>setImmediate(resolve));
+    const card=runtime.messages.find(m=>m.type==='card-update'&&m.callId==='progress-slot');assert.ok(card);assert.match(card.html,/Check connection and provider status/);assert.match(card.html,/do not resubmit/);
+  }finally{h.close();}
+});

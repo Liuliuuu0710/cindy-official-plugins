@@ -26,6 +26,10 @@
         await this.io({op:'open'});await this.io({op:'db.open',dbPath:'podcasts.sqlite'});
         await this.io({op:'db.migrate',dbPath:'podcasts.sqlite',targetVersion:1,steps:[{toVersion:1,sql:schema}]});
         await this.migrateLegacy();
+        // Reclaim interrupted ordinary imports only. Completed history, active versions
+        // and cloud versions (which resume using stable provider IDs) remain intact.
+        const incomplete="SELECT t.id FROM transcripts t WHERE t.is_active=0 AND t.source IN ('user','publisher') AND NOT EXISTS (SELECT 1 FROM meta m WHERE m.key='complete:' || t.id)";
+        await this.batch([{sql:'DELETE FROM segments WHERE transcript_id IN ('+incomplete+')'}, {sql:'DELETE FROM transcripts WHERE id IN ('+incomplete+')'}]);
         for(const j of await this.rows("SELECT * FROM jobs WHERE state='claiming'"))await this.releaseClaim(j);
         // A crash during submission is uncertain, never a reason to resubmit.
         await this.sql("UPDATE jobs SET state='unknown',error='SUBMISSION_UNKNOWN' WHERE state='submitting'");
@@ -140,7 +144,7 @@
           attempts++;episodeAttempts++;
           try{const f=/json/i.test(t.type)?'json':/vtt/i.test(t.type)?'vtt':/subrip|srt/i.test(t.type)?'srt':/html/i.test(t.type)?'html':'txt';transcriptResults[index]=await this.store(e.id,C.segments(await this.network(t.url,callId,null,false,Math.min(60000,remaining)),f),'publisher',f,t.url);lastError=undefined;break;}catch(error){lastError=error;}
         }
-        if(lastError){await this.sql("UPDATE episodes SET transcript_state=CASE WHEN transcript_state='ready' THEN 'ready' ELSE 'failed' END WHERE id=?",[e.id]);transcriptResults[index]={episode_id:e.id,errorCode:lastError.code || 'NETWORK_FAILED'};}
+        if(lastError){await this.sql("UPDATE episodes SET transcript_state=CASE WHEN transcript_state IN ('ready','transcribing') THEN transcript_state ELSE 'failed' END WHERE id=?",[e.id]);transcriptResults[index]={episode_id:e.id,errorCode:lastError.code || 'NETWORK_FAILED'};}
       }};
       // Keep the source callId alive until every sibling has finished its I/O.
       const workers=await Promise.allSettled(Array.from({length:Math.min(4,selected.length)},transcriptWorker));

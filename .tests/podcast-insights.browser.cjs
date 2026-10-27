@@ -8,7 +8,7 @@ const root=path.resolve(__dirname,'../podcast-insights');
   const browser=await chromium.launch({executablePath:process.env.PODCAST_CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
   const db=new DatabaseSync(':memory:');let version=0,locale='zh-CN';const errors=[];let failReaderOnce=false;
   try{
-    const page=await browser.newPage({viewport:{width:1200,height:900}});page.on('pageerror',e=>errors.push(e.message));
+    const page=await browser.newPage({viewport:{width:1200,height:900}});page.setDefaultTimeout(10000);page.setDefaultNavigationTimeout(10000);page.on('pageerror',e=>errors.push(e.message));
     await page.exposeFunction('testLibrary',a=>{
       if(['open','status'].includes(a.op))return {ok:true,state:'ready',usedBytes:4096};
       if(a.op==='read')return {ok:false,errorCode:'NOT_FOUND'};
@@ -34,6 +34,7 @@ const root=path.resolve(__dirname,'../podcast-insights');
       window.cindy={library:a=>window.testLibrary(a),request:async()=>({context:{locale:document.documentElement.lang || 'zh-CN'}}),send:async m=>{if(m.type==='tool-result')responses.push(m);if(m.type==='card-update')cards.push(m);},onHostMessage:f=>window.hostListener=f,
         fetch:async a=>({ok:true,status:200,body:a.url.endsWith('.vtt')?'WEBVTT\n\n00:00:01.000 --> 00:00:03.000\n城市绿地很重要。\n\n00:00:04.000 --> 00:00:06.000\nGreen spaces matter.':'<rss xmlns:podcast="https://podcastindex.org/namespace/1.0"><channel><title>Synthetic show</title><item><title>Synthetic episode</title><guid>one</guid><link>https://example.test/episode</link><enclosure url="https://audio.example.test/one.mp3"/><podcast:transcript url="https://example.test/one.vtt" type="text/vtt"/></item></channel></rss>'})};
     });
+    console.log('browser: start');
     await page.goto('http://127.0.0.1:18765/');
     await page.addScriptTag({url:'http://127.0.0.1:18765/main.js'});
     await page.waitForFunction(()=>typeof hostListener==='function');
@@ -80,7 +81,7 @@ const root=path.resolve(__dirname,'../podcast-insights');
       const xml='<feed xmlns="http://www.w3.org/2005/Atom" xmlns:podcast="https://podcastindex.org/namespace/1.0"><title>Atom</title><entry><id>id-1</id><title>Entry</title><link rel="enclosure" href="https://audio.example.test/a.mp3"/><podcast:transcript type="text/plain" url="https://example.test/a.txt"/><podcast:transcript type="text/vtt" url="https://example.test/a.vtt"/></entry></feed>';
       const f=PodcastCore.feed(xml,'https://example.test/feed');return {title:f.title,url:f.episodes[0].audio_url,first:f.episodes[0].transcripts[0].type};
     });assert.equal(parser.first,'text/vtt');assert.equal(parser.title,'Atom');
-    const dialogs=[];let noteReply='Synthetic note';page.on('dialog',async d=>{dialogs.push(d.message());await d.accept(noteReply);});
+    const dialogs=[];let noteReply='Synthetic note';page.on('dialog',async d=>{dialogs.push(d.message());await d.accept(d.type()==='prompt'?noteReply:undefined);});
     await page.evaluate(eid=>hostListener({type:'tool-call',tool:'podcast_import_transcript',args:{episode_id:eid,content:'x'.repeat(1300),format:'txt'},callId:'long-note'}),eid);
     await page.waitForFunction(()=>responses.some(r=>r.callId==='long-note'));
     await page.getByRole('button',{name:'Synthetic episode',exact:true}).click();
@@ -127,6 +128,7 @@ const root=path.resolve(__dirname,'../podcast-insights');
     assert.equal(await page.locator('#notes input').count(),502);assert.equal(await page.locator('#notes input').first().isChecked(),true);
     await page.locator('#notes input[value="archived-0"]').check();assert.equal(await page.locator('#notes input[value="archived-0"]').isChecked(),true);
     await page.getByRole('button',{name:'Synthetic episode',exact:true}).click();
+    console.log('browser: initial flows passed');
     const output=process.env.PODCAST_SCREENSHOT_DIR || '/private/tmp/podcast-158-visual';fs.mkdirSync(output,{recursive:true});
     for(const language of ['zh-CN','en']){
       locale=language;
@@ -163,6 +165,24 @@ const root=path.resolve(__dirname,'../podcast-insights');
     if(await page.locator('#reader').textContent()!==beforeRetry)errors.push('failed continuation reset the reader on unrelated refresh');
     assert.equal(await page.locator('#reader .selected').count(),beforeHighlight);
     await page.locator('#more').click();await page.waitForFunction(()=>Array.from(document.querySelectorAll('#reader blockquote')).reduce((n,e)=>n+e.textContent.length,0)===22000);
+    console.log('browser: pagination baseline passed');
+    // A queued import can activate a new transcript before an old continuation runs.
+    // Change only the synthetic DB here: no changed notification reaches the UI first.
+    db.prepare('UPDATE transcripts SET is_active=0 WHERE episode_id=?').run(eid);
+    db.prepare('INSERT INTO transcripts VALUES(?,?,?,?,?,?,?,?)').run('race-version',eid,'user','txt','','','',1);
+    for(let i=0;i<4;i++)db.prepare('INSERT INTO segments VALUES(?,?,?,?,?,?,?,?)').run('race-'+i,'race-version',i,null,null,'','n'.repeat(12000),'n'.repeat(12000));
+    await page.locator('#more').click();
+    await page.waitForFunction(()=>Array.from(document.querySelectorAll('#reader blockquote')).map(e=>e.textContent).join('').startsWith('n'));
+    assert.equal(await page.locator('#reader blockquote').allTextContents().then(parts=>parts.join('')),'n'.repeat(10000));
+    await page.evaluate(()=>{const c=new BroadcastChannel('podcast-insights-v2');c.postMessage({type:'changed'});c.close();});
+    await page.waitForFunction(()=>document.querySelector('#episode-title').textContent==='Synthetic episode');
+    // Deleting the selected episode must discard its notes and checkbox selections too.
+    await page.locator('#delete-episode').click();
+    await page.waitForFunction(()=>document.querySelectorAll('#notes input').length===0);
+    assert.equal(await page.locator('#notes input:checked').count(),0);
+    assert.equal(await page.locator('#more-notes').isVisible(),false);
+    assert.equal(await page.locator('#episode-actions').isVisible(),false);
+    assert.equal(db.prepare('SELECT count(*) n FROM notes WHERE episode_id=?').get(eid).n,0);
     assert.deepEqual(errors,[]);console.log('Browser checks passed: RSS/Atom DOMParser, transcript import, citation, reader, en/zh-CN × light/dark, narrow layout');
   }finally{db.close();await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
