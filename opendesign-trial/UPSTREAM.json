@@ -1,7 +1,7 @@
 {
   "repository": "https://github.com/nexu-io/open-design",
-  "tag": "v0.22.1 (apps/web package version)",
-  "commit": "eca7c7ab989852fb586384e19bcb6a6f2d7321f4",
+  "tag": "open-design-v0.25.0",
+  "commit": "de6d2c072a18dfef80ecad4a455b31f0d5aca090",
   "license": "Apache-2.0",
   "integration": "Real FileViewer, element comments, manual editor, PreviewDrawOverlay and runtime bridges. Cindy owns conversation/model execution. Local Node routes replace daemon routes.",
   "patches": [
@@ -25,7 +25,10 @@
     "Snapshot and export bridge correlation IDs use shared cryptographic randomUUID, removing timestamp/Math.random identifiers.",
     "CodeQL: crypto-only analytics identity/error IDs; markup omission uses separators to avoid manufacturing tags; notes accept whitespace in raw-text closing tags; Markdown table code spans escape backslashes before pipes.",
     "Parent-owned comment/Inspect/pod gestures authorize selection once; advisory updates retain selected identity. Bound comment target traversal to 1000 nodes and 500 visible candidates with matching parent limits.",
-    "Use shared fail-closed cryptographic UUIDs for runtime-state capture/restore and preview document, host, generation, measurement, scroll, base-update and transport-probe identifiers; preserve pending retry identity."
+    "Use shared fail-closed cryptographic UUIDs for runtime-state capture/restore and preview document, host, generation, measurement, scroll, base-update and transport-probe identifiers; preserve pending retry identity.",
+    "Experience diagnostics: keep the new daemon reporting hooks inert in Cindy; no background diagnostic requests or metadata transmission.",
+    "Motion source player: use Web Crypto UUIDs for document correlation instead of timestamp/Math.random.",
+    "Project recovery: only restore a missing ownership marker from the exact saved Host-private draft/session/root binding, after checking the existing generated directory and safe HTML file."
   ],
   "logo": {
     "path": "apps/web/public/app-icon.png",
@@ -33,5 +36,12 @@
   },
   "legacyComponents": {
     "SketchEditor": "38bdb59d868831c5c98602da9522acc84cabd97e (v0.1.0)"
+  },
+  "upgradeVerification": {
+    "fromCommit": "eca7c7ab989852fb586384e19bcb6a6f2d7321f4",
+    "release": "https://github.com/nexu-io/open-design/releases/tag/open-design-v0.25.0",
+    "archiveSha256": "f1179140051b452f6529df5d9b01201a32fa76be5b08ccce68d3f376076363ce",
+    "licenseUnchanged": true,
+    "scope": "Upgrade the vendored viewer/component dependency closure; retain the separately pinned legacy SketchEditor. No daemon, cloud-service integration or dependency-lockfile update."
   }
 }

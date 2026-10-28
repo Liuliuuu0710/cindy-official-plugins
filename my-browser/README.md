@@ -1,8 +1,27 @@
-# My Browser
+# Cindy Chrome
 
 [简体中文](README.zh-CN.md)
 
-A local candidate plugin connecting Cindy to your everyday signed-in browser. Version **0.3.x** adds content-first reading, browser/profile-bound routing, a minimal Art-generated icon and browser-specific setup. It is **not yet a publicly distributed consumer release**.
+A unified Cindy browser companion candidate. **0.4.10** brings compact reading controls and automatic in-player translation to browser control. The Chrome extension is **Cindy**; the Cindy plugin is **Cindy Chrome**, both using the official Cindy icon. The `my-browser` identity, extension key and five existing tools are preserved. Chrome installation uses the published Chrome Web Store listing and still requires a running Cindy client.
+
+## Reading and learning
+
+- Cancellation also applies while discovering the local connection. Request deadlines include serialized task execution and repair attempts; completed response receipts no longer consume running-request capacity. Browser and plugin updates are both required for this fix.
+- Player controls adapt to narrow widths and long language names. Menus stay within the visible player, keep their close button available while scrolling, and do not overprint subtitles; long captions shrink to fit small players.
+- Captions move toward the bottom when YouTube controls hide and make room when controls reappear. Preparation details, blockers and cache status live inside the subtitle menu. The preparation bar measures playback readiness and reaches Ready once buffered; whole-video translation percentages never float over the video.
+- Compact webpage panel, selection translation, contextual explanation, summary and reading aloud; bilingual pages with dynamic content and restore. Closing the panel keeps page translations.
+- YouTube automatically shows captions inside its player. The player menu offers bilingual, translation-only, original-only and off; video language is independent of webpage language. Native HTML5 captions, SRT/VTT import, sentence navigation, loop, pause and bilingual export remain under More. Live services have not been individually verified; universal coverage is not claimed.
+- Common languages are listed first; “Try other languages” opens a searchable language directory and custom names. This directory is **not a verified model support list**. Available languages and quality depend on the selected text model; the host currently does not provide verified per-language capability metadata.
+- PDF.js local PDF reading and Tesseract OCR for English, Chinese, Japanese, Korean, French, German, Spanish, Italian, Portuguese and Russian. Recognize a selected region and ask questions about its text. This is not visual chart understanding. Text and Markdown reading are included.
+- Speaking practice, collections and review controls are removed at the user's request. Existing Library records and legacy API operations are preserved. This package is not a full Trancy replacement.
+- New Cindy task: uses the ordinary task API, creates an explicitly owned task and separates user instructions from quoted webpage material. It never takes over an unrelated active task; uncertain submissions retain their request keys.
+
+Requires **Cindy 0.1.97+**, an available task model and Library. The plugin logic and local bridge remain resident to receive user clicks. Model credentials stay in Cindy. Task permission follows the existing Host approval flow; refusing it prevents model translation but does not prevent browser reading/control.
+
+Shortcuts: `Alt+Shift+T` toggles page translation; `Alt+Shift+C` opens Cindy. Pages open before installation need a user refresh to load content scripts and establish current-document address evidence.
+
+New plugin versions negotiate the 0.3.x extension control protocol. New extensions connected to an old plugin keep control working and require a plugin update for learning. Pairing and site policies retain their existing storage. Chrome handles incremental extension permissions through its normal update flow.
+
 
 ## Reading vs interaction
 
@@ -23,26 +42,28 @@ The on-demand workflow manual is `manual/browser/MANUAL.md`. Parameter names and
 | Edge | Shared Chromium extension, separate store artifact and profile routing | Protocol and Windows launcher tests; no real Windows/Edge device verification yet. |
 | Safari | WebExtension adapter + generated macOS container app | Universal arm64/x86_64 Release build and identity-pairing tests; no signed consumer installation or real Safari extension execution yet. |
 
-Settings makes ZIP installation the primary Chrome/Edge route: open the extensions manager and ZIP location, enable Developer mode, then drag the ZIP onto the page. No unzip or directory selection is needed. Connection checks are automatic; opening a page is not installation success. Directory loading remains a fallback. Manual ZIP dropping in official Chrome still needs real-device verification and may be blocked by managed browser policy.
+Settings opens the official Chrome Web Store as the primary Chrome installation route. Finish the store install; the extension connects automatically while Cindy Chrome is enabled. Developer directory loading remains an explicit fallback; it is not the normal consumer path.
 
-Safari still requires a store release or signed/notarized app, neither configured yet. Chrome/Edge ZIP installation does not depend on store publication. Unknown extension identities still require real Cindy pairing confirmation. After updates, drag the new ZIP again; directory installations use Reload. Keep only one copy.
+Safari still requires a store release or signed/notarized app, neither configured yet. Chrome Web Store installation uses the published extension identity and receives browser-managed updates. Official extension identities connect automatically after their key challenge succeeds; no connection button or pairing dialog is required. Existing custom identity bindings remain usable; new unknown identities are not automatically trusted. Developer installations remain separate and should keep only one copy.
 
-Installation cards appear only for connected browsers or installed browsers with a deliverable ZIP/store route. Unpublished Safari and browsers absent from this device are hidden, with no coming-soon placeholder.
+Installation cards appear only for connected browsers or installed browsers with a published store route. Unpublished browsers and browsers absent from this device are hidden, with no coming-soon placeholder. The official `.cindy` package includes directory loading as its only developer fallback; it does not ship a ZIP installer.
 
 ## Security and limitations
 
 - New installations allow reading and interaction on all public websites. Saved restrictions are preserved until explicitly removed in settings: old policies lack provenance, so matching the legacy preset does not prove user intent; the all-sites switch enables broad interaction, while read blocks and interaction exclusions still take precedence. Domain grants include subdomains; `=host.example.test` is exact-only. New grants/unblocking require real confirmation; cancellation changes nothing.
-- Only `127.0.0.1:18810–18819` is bound. HTTP cannot enqueue work or modify policy. Host, extension origin, profile identity and current bridge session are checked; no CORS. Unknown extension identities get no session/jobs before approval. This is browser-origin protection, not a defense against malicious same-user native software or already-trusted extensions.
+- Loopback only. New official profiles register their public key through Native Messaging before the signed handshake grants a session. Self-reported extension ID/Origin over HTTP is insufficient. The native executable checks its browser caller (macOS signature, Windows Authenticode, or Linux root-owned supported installation), then uses a private per-user bootstrap credential; that credential never reaches the browser, logs or Cindy KV. Existing saved bindings remain usable without reapproval. Site policy, single-use signatures, session binding and no CORS remain. This does not protect an OS account/browser already controlled by malware or an attacker able to read/alter its private credential files.
 - Jobs and acknowledgments/results are bound to one profile. Delivered actions are never replayed. `execution:executed` proves DOM dispatch, not successful sending/purchase; `unknown` requires checking before repetition.
 - No cookie export, arbitrary JS tool, debugger or credential extraction. Hidden/password/payment-code fields are excluded, but arbitrary page text may still contain private information. AI may receive this data off-device. Visits/reads contact websites and may affect server-side notification read state.
-- Public-looking hostnames are insufficient: before reading or acting, the extension requires a public peer IP reported by `webRequest` for the current main document, correlates navigation/request timestamps, and targets that exact `documentId`. Private/missing addresses, unobserved older tabs and ambiguous navigation evidence fail closed with `ADDRESS_UNVERIFIED`; tab metadata is redacted. No automatic refresh or replacement tab is attempted. A manually refreshed public page can supply new evidence. Cache/proxy/browser configurations that cannot provide public peer evidence are unsupported for that page. This prevents extraction from private main documents; it is not a network firewall: navigation may already have contacted the destination, and arbitrary page content can originate elsewhere. `webRequest` and `webNavigation` observe main-document address/identity only; no cookie/header capture.
+- Page access follows the browser’s current document identity and the saved site policy. Proxy endpoints, missing peer IPs, cache hits and restored tabs no longer block normal reading or translation. Local/private IP URLs, Chrome-protected pages, and hostnames that the browser’s DNS reports as private/loopback/link-local/ULA remain denied. Public IPv6 literals are allowed. Connection-peer IP is not used: a local proxy’s address is not the website. When DNS is unavailable or fails (typical of system/remote-DNS proxies), that hostname is not treated as private. No proxy permissions or settings changes are required. The extension targets the exact current `documentId`; no cookie/header capture.
 - At most three background tabs per profile, reclaimed after ten idle minutes. User-owned/focused/navigated tabs are not reclaimed. Safari without session storage keeps the ownership ledger in memory rather than persisting tab ids across browser restarts.
 - Refs are isolated-world Element maps, not page-writable attributes, and expire on navigation/new snapshots. Synthetic keys/hover may be ignored. No cross-origin frames or closed Shadow DOM. Form submission uses one mechanism only.
 - Text/record values default to a 6000-character budget; JSON/link overhead is additional. Tabs default to 20, max 100, with an additional aggregate budget. Overlong tab URLs are not exported. A timeout/empty shell is not proof of no results.
 
 ## Build and verification
 
-First-party JS and Node built-ins only. No runtime dependency installation. `node/worker.cjs` activates unconditionally because Cindy requires the entry rather than running it as `require.main`. Runtime subprocesses are restricted to fixed browser/app launchers and Safari signature checks.
+The official settings flow does not open a ZIP. The contributor-only `package-my-browser-zip.py` helper can create a development archive with the local `key`; do not present or upload that archive as a user installation. For Chrome Web Store releases, use `node scripts/build-my-browser.mjs /absolute/new-output-directory chrome`: its upload ZIP omits `key`. The published Chrome extension ID and store URL are already recorded in `distribution.json`; keep them unchanged for future releases and keep the local development key unchanged.
+
+The bridge uses first-party JS and Node built-ins. PDF.js and Tesseract are bundled, integrity-verified browser components; no runtime dependency installation or CDN code/model loading. `node/worker.cjs` activates unconditionally because Cindy requires the entry rather than running it as `require.main`. Runtime subprocesses are restricted to fixed browser/app launchers and Safari signature checks.
 
 ```sh
 python3 scripts/package-my-browser-zip.py
@@ -123,17 +144,21 @@ The builder creates Chrome/Edge store ZIPs and a Safari Xcode project/universal 
 
 0.3.36 stops the link scan at the requested count. The loop materialised and visibility-filtered every anchor first, so a page with tens of thousands of links paid a full layout sweep even for `limit:1`; eligibility, visibility and the count are now checked in that order per candidate and the loop exits as soon as the limit is met. Coverage: a 20000-link fixture page read at `limit:1` must return exactly one link and report truncation. This is a structural change — at that size the previous scan is not slow enough for a timing threshold to be discriminating, so none is asserted.
 
-A packaged ZIP can also be dragged onto Chromium's extensions manager as a developer-install alternative to selecting a directory. Browser developer-mode/policy requirements still apply; this is not a store-signed release or an automatic-update promise. Chromium's implementation supports this path; this machine's official Chrome ZIP-drop flow has not yet been verified. A self-packed CRX may be blocked rather than merely showing a dismissible warning.
+The official `.cindy` package does not include a ZIP installer. Local contributor builds may generate a ZIP for development checks, but that archive is not part of the plugin's installation flow; use the bundled directory fallback when the store is unavailable. Browser developer-mode/policy requirements still apply, and this is not a store-signed release or an automatic-update promise. A self-packed CRX may be blocked rather than merely showing a dismissible warning.
 
-Provisioning retains an empty staged audience. No marketplace admission, store submission, push, PR or public release is implied. The four HEAD-based package-contract tests also passed against the committed snapshot containing the new plugin and provisioning entry.
+Provisioning retains an empty staged audience. The Chrome Web Store listing is already public; repository maintenance and the new package submission are tracked separately. The four HEAD-based package-contract tests also passed against the committed snapshot containing the new plugin and provisioning entry.
 
 Review regressions: public hostname served by a real loopback fixture returns no DOM/title; positive fixture IPs are simulated at the browser API boundary in the isolated Chromium suite. Navigation/reload identity, late responses and unknown address paths are covered by unit tests.
 
+### 0.4.11: Chrome Web Store installation path
+
+The published Chrome Web Store listing is now the normal Chrome installation route. Plugin settings opens the listing, then verifies the live extension handshake when the user returns. Directory loading is the only developer fallback included in the plugin package; local ZIP generation remains a contributor-only build step. The Chrome store package uses version 0.4.13; the store requires a higher version for every update.
+
 ## Runtime source evidence
 
-`node/worker.cjs` is the reviewed first-party source entry, shipped byte-for-byte without transpilation or a separate generated/vendor copy. Its dependency graph is `worker.cjs` → `node:readline`, `node/bridge.cjs`, `node/installation.cjs`, `extension/policy.js`; these require only Node built-ins and the bundled manifest/distribution JSON. There is no external package name/version or upstream binary to reconstruct. `.github/scripts/package-plugin.sh my-browser <output.cindy>` packages the committed source; compare the extracted entry with `git show HEAD:my-browser/node/worker.cjs` to verify provenance.
+`node/worker.cjs` is the reviewed first-party source entry, shipped byte-for-byte without transpilation or a separate generated/vendor copy. Its dependency graph is `worker.cjs` → `node:readline`, `node/bridge.cjs`, `node/installation.cjs`, `extension/policy.js` and `extension/learning-core.js`; these require only Node built-ins and the bundled manifest/distribution JSON. There is no external package name/version or upstream binary to reconstruct. `.github/scripts/package-plugin.sh my-browser <output.cindy>` packages the committed source; compare the extracted entry with `git show HEAD:my-browser/node/worker.cjs` to verify provenance.
 
-Network/launch inventory: the worker creates only a loopback HTTP listener on 18810–18819; the extension polls those exact ports. Website navigation is HTTP(S) for the requested browser task. Installation opens fixed extension-manager URLs, bundled files, or configured store URLs validated against `chromewebstore.google.com`, `microsoftedge.microsoft.com`, `apps.apple.com`; the current store URLs are unset. Installation/signature checks use fixed executables and argv, not shell commands. Source inspection found no eval/Function/string-code execution or Math.random; the only base64 runtime decode is the public extension identity key. Loopback contract approval and bridge authentication remain unresolved review items; this evidence does not waive them.
+Network/launch inventory: the worker creates only a loopback HTTP listener on 18810–18819; the extension polls those exact ports. Website navigation is HTTP(S) for the requested browser task. Installation opens fixed extension-manager URLs, bundled files, or configured store URLs validated against `chromewebstore.google.com`, `microsoftedge.microsoft.com`, `apps.apple.com`; the Chrome store URL is configured; Edge and Safari store routes remain unset. Installation/signature checks use fixed executables and argv, not shell commands. Source inspection found no eval/Function/string-code execution or Math.random; the browser extension keeps a non-exportable WebCrypto identity key in IndexedDB and signs bridge challenges for paired learning access.
 
 Status tool output explicitly selects connection and installation fields; local paths, policy and pairing-origin details stay in the settings response. Extract attributes are limited to href/src/datetime/title/alt/aria-label/role before dispatch. Arbitrary token attributes are rejected, but site text and links can still contain private information.
 
@@ -161,4 +186,156 @@ Read failures after starting navigation report `execution: unknown`: the website
 
 0.3.47 treats the leftover after a same-segment context word as one credential string, so hyphenated alphabetic tokens (`/verify-abcdefghijkl-mnopqrstuv`) are masked without enumerating shapes.
 
-0.3.48 reports local `browser_act` validation failures as `not_executed`. Only worker transport failures after an act request remain `unknown`.
+0.4.0 reports local `browser_act` validation failures as `not_executed`. Only worker transport failures after an act request remain `unknown`.
+
+## 0.4.0 verification and dependency review
+
+2026-10-06: 77 targeted/localization/provisioning/workflow tests passed. Isolated Chromium control and learning suites passed separately. Learning tests exercise the actual extension, bridge, DOM and local OCR/PDF engines, with explicit model/Library fixtures; this is not installed Cindy, real model billing/permission, or public video-site validation. Screenshots cover light/dark reading and Library, plus PDF.
+
+PDF.js uses the official legacy build and `isEvalSupported:false`. Only user-selected local PDFs are opened; its Worker, CMaps, fonts and WASM resolve inside the package. Tesseract uses bundled workers, core and language files with persistent OCR cache disabled, never the default CDN. Extension CSP enables local WASM, not remote scripts or `unsafe-eval`. Unmodified Tesseract Core reads `navigator.languages` solely to build Emscripten C-runtime LANG; it does not select the UI or user-chosen OCR language. The localization check permits only that exact expression in that SHA-256-pinned vendor file and continues checking all other reads.
+
+Upstream packages contain unused Node/download/dynamic-execution branches. No provider credentials, arbitrary remote document URL or server execution entry is exposed to them. Sources, npm SHA-512 integrity and full licenses are recorded in `THIRD-PARTY-LICENSES.txt`.
+
+## 0.4.2 subtitle workflow fix
+
+Opening Subtitles now reads and translates automatically, starting near the playhead; delayed captions and imported SRT/VTT continue without refreshing the page or pressing Translate. Invalid model formatting or item counts get one automatic repair attempt. If that fails, original and completed lines remain with an inline retry action; the selected model is never silently changed. Closing the panel or cancelling stops translation.
+
+Reloading the same URL in the same tab restores subtitle mode. Explicit close, changing modes, or navigating elsewhere clears that choice. This state lives only in extension session storage, and resumed learning still uses the existing site and document authorization checks.
+
+## 0.4.3 in-player bilingual subtitles
+
+Subtitles are injected into the YouTube player: original above translation, on a content-sized translucent background. They follow playback, seeking, player resizing and fullscreen; the right floating panel is no longer the default subtitle surface. Language, repeat, import, export, transcript and saving remain in the in-player Subtitle settings.
+
+The YouTube caption container is hidden only while a current injected caption is available. Closing, switching modes or leaving the page restores original visibility and HTML5 track modes; replacement caption containers are handled too. Extension 0.4.3 can connect to plugin 0.4.2, so this display fix does not require a simultaneous host plugin upgrade. Isolated Chromium validates player/timeline fixtures, not the user's live YouTube video.
+
+## 0.4.4 Full-transcript semantic segmentation
+
+YouTube now loads the complete transcript before removing repeated rolling fragments and jointly regrouping and translating coherent clauses. Long videos use bounded windows with surrounding context, prioritizing the current playback position. HTML5 tracks and imported SRT/VTT use the same pipeline.
+
+The model supplies word-index ranges and translations only. Code reconstructs the original text and validates complete, ordered coverage, pause/speaker boundaries and caption length. Display timing uses JSON3 word offsets where present, otherwise estimates within original cue bounds, then adjusts ending times for readability without overlap (maximum 8.5 seconds). This is not audio forced alignment and cannot guarantee word-accurate sync when source timing is wrong. Invalid output gets one repair attempt; missing translations are never silently discarded.
+
+**Both the Chrome extension and Cindy Chrome plugin need version 0.4.4 for semantic segmentation.** The new host retains older extension support. A new extension connected to an old host shows an update message instead of sending an unsupported operation; normal browser control stays compatible.
+
+Validation uses isolated Chromium with the actual extension and bridge, fixture media and explicit model responses: five source fragments become two bilingual captions; playback, fullscreen and retry work; the complete YouTube JSON3 is fetched even when a partial native track exists. The user's actual video and selected model have not been validated in this environment.
+
+## 0.4.5 Subtitle recovery and accurate version reporting
+
+Fixes the 0.4.4 behavior where one invalid segment stopped the entire subtitle workflow after the model had returned content. Format/index repair now includes the specific reason. A short caption can use direct translation without model-generated word indices. Larger failed passages are split near pauses/punctuation and retried with surrounding context; completed captions stay intact and original text remains visible while translation is unavailable. Manual retry targets unfinished passages only. Recovery is bounded to eight splits and four levels per original window; two persistently failing passages stop automatic model calls with an actionable reason. The chosen model, word coverage and overlap checks are preserved.
+
+Errors distinguish structure, coverage, missing translation, pause boundaries, duration and text length, without logging model/page content. Connection `version` is now the explicitly reported installed extension version; compatibility negotiation is separately reported as `protocolVersion`. Older extensions without installation-version reporting return `null` instead of a misleading installation number.
+
+Both the Cindy plugin and Chrome extension are packaged as 0.4.5. Targeted tests and isolated Chromium verify recovery from invalid groups in valid JSON, retention of completed captions, original-text display, retry of unfinished passages, cancellation and compatibility. Model responses and website data are explicit fixtures; the user's live video and configured model remain unverified.
+
+## 0.4.6 Whole-transcript editing and preparation ahead of playback
+
+The full transcript is collected and standalone arrow/music formatting markers are removed. Consecutive text pages are read in full to build an accumulated editorial brief covering names, terminology, argument flow and tone; later pages are not silently discarded. Continuous long passages then use this brief and surrounding context to reconstruct faithful polished source prose, translate naturally and map readable viewing captions to source-word timing. Punctuation, capitalization, meaningless stutters and formatting noise may be cleaned; facts, negation, jokes and intentional emphasis must remain. Displayed source text no longer has to be a verbatim word concatenation. Older subtitle clients retain their existing contract.
+
+Two workers prepare adjacent passages, each bounded to 360 words and a text-size limit. Initial playback and seeks wait for at least 45 seconds of prepared coverage at the current playback speed, or all remaining content. During playback, preparation below three seconds triggers buffering rather than allowing untranslated playback. The rest of the transcript continues preparing in the background. Only pauses owned by subtitle buffering are auto-resumed; user pauses and sentence-end pause remain respected, and closing subtitles releases their owned pause. Display gaps of at most 0.7 seconds can join, while genuine longer pauses remain.
+
+Subtitle settings now include a paragraph-based Read transcript view with cleaned source and translation as preparation progresses. Both the extension and host plugin require 0.4.6 for this workflow. Isolated Chromium with deliberately delayed model fixtures verifies concurrent preparation, playback after the first long passage, buffering when seeking into unfinished content and the prose view. Targeted tests cover complete transcript pagination, word anchors, cleanup, playback rate, user pauses and closing recovery. The user's live video and configured model have not yet been verified.
+
+### 0.4.7: JSON3 interview timing and speaker-aware editing
+
+A real 66-minute YouTube interview exposed overlapping display holds, newline append events, explicit speaker flags and inline laughter. JSON3 parsing now preserves word offsets and speaker flags, removes speaker arrows before distributing time, caps the final text span at the next speech event, and keeps genuine repeated speech. Inline sound descriptions no longer imply a new speaker in editorial mode.
+
+Long passages still share the full-video brief and prepare concurrently. The host groups true speaker/pause turns into one editorial request; the model returns cleaned bilingual captions per turn without word indices. Monotonic source-word alignment determines timing. Successful turns are cached and only failed turns are repaired; split recovery retains the same contextual brief. Actual transcript parsing/alignment and isolated Chromium tests passed. The current provider's live generation and installed-video playback require separate validation; package generation does not mean installation or that live validation passed.
+
+### 0.4.8: incremental preparation without a whole-video model pass
+
+Read the transcript once, then translate near the playhead immediately. Each editorial window is capped at 180 words / roughly 45 seconds. Two workers prepare the current and next passages, with a 90-second look-ahead window that advances during playback; they do not translate distant future or past passages by default. Title, opening text, surrounding source and recently prepared bilingual wording supply context without a blocking full-document model analysis. Playback can begin with 15 seconds ready. Seeking outside pending work cancels obsolete requests and prioritizes the new position. The previous full-document operation remains supported for older extensions.
+
+Verified with the supplied real transcript and isolated Chromium slow-model/seek tests. These checks do not attest installed playback with the configured live model.
+
+### 0.4.9: compact reading and player controls
+
+The extension icon opens a 336 px reading panel on ordinary pages and player settings on YouTube. Captions start automatically on YouTube without opening the panel. The 292 px player menu follows fullscreen, supports four display modes, independent video language and subtitle size, and remembers preferences. Original-only and off stop translation requests. Additional language entries are explicitly experimental, not a promise that a model supports 185 languages. Model settings identifies the actual route in Cindy and provides an app link; it does not claim a model-settings deep link or a verified model language list.
+
+Preparation remains incremental: the current passage and its successor run concurrently, within the existing look-ahead window. No full-video model prepass is reintroduced. Same-document YouTube navigation uses the live URL plus document/origin identity; old-route requests still cancel. Browser control, pairing, site grants and existing saved data are retained. Both the Cindy plugin and Chrome extension are 0.4.9; unpacked Chrome installations must reload the updated extension directory and existing tabs once. That update step is not a subtitle workflow requirement.
+
+Validation uses an isolated real Chromium extension, bridge and local PDF/OCR components, with fixture pages and model responses. It covers automatic/SPA video startup, persisted preferences, fullscreen, four modes, independent languages, buffer/seek, bounded failure recovery and read-only mode, alongside existing browser-control regressions. This is not an installed Cindy or live YouTube/provider acceptance claim. Light and dark panels were inspected from rendered screenshots. No new third-party dependencies or model credential storage were added.
+
+### 0.4.10: report failures without guessing the cause
+
+Unclassified errors no longer tell users to check their Cindy connection. Model/internal failures, permission denials, concurrency limits, invalid parameters, missing captions and actual bridge failures have distinct messages, with the returned error code visible. Unknown free-form exception text is not exposed in the UI. Timeout wording refers to retrying unfinished translation, not resubmitting a transaction. This fixes misleading diagnosis; it does not claim to resolve an unknown remote machine's underlying failure or increase the host's model timeout.
+
+0.4.10 also hardens recovery without changing the version again:
+- The listener tries the ten compatible loopback ports (`18810–18819`). Discovery probes those fixed ports; generic HTTP services are never accepted. Occupancy, listen denial, pairing and compatibility failures remain distinct. No firewall changes or permission bypass are performed.
+- Only learning start/result transport failures get two bounded retries, using the same request id and session. Browser actions are never replayed. A changed bridge session invalidates the old request.
+- At most two model calls run across all profiles. The queue is bounded to eight and 30 seconds; cancellation cannot free an upstream call before it finishes, and cancelled queued calls never dispatch. The outer learning deadline is five minutes (three legacy repair calls plus bounded queues); the Host's individual model timeout remains unchanged, and results expire after five and a half minutes.
+- Transient subtitle failures retry with bounded backoff; a first timeout splits a passage once. Completed passages remain. Exhausted or permanent failures release only pauses introduced by Cindy, keeping manual pauses intact. Caption reads cannot overlap.
+- Reader/PDF results are scoped to their document and translation attempt, preventing slow old files or repeated translations from overwriting the latest view.
+
+Verification uses isolated Chromium with the actual extension, bridge, PDF and OCR code; model and website inputs are fixtures. It includes occupied-port recovery, permission-denied listener simulation, lost result polls, cancellation/concurrency, seek buffering, model failures and stale PDF completion. This is not validation of a coworker's environment or live provider availability, and the rebuilt package has not been installed into the running Cindy application.
+
+### 0.4.10: subtitle progress and persistent cache
+
+A compact in-player progress card reports the completed share of source words, completed passages, prepared coverage ahead, active video range, elapsed stage time and processing stage. Cache reads, queueing, waiting for previous model requests, model response, timeline validation and cache writes have distinct states. Elapsed time never invents model-generation percentages. Finished progress follows the player controls; errors keep their stage and retry action visible.
+
+Validated bilingual captions are cached incrementally in the declared plugin Library at `browser/<client-id>/subtitles/<hash>.json`, isolated by browser profile, video and target language. Reopening a video or restarting the plugin can reuse it; changed source text or timing misses the cache. Each file is limited to 8 MB. Unavailable, corrupt or full storage keeps the current translation with an explicit persistence warning; corrupt files are not automatically overwritten. Internal files are JSON, and existing SRT export remains available. More → Clear this video's cache and translate again clears the current video and target language, for example after choosing another model. Already-running writes cannot restore entries from before that clear.
+
+The former background short-text path could not cancel a dispatched request. It has been replaced by the ordinary task execution path described below.
+
+Both packages remain 0.4.10; full progress and persistence require updating the Cindy plugin and Chrome extension. Targeted tests cover restart reuse, isolation, corrupt/full storage, clear-versus-stale-write protection, timeout stages and old calls occupying slots. Isolated Chromium verifies the actual extension/bridge progress and light/dark rendering using fixture model responses. The package has not been installed into the running Cindy, and these checks do not establish live model latency.
+
+### 0.4.10: translation runs in one visible task
+
+Browser translation now uses the existing public `cindy.tasks` APIs only: create/get/send/getRun/readMessages/cancel. There is no client patch, new Host API, `oneshot_control`, log-only session, or separate harness tunnel. A single visible **Browser translation** task is persisted in plugin KV and reused across videos, passages and plugin restarts. Its real user-facing requests and agent replies remain in ordinary task history. Model and reasoning settings belong to that task; no synthetic per-request model settings are advertised.
+
+Requests are serialized into this one task. Playback uses ready captions while subsequent passages are prepared ahead. Requests waiting inside the plugin are checked for cancellation before dispatch; a new video cancels the old owned run before its next request is sent. Pending request keys/input/revisions are persisted before submission. Unknown delivery is reconciled with the exact same key, not retried as a new run. A plugin restart first settles/cancels its stored unfinished run. A user-archived/deleted task is not silently replaced. Task completion must reference the exact outputMessageId; the plugin never treats the most recent assistant message as the result of an unrelated request.
+
+The existing incremental Library cache remains. Playback progress describes actual task phases, not guessed model-token progress. Public API failures are reported explicitly without falling back to background short-text calls or requiring a new client API. Final production playback must be checked with the updated plugin on an installed Cindy build; fixture tests alone do not prove live provider behavior.
+
+After an extension reload, stale page scripts stop URL polling and event listeners, remove Cindy panels and overlays, and restore native captions. Synchronous invalid-context errors no longer repeat. Refresh already-open pages once to load the new script. Temporary messaging failures do not disable a valid extension context.
+
+A reconciling task status during startup is polled against the same run within the existing deadline; it does not immediately fail or cancel the run to start prefetch. Public history replies support JSON objects as well as strings and text blocks, still matched by outputMessageId. A recorded task response was replayed to verify its shape; this is not installed end-to-end verification.
+
+### 0.4.10: remove the sidebar entry and strengthen task binding
+
+The mainView declaration, Cindy-only reader page and learning-panel message branch are removed. PDF/text reading remains in the Chrome extension. Translation binds to the existing Browser translation task by identity, never by its title or whichever task is selected.
+
+A lost creation acknowledgement reuses the original creation key. Archived, deleted or invalid bindings do not silently create replacement tasks. Uncertain inputs are identified by browser profile, page, input and model revision; retries resume the same receipt despite a changed playback position. Other passages wait for the previous run to settle; a changed video in the same browser confirms cancellation first. Cancellation intent survives restart and blocks new sends until confirmed. Returned task/run identities are checked, and reply-read failures retain the original receipt. Existing bindings and keys migrate without deleting history or caches.
+
+Network verification survives extension service-worker restarts for the same document using browser-session storage. Reloads and other documents still require fresh public-address evidence. Chrome Web Store domains are protected by Chrome itself; the extension reports this restriction directly rather than suggesting a refresh. The Chrome store item ID and published install link are registered in `distribution.json`; the 0.4.13 update supersedes the previously submitted 0.4.12 package.
+
+
+## YouTube's new transcript panel (0.4.35 / Chrome 0.4.22)
+
+YouTube now marks many caption tracks as requiring a player-issued proof token, so the caption endpoint returns HTTP 200 with an empty body to the extension and the transcript fallback is the only source. Some videos open a new transcript panel (`PAmodern_transcript_view`) whose rows are `transcript-segment-view-model` elements instead of `ytd-transcript-segment-renderer`. Earlier versions waited for the old rows, timed out and reported `SUBTITLE_EMPTY`. The fallback now reads both panel types; in the new panel it takes the visible timestamp and text, skips chapter headers and the accessible duration label, and still rejects any row whose timestamp or text cannot be read. Opening, closing and restoring the panel and description are unchanged.
+
+## Model switches no longer stop translation (0.4.33 / Chrome 0.4.20)
+
+Switching the model during translation (the plugin's model card or the task's own model menu) made the in-flight passage fail or hit a revision conflict, and the whole video stopped at "retry". The passage is now resent with the current settings only after the Host has rejected the old request or the old run is terminal and the task configuration revision actually changed, at most twice per passage. Runs the user cancelled or interrupted from the task, video switches and uncertain deliveries keep their existing rules and are never sent twice. Failures without a configuration change are still reported; the subtitle loop retries them twice with the existing backoff before stopping.
+
+Following the plugin model setting before each new input requires a Cindy host that declares `pluginDefaultModel` (Cindy releases after 0.1.110). On those hosts the plugin setting is authoritative: a temporary switch in the task menu is synced back to the plugin setting before the next input (including the resend above), so change the plugin setting to switch models for good. Older hosts keep the task's existing model (including task-menu switches); the plugin never guesses or reads private preferences.
+
+When YouTube's caption endpoint returns an empty body, the fallback "Show transcript" entry is only rendered inside the expanded description. Earlier versions reported `SUBTITLE_EMPTY`; the description is now expanded temporarily, the transcript read, and the description collapsed again unless the user interacted, along with the transcript panel the plugin opened. Videos without a transcript entry still return an empty result.
+
+## Trusted automatic binding (0.4.32 / Chrome 0.4.19)
+
+New installations require both the Cindy plugin and Chrome extension update; the extension declares `nativeMessaging`. Enabling the plugin installs a user-level native host automatically. Users need no Go/Node installation or pairing button; existing saved bindings remain valid. Any browser-mandated permission confirmation remains browser-managed and is not bypassed. Signed Chrome, Edge and Brave releases support binding; Linux supports system-installed Chrome/Chromium/Edge/Brave at the listed trusted paths. Nonstandard installations fail closed. Safari continues to restore existing bindings only.
+
+Private host files: macOS `~/Library/Application Support/Cindy/browser-native`, Windows `%LOCALAPPDATA%/Cindy/browser-native`, Linux `~/.local/share/Cindy/browser-native`. Host manifests are written to browser user-profile `NativeMessagingHosts`; Windows uses fixed HKCU browser keys only. Stopping the plugin deletes its instance bootstrap credential; shared launch files remain for other active instances. The host only binds identity: it cannot read pages or invoke a model. Repository Go sources build with pinned Go 1.27.2 for x64/arm64 on all three systems; no runtime download/compiler is needed.
+
+Windows/Linux device execution and stable/Beta Cindy package installation remain supplemental acceptance gaps; cross-compilation and mocked registration are not device evidence.
+
+## 0.4.18 review follow-up (host package 0.4.31)
+
+Restoring an in-flight page translation no longer leaves the previous generation's run lock blocking the next translate. Switching from a pending selection translation to the page panel keeps the new page work running, but a late selection success or failure cannot write into a missing result node or surface as a page-panel error. Host-filtered tab lists omit tabs whose destination DNS is private; unfiltered lists still show those rows as redacted diagnostics.
+
+## 0.4.17 review follow-up (host package 0.4.30)
+
+Panel initialization is shared by waiting clicks, but model requests never block restore or other menu actions. Closing the panel invalidates older waiting clicks; only a new click can reopen it. Public IPv6 literals pass both shared site policy and document checks; private, loopback and reserved addresses remain blocked. Destination DNS is resolved again on each access, so a previous public answer or DNS failure cannot authorize a later private result. Failed/unavailable DNS remains the existing remote-proxy exemption. No DNS result is cached by the extension.
+
+## 0.4.16 review follow-up (host package 0.4.29)
+
+Panel actions wait in order for config, so a full-page translate issued while the first open is still loading is not dropped. After a service-worker restart, already-interactive documents are asked for `document.readyState` on the current `documentId` instead of waiting 25 seconds. Public IPv6 literals are allowed. Destination DNS, when the browser reports it, must be public; connection-peer IP remains unused so local proxies still work. Failed/unavailable DNS is the narrow exemption for system/remote-DNS proxies and does not admit a hostname that resolved private.
+
+## 0.4.15 browser recovery (host package 0.4.28)
+
+Removes the public-peer IP gate, including its stored receipts and `webRequest` permission: normal browser proxies, cached documents and restored pages use the current browser document identity. Local/private IP URLs, site restrictions and protected Chrome pages remain blocked. Destination DNS public-address checking lands in 0.4.16. No proxy settings are added.
+
+Allowed-site tab failures stay visible as redacted diagnostic rows. Page loading accepts current-document DOM readiness without waiting for stalled images, waits up to 25 seconds otherwise, and retains the tab on timeout. Document error reasons reach the panel. The 0.4.14 named-slot translation, responsive opening and YouTube transcript fixes are retained; the signed wire protocol remains 0.4.13 for existing hosts.
+
+## 0.4.23 toolbar badge recovery (host package 0.4.36)
+
+A failed panel-open click now marks only the affected tab. Opening the panel successfully, refreshing or navigating clears that document's warning and restores the shared connection badge. A disconnected Cindy still shows its warning; page recovery does not pretend to reconnect it. Update the Chrome extension to receive this fix. Permissions and the signed wire protocol remain unchanged.

@@ -1,8 +1,14 @@
-# OpenDesign for Cindy — local trial 0.4.25
+# OpenDesign for Cindy — local trial 0.4.27
 
-Cindy's native conversation, Harness and current session model generate and revise designs. The sidebar embeds the real OpenDesign v0.22.1 FileViewer, element comments, manual editing and PreviewDrawOverlay, plus the v0.1.0 SketchEditor. The official logo and bundled source are included. This is a component integration, not the full OpenDesign daemon or a separate chat application.
+## Cross-device preview
 
-Generation and updates return a manuscript preview card. Clicking it opens that manuscript in the card's owning session sidebar; it never creates or switches sessions or opens a directory. After updating the plugin, click the existing card again to obtain a fresh local URL.
+Every draft tool returns `previewPath` and `previewMarkdown` for the actual HTML file. Include `previewMarkdown` in the assistant reply as the primary entry: Cindy routes that file through its standard local, remote-desktop and mobile preview. No localhost editor URL, cloud upload, duplicate draft or new transport is needed. Prefer self-contained HTML for portable content.
+
+Continue edits in the original task with `opendesign_context` and `opendesign_update` using the current revision. Native desktop preview supports element comments and style proposals. Mobile uses the standard file reader; HTML text-to-task quoting requires the companion client change. These capabilities do not make the plugin’s dedicated drawing canvas or direct-save editor portable: that optional card entry remains local to the execution computer. Mobile card clicks explain the file entry without opening an unusable editor or consuming the preview rate limit.
+
+Cindy's native conversation, Harness and current session model generate and revise designs. The sidebar embeds the real OpenDesign v0.25.0 FileViewer, element comments, manual editing and PreviewDrawOverlay, plus the v0.1.0 SketchEditor. The official logo and bundled source are included. This is a component integration, not the full OpenDesign daemon or a separate chat application.
+
+Generation and updates return a standard HTML file link plus an optional local-editor card. On the execution computer, clicking that card opens the editor in the owning session sidebar; it never creates or switches sessions or opens a directory. After updating the plugin, click the existing card again to obtain a fresh local URL.
 
 The viewer supports element comments with selectors, manual text/style edits saved to HTML, drawing/region annotations with screenshots, and saved sketches. “Save feedback” only persists context for the next conversation turn; it does not populate Cindy's composer or start a model.
 
@@ -65,3 +71,7 @@ All ordinary draft tools, card actions and feedback dispatch reject pending init
 Runtime card metadata, unnamed design titles and card-open status use the host language: Chinese for zh-CN and English fallback for en/ja/ko. Explicit user titles remain unchanged.
 
 Runtime-state capture/restore and related preview measurement, scroll, scope and transport correlation IDs now use the shared fail-closed cryptographic UUID helper. Retries retain the same pending request ID; subsequent requests receive a fresh ID.
+
+0.4.26: Reopening an existing card can repair a missing project ownership marker using the exact draft/session/root binding previously saved in Host-private storage. Recovery requires the original generated project directory and its HTML file; it never overwrites conflicting or corrupt markers, follows draft symlinks, recreates missing content, or adopts an unregistered workspace. Missing directories and drafts now give recovery guidance instead of a raw ENOENT path. Project files remain local to the computer and workspace where they were created; this is not cloud synchronization or a backup of deleted files.
+
+0.4.26 also upgrades the bundled viewer to official `open-design-v0.25.0` (`de6d2c0`): snapshot XHTML serialization, localized export errors and updated viewer styles. Existing Cindy ownership, revision, trusted-input and download protections remain. The new daemon diagnostics bridge is disabled; runtime permissions and npm dependency versions are unchanged. Current-package device verification is recorded separately in the PR.

@@ -1,0 +1,263 @@
+{
+  "name": "通讯录",
+  "description": "AI 帮你记住打过交道的每个人：整理邮件、日历和聊天里的往来，记录人物档案、最新动态和待办。支持导入 macOS 通讯录与旧版智能通讯录。资料保存在本机；在支持插件同步的 Cindy 中，可开启同账号电脑间的加密同步，两台电脑同时在线时合并修改和删除。",
+  "whenToUse": "遇到陌生邮箱、手机号或飞书/Slack/GitHub 账号想知道是谁；要联系、发消息、写邮件或 @ 某人；准备会议、回邮件需要人物背景或「上次聊到哪」；对话里提到同事、朋友、客户的新情况（换工作、新联系方式、约定）；要整理、回补、去重或导入通讯录时。",
+  "tools": {
+    "find": {
+      "description": "用任意线索找人：姓名、别名、邮箱、手机号、飞书/Slack/GitHub 等平台 id，或公司、项目、事件里的关键词。返回最多 limit 个人的摘要、身份、分组、给 AI 的提示和最近事件；matchType 为 identity（身份精确命中，最可信）/ name（姓名或别名精确命中）/ partial（已存的名字被线索包含，如查全名找到只记了名的人，需确认）/ text（文字中包含）。",
+      "parameters": {
+        "/properties/query": {
+          "description": "线索原文，如 zhixia@example.com、138 0000 0000、Connie、做支付的那个人"
+        },
+        "/properties/limit": {
+          "description": "最多返回几个人，默认 10"
+        }
+      }
+    },
+    "get": {
+      "description": "按 id 读取一个人的完整档案：身份与联系方式、介绍（narrative）、要点（facts）、最新动态（latest）、还没完的事（loops）、往来（interactions，新的在前，最多 200 条）、事件、分组、关系和合并记录。id 来自 find 或 list。",
+      "parameters": {
+        "/properties/id": {
+          "description": "档案 id"
+        }
+      }
+    },
+    "list": {
+      "description": "分页列出档案摘要（不含故事和事件全文），可按分组、状态、类型筛选。浏览全册或查看待确认队列时用；找具体某人用 find。",
+      "parameters": {
+        "/properties/group": {
+          "description": "分组名"
+        },
+        "/properties/status": {
+          "description": "pending = 待用户确认"
+        },
+        "/properties/limit": {
+          "description": "默认 50"
+        }
+      }
+    },
+    "save": {
+      "description": "新建或更新档案。不传 id 为新建：名字与已有档案相似时返回 DUPLICATE_SUSPECT 和候选，先 get 确认；是同一人就带 id 更新。传 id 为更新：只改传入的字段；aliases、identities、groups、open_loops 是追加。身份已属于另一个人时返回 IDENTITY_CONFLICT 和 conflictContactId。",
+      "parameters": {
+        "/properties/id": {
+          "description": "要更新的档案 id；新建时不传"
+        },
+        "/properties/name": {
+          "description": "显示名，新建必填"
+        },
+        "/properties/kind": {
+          "description": "默认 person"
+        },
+        "/properties/aliases": {
+          "description": "追加的别名、英文名、昵称"
+        },
+        "/properties/remove_aliases": {
+          "description": "要删掉的别名"
+        },
+        "/properties/summary": {
+          "description": "一句话介绍：是谁、在哪、做什么。会覆盖原值"
+        },
+        "/properties/narrative": {
+          "description": "这个人的介绍：是谁、你们之间在做什么、最近的变化，几句自然语言。会覆盖原值，更新前先 get 读出原文再改写，保留仍然成立的旧内容"
+        },
+        "/properties/agent_notes": {
+          "description": "给 AI 的处置提示，如偏好的联系方式、称呼。会覆盖原值"
+        },
+        "/properties/status": {
+          "description": "拿不准的信息用 pending，等用户确认"
+        },
+        "/properties/identities": {
+          "description": "追加的身份与联系方式"
+        },
+        "/properties/identities/items/properties/platform": {
+          "description": "email / phone / feishu / slack / github / wechat / telegram / x 等，小写"
+        },
+        "/properties/identities/items/properties/label": {
+          "description": "可选，如 work、personal"
+        },
+        "/properties/remove_identity_ids": {
+          "description": "要删掉的身份 id（来自 get）"
+        },
+        "/properties/groups": {
+          "description": "追加加入的分组名，不存在会新建"
+        },
+        "/properties/allow_duplicate": {
+          "description": "确认与相似档案不是同一人后才传 true"
+        },
+        "/properties/facts": {
+          "description": "要点，整体覆盖：如 公司、常一起、怎么找 TA、记住；至多 12 条"
+        },
+        "/properties/latest": {
+          "description": "一句话最新动态（20 字以内），如「周日回完 5 个用户工单」；名单上显示在名字下面"
+        },
+        "/properties/open_loops": {
+          "description": "新增「还没完的事」：谁在等谁、答应过的事、待回复；同一句已开着的不会重复"
+        },
+        "/properties/close_loops": {
+          "description": "已经完结的事：loop id（来自 get），可带 detail 写一句结果"
+        }
+      }
+    },
+    "record": {
+      "description": "把从邮件、飞书、日历、Cindy 对话、GitHub 读到的往来记进某人的档案，单次最多 200 条。每条用 contact_id，或用 identity / email / name 让插件自己找人；找不到的返回 UNRESOLVED，先 find 或 save 建档再记。同一个人同一个 ref（来源 id）只记一次，可以放心重复提交。只记与用户真实往来的人；营销、通知和机器人不记。",
+      "parameters": {
+        "/properties/items/items/properties/contact_id": {
+          "description": "档案 id；不知道时用 identity、email 或 name"
+        },
+        "/properties/items/items/properties/email": {
+          "description": "对方邮箱"
+        },
+        "/properties/items/items/properties/name": {
+          "description": "对方名字（只在唯一同名时用来找人）"
+        },
+        "/properties/items/items/properties/occurred_at": {
+          "description": "发生时间，ISO 8601"
+        },
+        "/properties/items/items/properties/title": {
+          "description": "邮件主题、会议名或一句话标题"
+        },
+        "/properties/items/items/properties/summary": {
+          "description": "一两句发生了什么，写清谁在等谁"
+        },
+        "/properties/items/items/properties/quote": {
+          "description": "可选：值得留的一句原话"
+        },
+        "/properties/items/items/properties/link": {
+          "description": "可选：原文的 https 链接"
+        },
+        "/properties/items/items/properties/ref": {
+          "description": "来源 id：邮件 message id、飞书消息 id、日程 id、PR URL 等，用于去重"
+        }
+      }
+    },
+    "log_event": {
+      "description": "给某人追加一条带日期的事件：一次值得记住的往来、约定、变化。",
+      "parameters": {
+        "/properties/text": {
+          "description": "一两句话写清发生了什么，带上必要上下文"
+        },
+        "/properties/date": {
+          "description": "事件日期 YYYY-MM-DD，默认今天"
+        }
+      }
+    },
+    "relate": {
+      "description": "记录或删除两份档案之间的关系，如同组、上级、任职于某公司。",
+      "parameters": {
+        "/properties/relation": {
+          "description": "关系描述，如 同组、前上级、任职"
+        },
+        "/properties/remove": {
+          "description": "true = 删除这条关系"
+        }
+      }
+    },
+    "organize": {
+      "description": "批量整理：加入分组、移出分组、移到分组（离开其它分组）、确认待确认档案、标记为待确认。",
+      "parameters": {
+        "/properties/group": {
+          "description": "分组名；分组类 action 必填，不存在会新建"
+        }
+      }
+    },
+    "merge": {
+      "description": "把 source 档案并入 target 后删除 source：身份、事件、往来、还没完的事、分组、关系整体迁移。有把握时直接合并（同一邮箱、手机号或平台账号；或同名且公司、上下文一致），写上 reason；合并会留下记录，用户可以在资料页拆开。拿不准就不合并。",
+      "parameters": {
+        "/properties/source_id": {
+          "description": "被并入并删除的档案"
+        },
+        "/properties/target_id": {
+          "description": "保留的档案，选信息更全的那份"
+        },
+        "/properties/reason": {
+          "description": "为什么是同一个人，一句话，如「同一个工作邮箱」"
+        }
+      }
+    },
+    "delete": {
+      "description": "删除一份档案及其身份、事件、分组关系、往来、还没完的事、问答记录和合并快照，不可恢复。仅在用户明确要求删除时，传 confirm:true 调用。",
+      "parameters": {
+        "/properties/confirm": {
+          "description": "用户明确要求删除时传 true"
+        }
+      }
+    },
+    "groups": {
+      "description": "管理分组：list 列出全部分组及人数，create 新建，rename 改名，delete 删除分组（不删组内的人）。",
+      "parameters": {
+        "/properties/name": {
+          "description": "分组名；list 以外必填"
+        },
+        "/properties/new_name": {
+          "description": "rename 的新名字"
+        }
+      }
+    },
+    "find_duplicates": {
+      "description": "全库扫描名字相似的疑似重复档案对。每一对先 get 双方：有把握是同一个人（同一个邮箱、手机号或平台账号，或同名且公司、上下文一致）就直接 merge 并写 reason；拿不准的留着，用户在场时再问。"
+    },
+    "import_macos": {
+      "description": "从 macOS 系统通讯录只读导入，不修改系统通讯录。默认 dry_run 只返回将新建/补全/跳过的数量；用户同意后再传 dry_run:false 执行。邮箱、电话或系统锚点相同的名片并入已有档案，名字相似的新档案进入待确认。首次运行会弹出系统授权；被拒时返回 PERMISSION_DENIED。仅 Mac 可用。导入过一次后，若设置里开着「每天与 macOS 通讯录对账」，整理开始时每天最多自动只读对账一次（只新建和补全，不删除）。",
+      "parameters": {
+        "/properties/dry_run": {
+          "description": "默认 true，只预览"
+        },
+        "/properties/group": {
+          "description": "可选：把导入的人放进这个分组"
+        }
+      }
+    },
+    "stats": {
+      "description": "通讯录概览：人数、组织数、待确认数、分组数。"
+    },
+    "save_many": {
+      "description": "批量新建或更新档案，单次最多 100 条，规则与 save 相同。用于导入客户名单、表格、名片等大量联系人；逐条返回结果，某条失败（如 DUPLICATE_SUSPECT、IDENTITY_CONFLICT）不影响其它条，失败的按 save 的处理方式逐个解决。支持 save 的新建与追加字段；结束待办（close_loops）、删除别名或联系方式请逐条用 save。",
+      "parameters": {
+        "/properties/items": {
+          "description": "每条字段与 save 相同"
+        },
+        "/properties/items/items/properties/id": {
+          "description": "要更新的档案 id；新建时不传"
+        }
+      }
+    },
+    "maintenance": {
+      "description": "按时间段整理通讯录的开始、来源检查与收尾。begin 返回 run_id、时间段、每个来源各自的 from/to 与按时间查询的做法（消息类要群聊和单聊分别找）、上次没读完的 backlog、first_step 与 coverage_rule；scope 为 recent（上次整理到现在，第一次是最近两周）、backfill（所有人往前补）或 contact（只补一个人）。先按 first_step 用 action \"sources\" 报告来源能不能用；查完、记完后调用 end，带 run_id 和每个来源的 coverage（complete / partial / none，partial 带 gaps），读全或部分读到（partial 必须写 gaps）的来源才推进检查点，缺口留到下次先补。",
+      "parameters": {
+        "/properties/checkpoint": {
+          "description": "旧做法：不传 run_id 时，本次已处理到的时间（ISO 8601）"
+        },
+        "/properties/scanned": {
+          "description": "end 时传：本次读过的会话或邮件数"
+        },
+        "/properties/pending": {
+          "description": "本次写成待确认的数量"
+        },
+        "/properties/note": {
+          "description": "可选：一句话说明，最多 300 字"
+        },
+        "/properties/scope": {
+          "description": "begin 时传，默认 recent"
+        },
+        "/properties/contact_id": {
+          "description": "scope 为 contact 时传"
+        },
+        "/properties/months": {
+          "description": "backfill / contact 往前补几个月，默认 3"
+        },
+        "/properties/run_id": {
+          "description": "end 时传：begin 返回的 run_id"
+        },
+        "/properties/sources_status": {
+          "description": "sources 时传（end 时也可带）：每个来源能不能用"
+        },
+        "/properties/coverage": {
+          "description": "end 时必传：每个来源这次读全了没有"
+        },
+        "/properties/backlog_done": {
+          "description": "end 时传：这次补完的 backlog id"
+        }
+      }
+    }
+  }
+}

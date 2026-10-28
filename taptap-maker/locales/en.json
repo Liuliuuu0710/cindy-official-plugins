@@ -41,7 +41,7 @@
       "description": "Diagnose the TapTap Maker local development environment and project configuration in the current session work directory."
     },
     "maker_build": {
-      "description": "Use the bundled official Runtime to sync, submit, and build the current session workspace only when explicitly requested. Open successful previews in Cindy's right-side browser and quote user_facing_markdown verbatim. Do not use the system browser, an external CLI, direct MCP, or the internal build tool. Before committing for a build, the Runtime fast-forwards main when it is only behind remote; it stops on divergence or if local changes would be overwritten.",
+      "description": "Use the bundled official Runtime to sync, submit, and build the current session workspace only when explicitly requested. Open successful previews in Cindy's right-side browser by default (when the user turns this off in plugin settings, only the link is returned and the sidebar is not opened) and quote user_facing_markdown verbatim. Do not use the system browser, an external CLI, direct MCP, or the internal build tool. The Runtime fast-forwards behind main, merges divergence, and commits blocking cloud changes before merging and pushing again. Conflicts abort the merge; non-main, unverifiable remote state, or a fast-forward overwriting local edits stops the workflow.",
       "parameters": {
         "/properties/entry": {
           "description": "Optional single-player Lua entry file, relative to scriptsPath."
@@ -85,6 +85,38 @@
     },
     "maker_console": {
       "description": "Open Maker console. Starts a local service; does not build, submit, or install a game runtime. Closing the page does not stop the service; stop it in the console. Media switches apply to Agent tools, not manual console actions."
+    },
+    "maker_validate": {
+      "description": "Run local Lua validation or screenshots in the current workspace using the bundled Runtime, without a project Skill, commits or remote builds. Single-player only; refuses active or unverified previews. Does not stop previews, install Runtime or update the dev kit. Read taptap-maker/local-validation.md first. COMPLETED is not PASS; inspect reports and screenshots. Large results return a summary; read the full result through the evidence paths. Before validation, the evidence directory must be Git-ignored with no tracked files. Runtime may update .installer/local-skill-filter.json to remove the current platform's legacy run-lua-validate exclusion.",
+      "parameters": {
+        "/properties/mode": {
+          "description": "Validation mode; defaults to validate. Screenshot modes require screenshot_frame."
+        },
+        "/properties/entry": {
+          "description": "Optional existing Lua entry relative to the project scripts directory."
+        },
+        "/properties/test": {
+          "description": "Optional existing V assertion script relative to the project scripts directory. Only for validate/both."
+        },
+        "/properties/screenshot_frame": {
+          "description": "Select the capture frame for the current loading state; no fixed frame guarantees readiness. Only for screenshot/both."
+        },
+        "/properties/frames": {
+          "description": "Optional validation frame count; keep at least three readback frames after capture. Only for validate/both."
+        },
+        "/properties/timeout_seconds": {
+          "description": "Timeout per validation attempt; explicit budgets are not increased. The entire plugin call retains a 14-minute total limit."
+        },
+        "/properties/width": {
+          "description": "Width for this run only; does not change publish settings."
+        },
+        "/properties/height": {
+          "description": "Height for this run only; does not change publish settings."
+        },
+        "/properties/nosound": {
+          "description": "Mute this validation run."
+        }
+      }
     }
   }
 }

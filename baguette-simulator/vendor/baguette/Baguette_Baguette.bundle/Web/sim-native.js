@@ -59,6 +59,8 @@
   let statusBarPanel = null; // StatusBarPanel — simctl status_bar overrides
   let locationPanel = null;  // LocationPanel — simctl location map picker
   let networkPanel = null;   // NetworkPanel — latency / bandwidth / loss / offline
+  let defaultsPanel = null;  // DefaultsPanel — an app's typed UserDefaults
+  let notifyPanel = null;    // NotifyPanel — deliver a remote notification
   let networkArmedTimer = null; // keeps the toolbar's armed dot honest while the card is shut
   let render3DPanel = null;  // Sim3DPanel — live SceneKit stream + inspector
   let lastPaintedSize = { w: 0, h: 0 };
@@ -66,6 +68,13 @@
   let powerCard = null;      // boot affordance shown on an unbooted device's screen
   let bootPollTimer = null;  // /simulators.json poll while a boot is in flight
   let firstFrameTimer = null; // fallback so the card can't outlive a live stream
+  let handheld = false;       // the stream held in the hand — see enterHandheld
+  let handheldIdleTimer = null; // fades the floating button when left alone
+  let handheldButtonWired = false;
+  let wakeLock = null;        // keeps a phone's screen on while it is the simulator
+  let handheldViewport = null; // the viewport <meta> content handheld replaced
+  let handheldBackground = null; // the <body> background handheld replaced
+  let handheldHintTimer = null; // fades the Add-to-Home-Screen hint
 
   // CW rotation cycle. Two flavours — iPhone UIKit refuses
   // `portrait-upside-down` for apps that don't opt in (which is
@@ -95,6 +104,23 @@
   ];
   let orientationIndex = 0;
   let currentOrientation = 'portrait';
+
+  // Cindy: the bezel pose belongs to the viewer. An app/AX orientation may
+  // stay portrait on a sideways phone and must not undo the user's rotation.
+  const ORIENTATION_KEY = 'baguette.native.orientation.' + udid;
+  function storedOrientation() {
+    try {
+      const value = localStorage.getItem(ORIENTATION_KEY);
+      if (ORIENTATION_CYCLE.includes(value)) return value;
+    } catch (_) { /* storage may be unavailable in an embedded page */ }
+    return null;
+  }
+  let viewerOrientation = storedOrientation();
+  function rememberOrientation(value) {
+    if (deviceMode || foldable) return;
+    viewerOrientation = value;
+    try { localStorage.setItem(ORIENTATION_KEY, value); } catch (_) { /* optional visual hint */ }
+  }
 
   // Debug knobs for landscape-right edge-gesture exploration —
   // iOS in raw=3 doesn't fire the home recognizer on any of the
@@ -134,9 +160,10 @@
   // the container so non-rotation CSS (max-height caps in
   // landscape) and the input/overlay coord transforms can read
   // `currentOrientation`.
-  function applyOrientation(value) {
+  function applyOrientation(value, step = 1) {
     const previous = currentOrientation;
     currentOrientation = value;
+    rememberOrientation(value);
     const root = document.getElementById('nativeDeviceFrame');
     if (root) {
       if (value === 'portrait') root.removeAttribute('data-orientation');
@@ -147,11 +174,44 @@
       // after format swap), keep the existing degrees so the
       // bezel doesn't re-animate.
       if (value !== previous) {
-        rotationDegrees += 90;
+        rotationDegrees += 90 * step;
       }
       for (const wrapper of root.querySelectorAll(':scope > div')) {
         wrapper.style.transform = 'rotate(' + rotationDegrees + 'deg)';
       }
+    }
+    layoutHandheld();
+    fitRotatedFrame();
+  }
+
+  // Cindy: a CSS rotation does not move layout, so in landscape the frame
+  // kept its portrait box and the turned bezel spilled out of (and was
+  // clipped by) the device column. Give the frame the turned box and centre
+  // the wrapper in it; the img/canvas landscape cap keeps it inside the view.
+  let rotatedFitWired = false;
+  function fitRotatedFrame() {
+    const root = document.getElementById('nativeDeviceFrame');
+    if (!root) return;
+    const wrappers = Array.from(root.querySelectorAll(':scope > div'));
+    if (!rotatedFitWired && wrappers.length) {
+      rotatedFitWired = true;
+      window.addEventListener('resize', fitRotatedFrame);
+      if (typeof ResizeObserver === 'function') new ResizeObserver(fitRotatedFrame).observe(wrappers[0]);
+    }
+    for (const prop of ['width', 'height', 'max-width', 'max-height', 'position']) root.style.removeProperty(prop);
+    for (const el of wrappers) { el.style.removeProperty('position'); el.style.removeProperty('left'); el.style.removeProperty('top'); }
+    if (!/^landscape/.test(currentOrientation) || !wrappers.length) return;
+    const w = wrappers[0].offsetWidth, h = wrappers[0].offsetHeight;
+    if (!w || !h) return;
+    root.style.setProperty('position', 'relative');
+    root.style.setProperty('width', h + 'px', 'important');
+    root.style.setProperty('height', w + 'px', 'important');
+    root.style.setProperty('max-width', 'none', 'important');
+    root.style.setProperty('max-height', 'none', 'important');
+    for (const el of wrappers) {
+      el.style.position = 'absolute';
+      el.style.left = (h - w) / 2 + 'px';
+      el.style.top = (w - h) / 2 + 'px';
     }
   }
 
@@ -161,6 +221,7 @@
   function snapOrientation(value) {
     const canonical = { 'portrait': 0, 'landscape-left': 90, 'portrait-upside-down': 180, 'landscape-right': 270 };
     currentOrientation = value;
+    rememberOrientation(value);
     rotationDegrees = canonical[value] || 0;
     orientationIndex = Math.max(0, orientationCycle().indexOf(value));
     const root = document.getElementById('nativeDeviceFrame');
@@ -174,6 +235,8 @@
       void wrapper.offsetWidth;
       wrapper.style.transition = t;
     }
+    layoutHandheld();
+    fitRotatedFrame();
   }
 
   // Map a normalized coord [0, 1]² from the rotated visual frame
@@ -309,8 +372,11 @@
     // before the template paints.
     document.body.style.background = 'var(--nv-page-bg, #1a1a1f)';
 
+    // Independent reads overlap when a task recreates its viewer page.
+    const [html, meta, hinge] = await Promise.all([
+      fetchTemplate(), fetchDeviceMeta(udid), deviceMode ? null : readHinge(),
+    ]);
     // 1. Load template + inline styles from sim-native.html.
-    const html = await fetchTemplate();
     if (!html) {
       document.body.innerHTML =
           '<pre style="color:#f87171;padding:24px;font-family:ui-monospace">sim-native.html not found</pre>';
@@ -321,7 +387,6 @@
     // 2. Resolve device name + iOS runtime from the list endpoint.
     //    The SDK definition gives us the bezel; /simulators.json gives
     //    us the human-readable identity that sits above it.
-    const meta = await fetchDeviceMeta(udid);
     deviceName = meta.name;
     const nameEl = document.getElementById('nativeDeviceName');
     const osEl = document.getElementById('nativeDeviceOS');
@@ -359,15 +424,17 @@
     // flat chrome never shows for it while the guest is up — the cube
     // button turns the book instead of leaving 3D. The flat chrome
     // still carries the power card for a device that is not booted.
-    const hinge = deviceMode ? null : await readHinge();
     foldable = !!(hinge && hinge.foldable);
     if (foldable) currentLitPanel = hinge.litPanel || 'primary';
+    // Cindy: the guest's own orientation, so a book left turned opens turned.
+    if (foldable) foldOrientation = hinge.orientation || null;
     if (foldable && isBooted(meta.state)) {
       document.getElementById('nativeDeviceFrame').setAttribute('data-foldable', '');
     }
     try {
       sim = await useSimulator(deviceDefinitionURL);
       sim.mount(document.getElementById('nativeDeviceFrame'));
+      if (!deviceMode && !foldable && viewerOrientation) snapOrientation(viewerOrientation);
     } catch (e) {
       console.warn('[native] no device definition:', (e && e.message) || e);
       sim = null;
@@ -410,6 +477,25 @@
     wireUnload();
     applyStoredTheme();
 
+    // No flat screen to hand over (a foldable's main view is the 3D
+    // book; no definition means no screen at all) — no Handheld button.
+    if (foldable || !sim) {
+      const handheldBtn = document.getElementById('nativeHandheldToggle');
+      if (handheldBtn) handheldBtn.hidden = true;
+    }
+    // A Home Screen launch has a translucent status bar over the top of
+    // the page (sim.html's meta) whatever mode it is in, so the view
+    // always covers the whole glass and pads itself by the safe area
+    // (`[data-standalone]` in sim-native.html) — the workbench too.
+    if (launchedStandalone()) {
+      document.getElementById('simNativeView').setAttribute('data-standalone', '');
+      coverViewport(true);
+    }
+    // Open in the hand when the address asks for it, or when the page
+    // was launched from a Home Screen icon. No user gesture here, so no
+    // browser fullscreen — a Home Screen launch has no bars to hide.
+    if (handheldWanted()) enterHandheld({ fullscreen: false });
+
     // Capture surface — the output-size chip and the Record button.
     // Deliberately not awaited: the size vocabulary is four small files
     // and nothing on the stream path needs them, so the device paints
@@ -420,32 +506,14 @@
     // add to Photos. Dumb sender — POSTs the bytes to `/files`; the
     // Swift side routes by extension. The drop zone + highlight are
     // scoped to the device frame so the overlay traces the phone, not
-    // the whole page. See docs/features/file-upload.md.
+    // the whole page. See docs/features/file-upload/README.md.
     if (window.SimFileDrop && !deviceMode) {
       window.__fileDrop =
           window.SimFileDrop.attach(document.getElementById('nativeDeviceFrame'), { udid });
     }
 
-    // Reset iOS to portrait on page boot. Without this, a page
-    // reload would leave our JS state at `currentOrientation =
-    // 'portrait'` (rotation degrees 0) while iOS still holds
-    // whatever orientation it was set to in a previous session
-    // — the bezel renders un-rotated but the iOS framebuffer
-    // shows UI from the stale orientation, which looks upside
-    // down to the user.
-    //
-    // Only meaningful once the guest is up: an unbooted device has no
-    // PurpleWorkspacePort to send the GSEvent to. `resetToPortrait`
-    // runs again after a boot completes.
-    //
-    // Not on an open foldable, though. iPhone Duo's unfolded panel is
-    // landscape by the guest's own choice — SpringBoard turns it back
-    // the moment the home screen shows — so forcing portrait would
-    // leave the page fighting the device. The hinge poll says which
-    // way the lit panel faces, and the page takes that instead.
-    if (!foldable && isBooted(meta.state)) {
-      resetToPortrait();
-    }
+    // Cindy: observe the guest orientation when the stream opens. Opening a
+    // viewer must never write its initial visual hint back to the device.
 
     // Start watching for network conditioning immediately, before the card
     // has ever been opened. A throttle armed from the CLI in another
@@ -453,6 +521,323 @@
     // where they will be looking when the app feels slow.
     if (!deviceMode) watchNetworkArmed();
 
+  }
+
+  // --- Handheld ------------------------------------------------------
+  // The stream held in the hand: open this page on a phone and the live
+  // screen takes the whole view, no bezel, no workbench, the way the
+  // phone in your hand would look. HandheldMode (handheld/handheld-mode.js)
+  // answers whether, where and how big; this paints it. The CSS under
+  // `[data-handheld]` in sim-native.html does the rest. See
+  // docs/features/handheld/README.md.
+
+  function handheldMode() {
+    return window.Baguette && window.Baguette._HandheldMode;
+  }
+
+  /** Launched from a Home Screen icon — no browser bars around the page. */
+  function launchedStandalone() {
+    return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+        || (window.matchMedia && window.matchMedia('(display-mode: fullscreen)').matches)
+        || window.navigator.standalone === true;
+  }
+
+  function handheldWanted() {
+    const mode = handheldMode();
+    return !!mode && mode.wanted({ search: location.search, standalone: launchedStandalone() });
+  }
+
+  /**
+   * Hand the screen the whole view. A foldable has no flat screen to
+   * hand over — its main view is the 3D book — and without the SDK's
+   * definition there is no screen at all, so both stay on the bench.
+   *
+   * `fullscreen` asks the browser to drop its own bars too. That needs
+   * the click that got us here, and only Android / desktop browsers
+   * honour it for a page; on an iPhone every browser is WebKit and says
+   * no, so the Home Screen icon is the way there (see the README).
+   */
+  function enterHandheld({ fullscreen = true } = {}) {
+    const mode = handheldMode();
+    const view = document.getElementById('simNativeView');
+    if (!mode || !view || !sim || foldable || handheld) return;
+    if (view.getAttribute('data-render3d') === 'open') toggle3D();
+    handheld = true;
+    view.setAttribute('data-handheld', '');
+    history.replaceState(history.state, '', mode.href(location.href, true));
+    coverViewport(true);
+    wireHandheldButton();
+    layoutHandheld();
+    wakeHandheldButton();
+    window.addEventListener('resize', layoutHandheld);
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', layoutHandheld);
+    darkenBrowser(true);
+    holdScreenAwake();
+    const route = mode.fullscreenRoute({
+      standalone: launchedStandalone(),
+      pageFullscreen: !!(document.fullscreenEnabled || document.webkitFullscreenEnabled),
+    });
+    if (route === 'browser' && fullscreen) {
+      const el = document.documentElement;
+      const request = el.requestFullscreen || el.webkitRequestFullscreen;
+      try {
+        const pending = request.call(el, { navigationUI: 'hide' });
+        if (pending && pending.catch) pending.catch(() => { /* refused — handheld still fills the page */ });
+      } catch (_) { /* refused — handheld still fills the page */ }
+    } else if (route === 'home-screen') {
+      showHomeScreenHint();
+    }
+  }
+
+  function exitHandheld() {
+    const mode = handheldMode();
+    const view = document.getElementById('simNativeView');
+    if (!handheld || !view) return;
+    handheld = false;
+    view.removeAttribute('data-handheld');
+    view.style.removeProperty('--nv-hh-w');
+    view.style.removeProperty('--nv-hh-h');
+    setHandheldMenu(false);
+    if (mode) history.replaceState(history.state, '', mode.href(location.href, false));
+    if (!launchedStandalone()) coverViewport(false);
+    darkenBrowser(false);
+    hideHomeScreenHint();
+    window.removeEventListener('resize', layoutHandheld);
+    if (window.visualViewport) window.visualViewport.removeEventListener('resize', layoutHandheld);
+    releaseScreenAwake();
+    const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+    if (fsEl) {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if (exit) {
+        try {
+          const pending = exit.call(document);
+          if (pending && pending.catch) pending.catch(() => {});
+        } catch (_) { /* already out */ }
+      }
+    }
+    if (refreshToolbarScroll) refreshToolbarScroll();
+  }
+
+  /** Size the screen box to the view, for the orientation it shows. */
+  function layoutHandheld() {
+    const mode = handheldMode();
+    const view = document.getElementById('simNativeView');
+    if (!handheld || !mode || !view || !sim || !sim.screen) return;
+    const rect = sim.screen.def.rect;
+    const box = mode.fit({
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      screen: { width: rect.width, height: rect.height },
+      orientation: currentOrientation,
+    });
+    view.style.setProperty('--nv-hh-w', box.width + 'px');
+    view.style.setProperty('--nv-hh-h', box.height + 'px');
+    placeHandheldButton();
+  }
+
+  /**
+   * `viewport-fit=cover` lets the screen run under a Home Screen
+   * launch's translucent status bar and round the notch, instead of
+   * stopping at the safe area. Workbench layout was never drawn for
+   * that, so it is handheld's alone and handed back on the way out.
+   */
+  function coverViewport(on) {
+    const meta = document.querySelector('meta[name="viewport"]');
+    if (!meta) return;
+    if (on) {
+      if (handheldViewport === null) handheldViewport = meta.getAttribute('content') || '';
+      meta.setAttribute('content', 'width=device-width,initial-scale=1,viewport-fit=cover');
+    } else if (handheldViewport !== null) {
+      meta.setAttribute('content', handheldViewport);
+      handheldViewport = null;
+    }
+  }
+
+  /**
+   * The bars a phone browser keeps — Safari's status-bar strip and
+   * toolbar, Chrome's — tint themselves from the page background and
+   * `theme-color`. The workbench's light page made them a pale frame
+   * around a black stage; black makes them recede into the bezel.
+   */
+  function darkenBrowser(on) {
+    let meta = document.querySelector('meta[name="theme-color"]');
+    if (on) {
+      if (handheldBackground === null) handheldBackground = document.body.style.background;
+      document.body.style.background = '#000';
+      document.documentElement.style.background = '#000';
+      if (!meta) {
+        meta = document.createElement('meta');
+        meta.name = 'theme-color';
+        meta.dataset.handheld = '';
+        document.head.appendChild(meta);
+      }
+      meta.setAttribute('content', '#000000');
+    } else {
+      if (handheldBackground !== null) document.body.style.background = handheldBackground;
+      handheldBackground = null;
+      document.documentElement.style.background = '';
+      if (meta && meta.dataset.handheld !== undefined) meta.remove();
+    }
+  }
+
+  /**
+   * On an iPhone the bars can't go from inside a tab; a Home Screen
+   * icon is the way to a screen with nothing around it. Said once per
+   * browser — after that it's known, and it would only be in the way.
+   */
+  function showHomeScreenHint() {
+    const hint = document.getElementById('nativeHandheldHint');
+    const key = 'baguette.handheld.homeScreenHintSeen';
+    if (!hint) return;
+    try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch (_) {}
+    hint.hidden = false;
+    clearTimeout(handheldHintTimer);
+    handheldHintTimer = setTimeout(hideHomeScreenHint, 9000);
+  }
+
+  function hideHomeScreenHint() {
+    const hint = document.getElementById('nativeHandheldHint');
+    clearTimeout(handheldHintTimer);
+    handheldHintTimer = null;
+    if (hint) hint.hidden = true;
+  }
+
+  /**
+   * A phone that dims and locks in the middle of a session isn't
+   * acting like the simulator. The browser drops the lock whenever the
+   * page is hidden, so it is taken again each time the page comes back.
+   */
+  async function holdScreenAwake() {
+    if (!handheld || !navigator.wakeLock || document.visibilityState !== 'visible') return;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+    } catch (_) { /* refused (low battery, no gesture yet) — the screen may dim */ }
+  }
+
+  function releaseScreenAwake() {
+    if (wakeLock) {
+      wakeLock.release().catch(() => {});
+      wakeLock = null;
+    }
+  }
+
+  document.addEventListener('visibilitychange', () => { void holdScreenAwake(); });
+
+  // --- The floating button --------------------------------------------
+  // HandheldButton (handheld/handheld-button.js) decides where it rests;
+  // this drags and paints it. The spot is kept per browser, so a Home
+  // Screen icon opens with the button where it was left.
+
+  const HANDHELD_BUTTON_KEY = 'baguette.handheld.button';
+  const HANDHELD_BUTTON_SIZE = 56;
+  const HANDHELD_BUTTON_MARGIN = 6;
+
+  function handheldButtonGeometry() {
+    const ui = document.getElementById('nativeHandheldUI');
+    const pad = ui ? getComputedStyle(ui) : null;
+    const px = (v) => parseFloat(v) || 0;
+    return {
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      size: HANDHELD_BUTTON_SIZE,
+      margin: HANDHELD_BUTTON_MARGIN,
+      // The phone's status bar and home indicator, as the safe area
+      // `.handheld-ui` carries in its padding.
+      insets: pad
+        ? { top: px(pad.paddingTop), right: px(pad.paddingRight),
+            bottom: px(pad.paddingBottom), left: px(pad.paddingLeft) }
+        : { top: 0, right: 0, bottom: 0, left: 0 },
+    };
+  }
+
+  function storedHandheldSpot() {
+    try {
+      const spot = JSON.parse(localStorage.getItem(HANDHELD_BUTTON_KEY) || 'null');
+      if (spot && (spot.side === 'left' || spot.side === 'right') && typeof spot.yNorm === 'number') {
+        return spot;
+      }
+    } catch (_) { /* unreadable — fall back */ }
+    // Right edge, below the middle: where a right thumb rests, and clear
+    // of the status bar and the home indicator either way.
+    return { side: 'right', yNorm: 0.62 };
+  }
+
+  function placeHandheldButton() {
+    const fab = document.getElementById('nativeHandheldFab');
+    const button = window.Baguette && window.Baguette._HandheldButton;
+    if (!handheld || !fab || !button) return;
+    const at = button.place(Object.assign({}, storedHandheldSpot(), handheldButtonGeometry()));
+    fab.style.left = at.left + 'px';
+    fab.style.top = at.top + 'px';
+  }
+
+  /** Full strength now, faded after a few seconds of being left alone. */
+  function wakeHandheldButton() {
+    const fab = document.getElementById('nativeHandheldFab');
+    if (!fab) return;
+    fab.removeAttribute('data-idle');
+    clearTimeout(handheldIdleTimer);
+    handheldIdleTimer = setTimeout(() => fab.setAttribute('data-idle', ''), 3000);
+  }
+
+  /**
+   * Press, drag, lift. A press that lifts where it landed opens the
+   * menu; one that travels carries the button and drops it on the
+   * nearer side edge. Pointer events cover finger and mouse alike, and
+   * the capture keeps a fast drag from slipping off the button.
+   */
+  function wireHandheldButton() {
+    const fab = document.getElementById('nativeHandheldFab');
+    const button = window.Baguette && window.Baguette._HandheldButton;
+    if (handheldButtonWired || !fab || !button) return;
+    handheldButtonWired = true;
+    let press = null;
+    fab.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const r = fab.getBoundingClientRect();
+      press = { id: e.pointerId, x: e.clientX, y: e.clientY,
+                dx: e.clientX - r.left, dy: e.clientY - r.top, dragging: false };
+      try { fab.setPointerCapture(e.pointerId); } catch (_) {}
+      wakeHandheldButton();
+    });
+    fab.addEventListener('pointermove', (e) => {
+      if (!press || e.pointerId !== press.id) return;
+      if (!press.dragging && button.isTap({ dx: e.clientX - press.x, dy: e.clientY - press.y })) return;
+      press.dragging = true;
+      fab.setAttribute('data-dragging', '');
+      fab.style.left = (e.clientX - press.dx) + 'px';
+      fab.style.top = (e.clientY - press.dy) + 'px';
+    });
+    const lift = (e) => {
+      if (!press || e.pointerId !== press.id) return;
+      const was = press;
+      press = null;
+      fab.removeAttribute('data-dragging');
+      if (!was.dragging) {
+        setHandheldMenu(true);
+        return;
+      }
+      const geometry = handheldButtonGeometry();
+      const spot = button.rest({
+        x: e.clientX - was.dx + HANDHELD_BUTTON_SIZE / 2,
+        y: e.clientY - was.dy + HANDHELD_BUTTON_SIZE / 2,
+        viewport: geometry.viewport, size: HANDHELD_BUTTON_SIZE,
+      });
+      try { localStorage.setItem(HANDHELD_BUTTON_KEY, JSON.stringify(spot)); } catch (_) {}
+      placeHandheldButton();
+      wakeHandheldButton();
+    };
+    fab.addEventListener('pointerup', lift);
+    fab.addEventListener('pointercancel', lift);
+  }
+
+  /** Open (or close) the menu over its scrim. */
+  function setHandheldMenu(open) {
+    const ui = document.getElementById('nativeHandheldUI');
+    if (!ui) return;
+    ui.setAttribute('data-open', open ? 'true' : 'false');
+    const fab = document.getElementById('nativeHandheldFab');
+    if (fab) fab.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (!open) wakeHandheldButton();
   }
 
   // One SDK simulator for a definition URL, wired to this page's
@@ -489,19 +874,19 @@
    *  screens — so nothing here follows the hinge; the 3D scene does. */
   let foldable = false;
   let currentLitPanel = 'primary';
+  let foldOrientation = null;
 
   function syncLitPanel(panel) {
     if (!foldable || (panel !== 'primary' && panel !== 'secondary') || panel === currentLitPanel) return;
     currentLitPanel = panel;
-    currentOrientation = panel === 'secondary' ? 'landscape-left' : 'portrait';
-    orientationIndex = Math.max(0, orientationCycle().indexOf(currentOrientation));
+    // The unfolded panel stands a quarter turn ahead of the cover (upright
+    // book: cover portrait, panel landscape-left). Folding or unfolding keeps
+    // the book where it is held, as the guest does.
+    const cycle = orientationCycle();
+    const at = Math.max(0, cycle.indexOf(currentOrientation));
+    orientationIndex = (at + (panel === 'secondary' ? 1 : -1) + cycle.length) % cycle.length;
+    currentOrientation = cycle[orientationIndex];
     if (render3DPanel) render3DPanel.setInterfaceOrientation(currentOrientation);
-  }
-
-  function resetToPortrait() {
-    if (deviceMode) return; // a physical phone rotates itself
-    fetch('/simulators/' + encodeURIComponent(udid) + '/orientation?value=portrait',
-        { method: 'POST' }).catch(() => { /* best-effort */ });
   }
 
   // Theme toggle. Three logical states — "auto" (no manual pin,
@@ -576,8 +961,13 @@
   }
 
   function sessionCallbacks(onFirstPaint) {
-    let painted = false;
+    let painted = false, orientationRead = null;
     return {
+      onOpen: () => {
+        if (deviceMode || foldable || viewerOrientation) return;
+        orientationRead = { session, orientation: currentOrientation };
+        session.send({ type: 'describe_ui', x: 1, y: 1 });
+      },
       onSize: (w, h) => {
         lastPaintedSize = { w, h };
         // First frame after a boot — the guest is genuinely up, so
@@ -590,7 +980,17 @@
         if (el) el.textContent = fps + ' fps';
       },
       onLog: (msg) => console.log('[native]', msg),
-      onText: routeStreamText,
+      onText: (env) => {
+        if (orientationRead && env?.type === 'describe_ui_result') {
+          const read = orientationRead; orientationRead = null;
+          const orientation = env.ok && env.tree?.screen?.orientation;
+          // Only seed a view with no known pose. A saved/manual pose wins,
+          // including a full turn back to the value present when reading began.
+          if (!viewerOrientation && read.session === session && read.orientation === currentOrientation && ORIENTATION_CYCLE.includes(orientation)) snapOrientation(orientation);
+          return true;
+        }
+        return routeStreamText(env);
+      },
     };
   }
 
@@ -1141,7 +1541,6 @@
   function onBooted() {
     renderPowerCard('starting');
     startMainView();
-    if (!foldable) resetToPortrait();
     firstFrameTimer = setTimeout(hidePowerCard, FIRST_FRAME_TIMEOUT_MS);
   }
 
@@ -1152,11 +1551,15 @@
       const frame = document.getElementById('nativeDeviceFrame');
       if (frame) frame.setAttribute('data-foldable', '');
       toggle3D({ fixed: true });
-      // The unfolded panel is landscape-left by the guest's choice and
-      // the cover portrait; the rotate button cycles from there.
-      const start = currentLitPanel === 'secondary' ? 'landscape-left' : 'portrait';
+      // Start where the guest stands (the hinge read reports its
+      // orientation), else upright: the unfolded panel landscape-left by
+      // the guest's choice and the cover portrait. The book is rolled to
+      // match, and the rotate button cycles from there.
+      const start = ORIENTATION_CYCLE.includes(foldOrientation) ? foldOrientation
+          : currentLitPanel === 'secondary' ? 'landscape-left' : 'portrait';
       currentOrientation = start;
       orientationIndex = Math.max(0, orientationCycle().indexOf(start));
+      if (render3DPanel) render3DPanel.setInterfaceOrientation(start);
       return;
     }
     startSession(currentFormat());
@@ -1417,7 +1820,10 @@
     },
     {
       id: 'view', icon: 'cube',
-      members: [{ id: 'native3DToggle', label: '3D view', role: 'state' }],
+      members: [
+        { id: 'native3DToggle', label: '3D view', role: 'state' },
+        { id: 'nativeHandheldToggle', label: 'Handheld', role: 'action' },
+      ],
     },
     {
       id: 'control', label: 'Control', fold: 4, icon: 'home',
@@ -1433,6 +1839,7 @@
       members: [
         { id: 'nativeStatusBarToggle', label: 'Status bar', role: 'state' },
         { id: 'nativeLocationToggle', label: 'Location', role: 'state' },
+        { id: 'nativeNotifyToggle', label: 'Notification', role: 'state' },
         { id: 'nativeCameraToggle', label: 'Camera', role: 'state' },
       ],
     },
@@ -1837,6 +2244,34 @@
     }
   }
 
+  /**
+   * Start the floating panels (status bar, network, defaults, …) below
+   * the toolbar wherever it actually is.
+   *
+   * The toolbar rides the device's vertically centred column, so a
+   * window taller than the device needs pushes it down past the panels'
+   * old fixed `top: 84px` and the bar covered each panel's first row.
+   * Watching the view as well as the bar catches a window resize that
+   * re-centres the column without changing the bar's own size.
+   */
+  function placeFloatingPanels() {
+    const view = document.getElementById('simNativeView');
+    const bar = document.querySelector('#simNativeView .top-bar');
+    if (!view || !bar || typeof ResizeObserver === 'undefined') return;
+    const place = () => {
+      const below = Math.round(bar.getBoundingClientRect().bottom) + 24;
+      view.style.setProperty('--nv-panel-top', Math.max(84, below) + 'px');
+    };
+    const observer = new ResizeObserver(place);
+    observer.observe(view);
+    observer.observe(bar);
+    // The device frame settling (bezel image, rotation) moves the bar
+    // without resizing either element.
+    const frame = document.getElementById('nativeDeviceFrame');
+    if (frame) observer.observe(frame);
+    place();
+  }
+
   function wireToolbarScroll() {
     if (!buildToolbarClusters()) return;
     applyDeviceModeChrome();
@@ -1871,6 +2306,7 @@
 
     refreshToolbarScroll = layoutToolbar;
     window.addEventListener('resize', layoutToolbar);
+    placeFloatingPanels();
     // Re-measure once layout settles (fonts, device frame, format pills).
     requestAnimationFrame(layoutToolbar);
     setTimeout(layoutToolbar, 400);
@@ -1924,7 +2360,18 @@
     window.__nativeToggleStatusBar = () => toggleStatusBar();
     window.__nativeToggleLocation = () => toggleLocation();
     window.__nativeToggleNetwork = () => toggleNetwork();
+    window.__nativeToggleDefaults = () => toggleDefaults();
+    window.__nativeToggleNotify = () => toggleNotify();
     window.__nativeToggle3D = () => toggle3D();
+    window.__nativeEnterHandheld = () => enterHandheld();
+    window.__nativeHandheldMenu = (open) => setHandheldMenu(!!open);
+    window.__nativeHandheldHintClose = () => hideHomeScreenHint();
+    window.__nativeHandheldAction = (action) => {
+      setHandheldMenu(false);
+      if (action === 'exit') exitHandheld();
+      else if (action === 'rotate') window.__nativeRotate();
+      else if (sim) sim.pressButton(action);
+    };
     window.__nativeToggle3DInspector = () => toggle3DInspector();
     // The watch's hardware buttons. Same `button` envelope the phone's
     // bezel buttons use, but down the watch's own socket — the press
@@ -1952,17 +2399,28 @@
     // which iPhone UIKit ignores), 4 on iPad. POSTs the new value
     // through the `/simulators/<udid>/orientation?value=...` route;
     // server delegates to `simulator.orientation().set(...)`, which
-    // fires a GSEvent over PurpleWorkspacePort.
-    window.__nativeRotate = () => {
+    // dispatches a device orientation change through the appropriate backend.
+    // Cindy: rotate either way (Simulator's Rotate Left / Right) and let the
+    // controller read the orientation it shows. Reloads observe the guest.
+    window.__nativeOrientation = () => currentOrientation;
+    window.__nativeRotate = () => window.__nativeRotateBy(1);
+    window.__nativeRotateBy = (step) => {
+      step = step < 0 ? -1 : 1;
       const cycle = orientationCycle();
-      orientationIndex = (orientationIndex + 1) % cycle.length;
+      orientationIndex = (orientationIndex + step + cycle.length) % cycle.length;
       const value = cycle[orientationIndex];
       // A foldable's book turns in 3D, as the flat chrome would.
       if (foldable) {
         currentOrientation = value;
         if (render3DPanel) render3DPanel.setInterfaceOrientation(value);
+        // Cindy: the route sets the device's orientation, which the cover
+        // shows as is and the unfolded panel a step further on (device
+        // portrait reads landscape-left there), so send the hold the panel
+        // orientation stands for.
+        const held = currentLitPanel === 'secondary'
+            ? cycle[(orientationIndex - 1 + cycle.length) % cycle.length] : value;
         const url = '/simulators/' + encodeURIComponent(udid)
-            + '/orientation?value=' + encodeURIComponent(value);
+            + '/orientation?value=' + encodeURIComponent(held);
         fetch(url, { method: 'POST' }).catch(() => { /* best-effort */ });
         return;
       }
@@ -1971,7 +2429,7 @@
       // + canvas as one unit, while the input + overlay wrappers
       // remap coords back to portrait so taps still land on the
       // iOS element under the cursor.
-      applyOrientation(value);
+      applyOrientation(value, step);
       const url = '/simulators/' + encodeURIComponent(udid)
           + '/orientation?value=' + encodeURIComponent(value);
       fetch(url, { method: 'POST' }).catch(() => { /* best-effort */ });
@@ -2136,6 +2594,59 @@
         networkPanel.attach(host, udid);
       } else if (networkPanel) {
         networkPanel.refresh();
+      }
+    }
+  }
+
+  // Notify card — same lazy-mount pattern as the network card. Closing it
+  // keeps the panel mounted, so the app and payload survive a reopen.
+  function toggleNotify() {
+    const view = document.getElementById('simNativeView');
+    const host = document.getElementById('nativeNotifyHost');
+    const btn  = document.getElementById('nativeNotifyToggle');
+    const sheet = document.getElementById('nativeNotifySheet');
+    const open = view && view.getAttribute('data-notify') === 'open';
+    if (!view || !host) return;
+    if (open) {
+      view.removeAttribute('data-notify');
+      if (btn) btn.classList.remove('active');
+      if (sheet) { sheet.setAttribute('aria-hidden', 'true'); sheet.inert = true; }
+    } else {
+      view.setAttribute('data-notify', 'open');
+      if (btn) btn.classList.add('active');
+      if (sheet) { sheet.setAttribute('aria-hidden', 'false'); sheet.inert = false; }
+      if (!notifyPanel && window.NotifyPanel && udid) {
+        host.innerHTML = '';
+        notifyPanel = new window.NotifyPanel();
+        notifyPanel.attach(host, udid);
+      }
+    }
+  }
+
+  // Defaults card — same lazy-mount pattern as the network card. Reopening
+  // re-reads the device, since the app under test may have rewritten its
+  // own preferences while the card was shut.
+  function toggleDefaults() {
+    const view = document.getElementById('simNativeView');
+    const host = document.getElementById('nativeDefaultsHost');
+    const btn  = document.getElementById('nativeDefaultsToggle');
+    const sheet = document.getElementById('nativeDefaultsSheet');
+    const open = view && view.getAttribute('data-defaults') === 'open';
+    if (!view || !host) return;
+    if (open) {
+      view.removeAttribute('data-defaults');
+      if (btn) btn.classList.remove('active');
+      if (sheet) { sheet.setAttribute('aria-hidden', 'true'); sheet.inert = true; }
+    } else {
+      view.setAttribute('data-defaults', 'open');
+      if (btn) btn.classList.add('active');
+      if (sheet) { sheet.setAttribute('aria-hidden', 'false'); sheet.inert = false; }
+      if (!defaultsPanel && window.DefaultsPanel && udid) {
+        host.innerHTML = '';
+        defaultsPanel = new window.DefaultsPanel();
+        defaultsPanel.attach(host, udid);
+      } else if (defaultsPanel) {
+        defaultsPanel.refresh();
       }
     }
   }
@@ -2312,6 +2823,7 @@
       try { if (statusBarPanel) statusBarPanel.detach(); } catch (_) { /* ignore */ }
       try { if (locationPanel) locationPanel.detach(); } catch (_) { /* ignore */ }
       try { if (networkPanel) networkPanel.detach(); } catch (_) { /* ignore */ }
+      try { if (notifyPanel) notifyPanel.detach(); } catch (_) { /* ignore */ }
       try { if (networkArmedTimer) clearInterval(networkArmedTimer); } catch (_) { /* ignore */ }
       try { if (render3DPanel) render3DPanel.detach(); } catch (_) { /* ignore */ }
     });
@@ -2323,7 +2835,7 @@
   // the toolbar, and every capture on this page reads it — in 2D and in
   // 3D alike. The vocabulary is shared with the HTTP routes and the CLI
   // and lives in Resources/Web/capture/; see
-  // docs/features/capture-size.md. Nothing here reimplements any of it.
+  // docs/features/capture-size/README.md. Nothing here reimplements any of it.
   //
   // Who applies it differs by verb, because who owns the output canvas
   // differs: a screenshot is composed here, a 3D Save Frame is rendered

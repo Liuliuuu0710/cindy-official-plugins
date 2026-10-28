@@ -58,12 +58,42 @@ Start with the
 For large prebuilt dependencies, follow the [dependency guide](docs/binary-dependencies.md):
 retain local outputs for debugging, commit only source/declarations/licenses,
 and let CI download and package. Python is not a local development prerequisite.
-You may open a Ready PR with device verification unchecked, download a test package
-from **Verify pull request** Artifacts, verify it on stable/Beta Cindy, then check
-the attestation. Upload runs before that gate, so a failure of only the final
-attestation still leaves the artifact available; fix earlier test/build failures
-first. Packages expire after 7 days, are unreviewed, and never go to Platform/OSS.
-Record source identity and package hash; green CI alone is not device verification.
+You may open a Ready PR to obtain test packages from **Verify pull request**
+Artifacts. They expire after 7 days, are unreviewed and never go to Platform/OSS.
+Tests and packaging must pass. CI no longer fails on a device checkbox or exempts
+authors by identity. Reviewers assess actual runtime evidence for affected paths;
+authors or maintainers may supply it. Green CI does not prove runtime testing.
+
+**What happens after submission:**
+
+- **Verify pull request** runs on source pushes with read-only permissions and no
+  publishing secrets. A first-time fork run may need maintainer approval; this is
+  a maintainer action, not a code change for the author.
+- **PR contributor guidance** maintains one comment for DCO and fork-run actions,
+  recomputing from current commits and accepting DCO remediation without rewriting
+  history. It reads metadata only and never executes PR code.
+- PR edits refresh guidance and validation (including target-branch changes).
+  Put verification in the body or a linked comment: actual version/environment,
+  exercised paths and gaps. No fixed wording, checkbox or copied artifact hash is
+  required. Explain applicability across the full diff since reused evidence;
+  affected behavior still needs verification.
+- Once required checks, effective review, and runtime evidence are satisfied,
+  already-authorized merge automation may execute without asking again.
+  Packaging scripts, dependency updates, or images do not require manual
+  approval just because of their paths. Admission and audience that fit the
+  standard below need no separate maintainer approval. Real permission,
+  credential, or publish-trust widening, undisclosed network access, and
+  renaming or deleting a published plugin still need the maintainers' explicit
+  decision for that scope. A plugin pull request also records any Cindy host
+  authorization it uses: which grant, whether the platform has approved it, and
+  whether a host release contains it. If that grant changed or is not ready, do
+  not merge. Other changes that fit the existing standard are still judged
+  directly.
+- Before merging, verify the current target and combined result. Retargeting a PR
+  requires fresh validation; checks for its previous target are insufficient.
+  Merge and public release are separate stages.
+
+See the [review contract](.greptile/rules.md) for the complete decision rules.
 
 The `*.test.mjs` files under `.tests/` run on Node's built-in test runner:
 
@@ -128,38 +158,61 @@ do not edit the generated `dist/maker.js` by hand.
    historical release is delivered instead; without one, the plugin is hidden.
    Desktop treats that Server selection as authoritative and does not add a
    second `minCindyVersion` filter or install confirmation, so keep this field accurate.
-4. When changing `ghost.json` tool declarations (`tools[].description` or
-   parameters), explain the impact on Agent behaviour in the pull request
-   description — that description is the usage manual the Agent reads.
-   Check the Cindy device verification item only after installing every
-   changed plugin's packaged `.cindy` on a real device running a stable production
-   or Beta Cindy build and exercising its core functionality. If a plugin
-   declares `minCindyVersion`, that Cindy build must be greater than or equal to
-   it. Lowering or removing the field expands claimed compatibility and
-   requires maintainer review.
+   Release notes in `ghost.json.releaseNotes` are **optional, but recommended**
+   for version updates. If included, use a plain-text string describing the
+   changes; missing or empty notes do not block validation or publication.
+   See the [release-note reference](docs/plugin-authoring.md#release-notes-optional-recommended).
+4. Explain the Agent-facing impact of changed tool declarations. Supply actual
+   verification for affected paths; reuse valid evidence for unaffected ones,
+   with accurate environments and compatibility limitations. Lowering/removing
+   `minCindyVersion` still needs the maintainers' review and old-version evidence.
+   Besides scopes the plugin itself requests, name any Cindy host authorization
+   it uses or depends on, whether the platform has approved it, and whether a
+   host release contains it. If that grant changed or is not ready, do not
+   merge. Plan the scopes that still need requesting together, and do not
+   request unused ones. Only this platform-gated authorization waits.
 
-Every non-draft pull request is verified by the `Verify pull request`
-workflow: it runs the Server/Desktop delivery contract, localization and
-provisioning gates, runs the `*.test.mjs` tests of every changed plugin
-(installing that plugin's dependencies first), and dry-runs the exact packaging
-step the publish pipeline uses. For every changed plugin package, CI also
-requires the Cindy device verification checkbox in the pull request body.
-The actual upload still happens only after merge to `main`.
+Every non-draft PR's **Verify pull request** runs the Server/Desktop contract,
+localization, provisioning, changed-plugin tests and actual dry-run packaging.
+There is no device-checkbox parsing or identity exemption. CN uploads remain
+removed; merging or manually dispatching from main submits Global pending releases.
 
 5. Review the complete diff and confirm it contains no credentials, unrelated
    generated files, or an accidentally committed `node_modules`.
-6. Wait for review; do not push directly to `main`. After a merge to `main`, the
-   regional workflows submit changed packages to Plugin Platform. CN and Global
-   review independently; a package becomes visible in a region only after that
-   region approves it.
+6. Wait for review; do not push directly to `main`. After merge, changed packages
+   are submitted to Global Plugin Platform. Approval is required before a release
+   becomes visible to compatible clients. CN submission remains removed.
 7. Paired bilingual documents move together: a pull request that changes
    `README.md`, `CONTRIBUTING.md`, or any other document with a `.zh-CN`
    counterpart must update both files in the same pull request, and vice
    versa. A pull request that updates only one side will not be merged.
 
-Bug fixes and small improvements are welcome as direct pull requests. For a new
-official plugin, open an issue first to discuss positioning and boundaries
-(avoiding overlap with existing plugins), then submit a pull request once aligned.
+Bug fixes and small improvements are welcome as direct PRs. New plugins,
+built-in providers, and audience changes are judged by the standard below. A
+match needs no separate maintainer approval. A proposal issue or Draft PR may
+record design notes; it is not an approval gate, and no duplicate proposal is
+required.
+
+### Admission and audience
+
+Apply this uniformly. When a useful plugin does not clearly earn `all`, accept
+it as opt-in instead of waiting for a case-by-case decision.
+
+1. `audience: "all"` (installed for everyone): most users benefit; works out of
+   the box with no self-obtained third-party key or account; not tied to one
+   person's or one team's workflow; stable quality. Popularity or many
+   submissions alone never justify `all`.
+2. Accept as opt-in (provisioning audience `{ "emails": [] }`; users choose it
+   in the marketplace): useful but niche, or needs the user's own key or account.
+3. Not accepted: very personal (serves only the author's own data, workflow, or
+   private service), a pure demo or sample (put it in `docs/` instead), or
+   something the agent can already do directly without a plugin.
+
+The `author` field must be the real author, not an impersonation of the official
+team. A mismatch is a concrete review finding. Only a genuine boundary expansion
+needs the maintainers' explicit decision: real permission, credential, or
+publish-trust widening; undisclosed network access; renaming or deleting a
+published plugin.
 
 ## Licensing of contributions (DCO)
 
@@ -237,8 +290,10 @@ platforms. New plugins and binary additions/modifications trigger the check;
 source/docs-only edits and binary deletions do not force legacy migrations.
 Both paths retain license/review/package-size requirements.
 Custom build hooks are not accepted.
-Dependency declaration changes require a plugin version bump and maintainer
-review of provenance, hashes and redistribution licenses.
+Dependency declaration changes require a plugin version bump and review of
+provenance, hashes and redistribution licenses. Routine maintenance can be reviewed
+automatically; real permission/trust expansion or missing evidence needs maintainer
+attention.
 `node --test .tests/binary-dependencies.test.mjs` runs the offline packaging
 regressions; PR CI also dry-runs the actual changed packages. Downloads and
 packaging run separately from the OIDC publishing job.

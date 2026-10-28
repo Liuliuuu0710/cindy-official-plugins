@@ -3,49 +3,89 @@
   "dependencies": [
     {
       "name": "baguette",
-      "version": "0.2.0",
+      "version": "0.2.10",
       "license": "THIRD-PARTY-LICENSES.txt",
       "assets": [
         {
-          "url": "https://github.com/tddworks/baguette/releases/download/v0.2.0/baguette_v0.2.0_macOS_arm64.tar.gz",
-          "sha256": "8d382a4c9efe1e64ea591353bb10fec3bd46ec1ef909d63be1bee9c201f4ef3b",
+          "url": "https://github.com/tddworks/baguette/releases/download/v0.2.10/baguette_v0.2.10_macOS_arm64.tar.gz",
+          "sha256": "2650f1e6c371c7b7512d5303666efad5804dec01a96e04a729a1fa39a2a65d88",
           "format": "tar.gz",
           "files": [
             {
-              "source": "baguette-v0.2.0-macOS-arm64/Baguette_Baguette.bundle/Models3D/apple-watch-series-11-42mm/device.usdz",
+              "source": "baguette-v0.2.10-macOS-arm64/Baguette_Baguette.bundle/Models3D/apple-watch-series-11-42mm/device.usdz",
               "target": "vendor/baguette/Baguette_Baguette.bundle/Models3D/apple-watch-series-11-42mm/device.usdz"
             },
             {
-              "source": "baguette-v0.2.0-macOS-arm64/Baguette_Baguette.bundle/Models3D/apple-watch-series-11-46mm/device.usdz",
+              "source": "baguette-v0.2.10-macOS-arm64/Baguette_Baguette.bundle/Models3D/apple-watch-series-11-46mm/device.usdz",
               "target": "vendor/baguette/Baguette_Baguette.bundle/Models3D/apple-watch-series-11-46mm/device.usdz"
             },
             {
-              "source": "baguette-v0.2.0-macOS-arm64/Baguette_Baguette.bundle/Models3D/apple-watch-ultra-3/device.usdz",
+              "source": "baguette-v0.2.10-macOS-arm64/Baguette_Baguette.bundle/Models3D/apple-watch-ultra-3/device.usdz",
               "target": "vendor/baguette/Baguette_Baguette.bundle/Models3D/apple-watch-ultra-3/device.usdz"
             },
             {
-              "source": "baguette-v0.2.0-macOS-arm64/Baguette_Baguette.bundle/Models3D/ipad-pro-11-m4/device.usdz",
+              "source": "baguette-v0.2.10-macOS-arm64/Baguette_Baguette.bundle/Models3D/ipad-pro-11-m4/device.usdz",
               "target": "vendor/baguette/Baguette_Baguette.bundle/Models3D/ipad-pro-11-m4/device.usdz"
             },
             {
-              "source": "baguette-v0.2.0-macOS-arm64/Baguette_Baguette.bundle/Models3D/ipad-pro-13-m4/device.usdz",
+              "source": "baguette-v0.2.10-macOS-arm64/Baguette_Baguette.bundle/Models3D/ipad-pro-13-m4/device.usdz",
               "target": "vendor/baguette/Baguette_Baguette.bundle/Models3D/ipad-pro-13-m4/device.usdz"
             },
             {
-              "source": "baguette-v0.2.0-macOS-arm64/Baguette_Baguette.bundle/Models3D/iphone-17/device.usdz",
+              "source": "baguette-v0.2.10-macOS-arm64/Baguette_Baguette.bundle/Models3D/iphone-17/device.usdz",
               "target": "vendor/baguette/Baguette_Baguette.bundle/Models3D/iphone-17/device.usdz"
             },
             {
-              "source": "baguette-v0.2.0-macOS-arm64/Baguette_Baguette.bundle/Models3D/iphone-17-pro/device.usdz",
+              "source": "baguette-v0.2.10-macOS-arm64/Baguette_Baguette.bundle/Models3D/iphone-17-pro/device.usdz",
               "target": "vendor/baguette/Baguette_Baguette.bundle/Models3D/iphone-17-pro/device.usdz"
             },
             {
-              "source": "baguette-v0.2.0-macOS-arm64/Baguette_Baguette.bundle/Models3D/iphone-17-pro-max/device.usdz",
+              "source": "baguette-v0.2.10-macOS-arm64/Baguette_Baguette.bundle/Models3D/iphone-17-pro-max/device.usdz",
               "target": "vendor/baguette/Baguette_Baguette.bundle/Models3D/iphone-17-pro-max/device.usdz"
             },
             {
-              "source": "baguette-v0.2.0-macOS-arm64/Baguette_Baguette.bundle/Models3D/iphone-air/device.usdz",
+              "source": "baguette-v0.2.10-macOS-arm64/Baguette_Baguette.bundle/Models3D/iphone-air/device.usdz",
               "target": "vendor/baguette/Baguette_Baguette.bundle/Models3D/iphone-air/device.usdz"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "android",
+      "version": "7.0.0-data1.0.0",
+      "license": "vendor/android/LICENSES.txt",
+      "assets": [
+        {
+          "url": "https://registry.npmjs.org/tesseract.js-core/-/tesseract.js-core-7.0.0.tgz",
+          "sha256": "ba584355515eaff877552022853c0e71f2cb70466e759d1d6940484929718ee0",
+          "format": "tar.gz",
+          "files": [
+            {
+              "source": "package/tesseract-core-lstm.wasm",
+              "target": "vendor/android/tesseract-core-lstm.wasm"
+            }
+          ]
+        },
+        {
+          "url": "https://registry.npmjs.org/@tesseract.js-data/eng/-/eng-1.0.0.tgz",
+          "sha256": "c9bddf2e2f0a214ac7918f3f4a3caf45e09ce8674fe26662ae7787ac8927f7bb",
+          "format": "tar.gz",
+          "files": [
+            {
+              "source": "package/4.0.0_best_int/eng.traineddata.gz",
+              "target": "vendor/android/eng.traineddata.gz"
+            }
+          ]
+        },
+        {
+          "url": "https://registry.npmjs.org/@tesseract.js-data/chi_sim/-/chi_sim-1.0.0.tgz",
+          "sha256": "850d4a217c87808ef765385cbe5825f4ae99047a49b17e024069ceb663f01c33",
+          "format": "tar.gz",
+          "files": [
+            {
+              "source": "package/4.0.0_best_int/chi_sim.traineddata.gz",
+              "target": "vendor/android/chi_sim.traineddata.gz"
             }
           ]
         }

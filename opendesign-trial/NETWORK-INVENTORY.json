@@ -2,13 +2,13 @@
   "note": "Literal http(s) domains scanned in vendored .ts/.tsx/.js/.css, generated assets/studio.js and node/*.cjs; excludes dependency installation/build metadata. Includes inert documentation, namespaces and placeholders. Not a network allowlist. Domain evidence and reachability are recorded below. Runtime CSP restricts requests to loopback/self/data/blob.",
   "domains": [
     "127.0.0.1",
-    "192.168.1.10",
     "_od_deck_base",
     "api.whatsapp.com",
     "cdnjs.cloudflare.com",
     "dash.cloudflare.com",
     "discord.gg",
     "evil.example",
+    "example.com",
     "figma.com",
     "github.com",
     "hertzen.com",
@@ -30,6 +30,7 @@
     "twitter.com",
     "unpkg.com",
     "us.posthog.com",
+    "vela.invalid",
     "vercel.com",
     "www.cs.cmu.edu",
     "www.facebook.com",
@@ -76,19 +77,12 @@
       "conclusion": "Loopback runtime/project URLs; only fixed token-scoped local endpoints are used by the Cindy adapter."
     },
     {
-      "domain": "192.168.1.10",
-      "paths": [
-        "source/latest/apps/web/src/utils/uuid.ts"
-      ],
-      "conclusion": "Upstream examples, parsing base or XML namespace; not an adapter request target. CSP rejects non-loopback network origins."
-    },
-    {
       "domain": "_od_deck_base",
       "paths": [
         "assets/studio.js",
         "source/latest/apps/web/src/runtime/deck-thumbnail-parser.ts"
       ],
-      "conclusion": "Upstream examples, parsing base or XML namespace; not an adapter request target. CSP rejects non-loopback network origins."
+      "conclusion": "Synthetic deck parsing base, not a request target; existing runtime behavior."
     },
     {
       "domain": "api.whatsapp.com",
@@ -126,6 +120,13 @@
         "source/latest/apps/web/src/runtime/deck-thumbnail-parser.ts"
       ],
       "conclusion": "Upstream examples, parsing base or XML namespace; not an adapter request target. CSP rejects non-loopback network origins."
+    },
+    {
+      "domain": "example.com",
+      "paths": [
+        "source/latest/packages/contracts/src/touchpoint-component-v2.ts"
+      ],
+      "conclusion": "Inert example URL or parsing-only base URL in upstream touchpoint contract validation; no request, download or external resource load."
     },
     {
       "domain": "figma.com",
@@ -340,6 +341,14 @@
       "conclusion": "Upstream analytics or sketch metadata. Analytics provider is not mounted; no autonomous request. CSP excludes remote network requests."
     },
     {
+      "domain": "vela.invalid",
+      "paths": [
+        "assets/studio.js",
+        "source/latest/packages/contracts/src/touchpoint-component-v2.ts"
+      ],
+      "conclusion": "Inert example URL or parsing-only base URL in upstream touchpoint contract validation; no request, download or external resource load."
+    },
+    {
       "domain": "vercel.com",
       "paths": [
         "assets/studio.js",
@@ -438,5 +447,12 @@
       ],
       "conclusion": "Upstream attribution, documentation, license, namespace or UI link literal; not an adapter fetch endpoint. CSP excludes remote resource loading."
     }
-  ]
+  ],
+  "upgradeReview": {
+    "release": "open-design-v0.25.0",
+    "network": "New experience diagnostics hooks are inert in this integration. Existing publish/deploy request changes remain behind hidden unsupported UI and unsupported local daemon routes. No remote-host or permission expansion.",
+    "dynamicExecution": "The motion source player injects bundled static JavaScript into the existing opaque sandbox. It creates no network client, dynamic code evaluator or external script URL. Snapshot serialization stays in the iframe.",
+    "downloads": "Existing parent-owned trusted Save file gate remains after motion/title injection. Export failure-copy changes do not authorize new writes or downloads.",
+    "credentials": "New failure-detail parsing only accepts bounded classification tokens; Cindy does not mount the upstream analytics/daemon credential flows. No credentials are introduced."
+  }
 }

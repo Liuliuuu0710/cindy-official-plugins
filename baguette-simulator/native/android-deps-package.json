@@ -1,0 +1,13 @@
+{
+  "dependencies": {
+    "@tesseract.js-data/chi_sim": "1.0.0",
+    "@tesseract.js-data/eng": "1.0.0",
+    "esbuild": "0.28.2",
+    "fast-xml-parser": "5.11.2",
+    "jpeg-js": "0.4.4",
+    "pngjs": "7.0.0",
+    "protobufjs": "8.8.1",
+    "tesseract.js": "7.0.0",
+    "yauzl": "3.4.0"
+  }
+}

@@ -1,0 +1,86 @@
+[
+  {
+    "name": "@tesseract.js-data/chi_sim",
+    "version": "1.0.0",
+    "license": "MIT",
+    "source": "https://github.com/naptha/tessdata.git"
+  },
+  {
+    "name": "@tesseract.js-data/eng",
+    "version": "1.0.0",
+    "license": "MIT",
+    "source": "https://github.com/naptha/tessdata.git"
+  },
+  {
+    "name": "bmp-js",
+    "version": "0.1.0",
+    "license": "MIT",
+    "source": "https://github.com/shaozilee/bmp-js"
+  },
+  {
+    "name": "fast-xml-parser",
+    "version": "5.11.2",
+    "license": "MIT",
+    "source": "git+https://github.com/NaturalIntelligence/fast-xml-parser.git"
+  },
+  {
+    "name": "is-url",
+    "version": "1.2.4",
+    "license": "MIT",
+    "source": "https://github.com/segmentio/is-url"
+  },
+  {
+    "name": "jpeg-js",
+    "version": "0.4.4",
+    "license": "BSD-3-Clause",
+    "source": "https://github.com/eugeneware/jpeg-js"
+  },
+  {
+    "name": "long",
+    "version": "5.3.2",
+    "license": "Apache-2.0",
+    "source": "https://github.com/dcodeIO/long.js.git"
+  },
+  {
+    "name": "pend",
+    "version": "1.2.0",
+    "license": "MIT",
+    "source": "git://github.com/andrewrk/node-pend.git"
+  },
+  {
+    "name": "pngjs",
+    "version": "7.0.0",
+    "license": "MIT",
+    "source": "git://github.com/pngjs/pngjs.git"
+  },
+  {
+    "name": "protobufjs",
+    "version": "8.8.1",
+    "license": "BSD-3-Clause",
+    "source": "protobufjs/protobuf.js"
+  },
+  {
+    "name": "regenerator-runtime",
+    "version": "0.13.11",
+    "license": "MIT",
+    "source": "https://github.com/facebook/regenerator/tree/main/packages/runtime"
+  },
+  {
+    "name": "tesseract.js",
+    "version": "7.0.0",
+    "license": "Apache-2.0",
+    "source": "https://github.com/naptha/tesseract.js.git"
+  },
+  {
+    "name": "tesseract.js-core",
+    "version": "7.0.0",
+    "license": "Apache-2.0",
+    "source": "https://github.com/naptha/tesseract.js-core.git"
+  },
+  {
+    "name": "yauzl",
+    "version": "3.4.0",
+    "license": "MIT",
+    "source": "git+https://github.com/thejoshwolfe/yauzl.git"
+  }
+]

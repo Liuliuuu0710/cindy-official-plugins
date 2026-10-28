@@ -1,0 +1,22 @@
+{
+  "name": "Cindy Ping",
+  "description": "Give the cat a poke to ping Cindy. What you’re looking at and what you want done go along with it, and Cindy takes it from there. Currently supports macOS 14+ only.",
+  "whenToUse": "Desktop emotes, configurable reactions, window context collection, and tasks triggered by an emote.",
+  "tools": {
+    "status": {
+      "description": "Read wheel, capture-permission and delivery status. macOS 14+. Emotes can create a project task, add context to an existing task or send to a companion, with per-trigger selection or a fixed target. Requires cindy.targets support; legacy plugin-task bindings are retained. Actions can incur model costs and attach screenshots through Cindy managed media; no conversation history is returned."
+    },
+    "get_config": {
+      "description": "Read the current Cindy Ping configuration and revision before editing. Preserve fields the user did not ask to change."
+    },
+    "configure": {
+      "description": "Configure the wheel, emotes, instructions, actions, model routes, destinations, delivery and shortcut. Read get_config first, edit its complete config and submit its revision. Use list_targets/list_models for exact identifiers. STALE_REVISION requires re-reading. Saving does not display an emote, capture content, create a task or send a message."
+    },
+    "list_targets": {
+      "description": "List available projects, conversations or companions with exact kind/id and display metadata, in host activity order. No conversation history."
+    },
+    "list_models": {
+      "description": "List available models and complete routes, reasoning efforts and Fast support."
+    }
+  }
+}

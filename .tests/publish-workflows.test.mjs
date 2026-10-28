@@ -7,15 +7,12 @@ import path from 'node:path';
 import test from 'node:test';
 
 const workflowRoot = new URL('../.github/workflows/', import.meta.url);
-const cnWorkflow = readFileSync(
-  new URL('publish-cindy-plugins.yml', workflowRoot),
-  'utf8',
-);
 const globalWorkflow = readFileSync(
   new URL('publish-cindy-plugins-global.yml', workflowRoot),
   'utf8',
 );
 const prWorkflow = readFileSync(new URL('pr-verify.yml', workflowRoot), 'utf8');
+const guidanceWorkflow = readFileSync(new URL('pr-guidance.yml', workflowRoot), 'utf8');
 
 test('changed-plugin detection uses the merge parents even when event base is stale', (t) => {
   const fixture = mkdtempSync(path.join(os.tmpdir(), 'cindy-plugin-pr-diff-'));
@@ -80,52 +77,17 @@ test('changed-plugin detection uses the merge parents even when event base is st
   assert.doesNotMatch(prWorkflow, /github\.event\.pull_request\.base\.sha/);
 });
 
-test('pull request verification requires the Cindy device attestation', () => {
+test('technical PR checks do not depend on editable prose or contributor identity', () => {
+  // Retargeting emits edited: keep validation for the new merge result.
+  // Required jobs must not turn green merely because prose was edited.
   assert.match(prWorkflow, /^      - edited$/m);
-  assert.match(
-    prWorkflow,
-    /name: Require Cindy device verification attestation\n        if: \$\{\{ steps\.changes\.outputs\.plugins != '\[\]' \}\}/,
-  );
-  assert.match(prWorkflow, /Cindy device verification \/ Cindy 实机验证/);
-  assert.match(prWorkflow, /\.pull_request\.body/);
-  assert.match(prWorkflow, /GITHUB_EVENT_PATH/);
-  assert.doesNotMatch(prWorkflow, /github\.event\.pull_request\.body/);
-  assert.ok(
-    prWorkflow.indexOf('name: Dry-run plugin packaging') <
-      prWorkflow.indexOf('name: Require Cindy device verification attestation'),
-    'package validation must run before a pending manual attestation blocks the job',
-  );
+  assert.doesNotMatch(prWorkflow, /pull_request\.(?:body|author_association|user\.login)/);
+  assert.doesNotMatch(prWorkflow, /Require Cindy device verification|Skipping Cindy device/);
+  assert.match(prWorkflow, /node --test \.tests\/plugin-contract\.test\.mjs/);
+  assert.match(prWorkflow, /name: Dry-run plugin packaging/);
 });
 
-test('device attestation accepts current and legacy checked labels, but not unchecked claims', (t) => {
-  const step = prWorkflow.match(/      - name: Require Cindy device verification attestation\n([\s\S]*?)(?=\n      - name:|$)/)?.[1];
-  assert.ok(step, 'workflow must contain the device attestation gate');
-  const source = step.split('        run: |\n')[1];
-  assert.ok(source, 'attestation gate must contain an executable shell script');
-  const script = source.split('\n').map((line) => line.replace(/^          /, '')).join('\n');
-  const fixture = mkdtempSync(path.join(os.tmpdir(), 'cindy-attestation-'));
-  t.after(() => rmSync(fixture, { recursive: true, force: true }));
-  const event = path.join(fixture, 'event.json');
-  const template = readFileSync(new URL('../.github/PULL_REQUEST_TEMPLATE.md', import.meta.url), 'utf8');
-  assert.match(template, /or Beta Cindy build/);
-  assert.match(template, /Either channel is sufficient/);
-  assert.match(template, /Dev\/local builds do not qualify/);
-  for (const [body, expected] of [
-    ['- [x] **Cindy device verification / Cindy 实机验证** — stable 0.1.82', 0],
-    ['- [X] **Cindy device verification / Cindy 实机验证** — Beta 0.1.82', 0],
-    ['- [x] **Production Cindy verification / 生产版 Cindy 验证**', 0],
-    ['- [ ] **Cindy device verification / Cindy 实机验证**', 1],
-    ['- [ ] **Production Cindy verification / 生产版 Cindy 验证**', 1],
-    ['Beta 0.1.82 verified, without checking the attestation', 1],
-    ['', 1],
-  ]) {
-    writeFileSync(event, JSON.stringify({ pull_request: { body } }));
-    const result = spawnSync('bash', ['-c', script], { encoding: 'utf8', env: { ...process.env, GITHUB_EVENT_PATH: event } });
-    assert.equal(result.status, expected, result.stderr || result.stdout);
-  }
-});
-
-test('PR verification artifacts are scoped, pinned and uploaded before attestation', () => {
+test('PR verification artifacts are scoped, pinned and available for runtime review', () => {
   const upload = prWorkflow.split('      - name: Upload PR verification packages\n')[1]?.split('\n      - name: ')[0];
   assert.ok(upload);
   assert.match(upload, /if: \$\{\{ steps\.changes\.outputs\.plugins != '\[\]' \}\}/);
@@ -137,9 +99,8 @@ test('PR verification artifacts are scoped, pinned and uploaded before attestati
   assert.match(upload, /compression-level: 0/);
   assert.doesNotMatch(upload, /always\(|continue-on-error/);
   assert.ok(prWorkflow.indexOf('name: Dry-run plugin packaging') < prWorkflow.indexOf('name: Upload PR verification packages'));
-  assert.ok(prWorkflow.indexOf('name: Upload PR verification packages') < prWorkflow.indexOf('name: Require Cindy device verification attestation'));
   assert.doesNotMatch(prWorkflow, /pull_request_target|id-token: write|secrets\./);
-  for (const publisher of [cnWorkflow, globalWorkflow]) {
+  for (const publisher of [globalWorkflow]) {
     assert.doesNotMatch(publisher, /pr-plugins-|workflow_run:/);
   }
 });
@@ -205,31 +166,35 @@ test('PR packaging stages only complete packages with matching hash and merge id
   assert.notEqual(run().status, 0, 'wrong PR head must be rejected');
 });
 
-test('CN and Global plugin publishers are operationally independent', () => {
-  assert.match(cnWorkflow, /^name: Publish Cindy Plugins \(CN\)$/m);
-  assert.match(globalWorkflow, /^name: Publish Cindy Plugins \(Global\)$/m);
-  assert.match(cnWorkflow, /group: cindy-plugin-publish-cn-prod-/);
-  assert.match(globalWorkflow, /group: cindy-plugin-publish-global-prod-/);
-
-  assert.match(cnWorkflow, /secrets\.CINDY_PLUGIN_PLATFORM_URL_CN/);
-  assert.doesNotMatch(cnWorkflow, /CINDY_PLUGIN_PLATFORM_URL_GLOBAL/);
+test('CN publishing stays removed and Global publishing is enabled only from main', () => {
+  assert.equal(existsSync(new URL('publish-cindy-plugins.yml', workflowRoot)), false);
+  for (const file of readdirSync(workflowRoot).filter(name => /\.ya?ml$/.test(name))) {
+    assert.doesNotMatch(readFileSync(new URL(file, workflowRoot), 'utf8'), /CINDY_PLUGIN_(?:PLATFORM|SERVER)_URL_CN|cindy-plugin-publish-cn-prod/);
+  }
+  const detection = globalWorkflow.split('\n  detect:\n')[1].split('\n  package:\n')[0];
+  const publishing = globalWorkflow.split('\n  publish:\n')[1];
+  assert.match(detection, /^    if: \$\{\{ github\.ref == 'refs\/heads\/main' \}\}$/m);
+  assert.match(publishing, /^    if: \$\{\{ !cancelled\(\) && needs\.detect\.result == 'success' && needs\.detect\.outputs\.plugins != '\[\]' \}\}$/m);
+  assert.doesNotMatch(globalWorkflow, /^  maintenance:|false &&/m);
+  const packaging = globalWorkflow.split('\n  package:\n')[1].split('\n  publish:\n')[0];
+  assert.match(packaging, /^    needs: detect$/m);
+  assert.doesNotMatch(packaging, /always\(|!cancelled\(/);
   assert.match(globalWorkflow, /secrets\.CINDY_PLUGIN_PLATFORM_URL_GLOBAL/);
-  assert.doesNotMatch(globalWorkflow, /CINDY_PLUGIN_PLATFORM_URL_CN/);
 });
 
-test('both production publishers route through protected Platform endpoints', () => {
-  for (const workflow of [cnWorkflow, globalWorkflow]) {
+test('the retained Global publisher routes through protected Platform endpoints', () => {
+  for (const workflow of [globalWorkflow]) {
     assert.doesNotMatch(workflow, /CINDY_PLUGIN_SERVER_URL_/);
     assert.doesNotMatch(workflow, /api\/publisher\/releases/);
     assert.doesNotMatch(workflow, /https:\/\/(?:plugin|platform)\./);
   }
 });
 
-test('both regional publishers support main pushes and full manual republish', () => {
-  for (const workflow of [cnWorkflow, globalWorkflow]) {
+test('the Global publisher supports main pushes and full manual republish', () => {
+  for (const workflow of [globalWorkflow]) {
     assert.match(workflow, /push:\n    branches:\n      - main/);
     assert.match(workflow, /workflow_dispatch:/);
-    assert.match(workflow, /if: github\.ref == 'refs\/heads\/main'/);
+    assert.match(workflow, /if: \$\{\{ github\.ref == 'refs\/heads\/main' \}\}/);
     assert.match(workflow, /EVENT_NAME === 'workflow_dispatch'/);
     assert.match(workflow, /Publishing all Cindy plugins:/);
     assert.match(workflow, /id-token: write/);
@@ -242,10 +207,10 @@ test('both regional publishers support main pushes and full manual republish', (
   }
 });
 
-test('both regional publishers pin actions in the OIDC publishing chain', () => {
+test('the retained Global publisher pins actions in the OIDC publishing chain', () => {
   const checkoutRef = '3d3c42e5aac5ba805825da76410c181273ba90b1';
   const githubScriptRef = '3a2844b7e9c422d3c10d287c895573f7108da1b3';
-  for (const workflow of [cnWorkflow, globalWorkflow]) {
+  for (const workflow of [globalWorkflow]) {
     assert.match(workflow, new RegExp(`actions/checkout@${checkoutRef}`));
     assert.doesNotMatch(workflow, /actions\/checkout@v\d+/);
     assert.match(
@@ -257,7 +222,7 @@ test('both regional publishers pin actions in the OIDC publishing chain', () => 
 });
 
 test('dependency collection cannot use the publishing job credentials', () => {
-  for (const workflow of [cnWorkflow, globalWorkflow]) {
+  for (const workflow of [globalWorkflow]) {
     const packaging = workflow.split('\n  package:\n')[1]?.split('\n  publish:\n')[0];
     const publishing = workflow.split('\n  publish:\n')[1];
     assert.ok(packaging && publishing);
@@ -278,7 +243,7 @@ test('dependency collection cannot use the publishing job credentials', () => {
   assert.match(prWorkflow, /node \.github\/scripts\/check-source-size\.mjs/);
 });
 
-test('regional workflow scripts package, transfer, verify and publish the same bytes locally', (t) => {
+test('retained Global workflow scripts package, transfer, verify and publish the same bytes locally', (t) => {
   const fixture = mkdtempSync(path.join(os.tmpdir(), 'cindy-publish-local-'));
   t.after(() => rmSync(fixture, { recursive: true, force: true }));
   const build = path.join(fixture, 'build');
@@ -322,7 +287,7 @@ if (url === 'https://oidc.example.test/token?request=1&audience=cindy-plugin') {
     assert.ok(run, 'missing workflow script: ' + name);
     return run.split('\n').map(line => line.replace(/^          /, '')).join('\n');
   };
-  for (const [region, workflow] of [['CN', cnWorkflow], ['GLOBAL', globalWorkflow]]) {
+  for (const [region, workflow] of [['GLOBAL', globalWorkflow]]) {
     const built = path.join(fixture, region + '-built');
     const publish = path.join(fixture, region + '-publish');
     mkdirSync(built);
@@ -357,3 +322,276 @@ if (url === 'https://oidc.example.test/token?request=1&audience=cindy-plugin') {
     }
   }
 });
+
+const GUIDANCE_HEAD = 'c'.repeat(40);
+const GUIDANCE_UNSIGNED = 'a'.repeat(40);
+const GUIDANCE_REMEDIATE = 'b'.repeat(40);
+
+function extractGuidanceScript() {
+  const source = guidanceWorkflow.split('        run: |\n')[1];
+  assert.ok(source, 'pr-guidance.yml must contain an executable shell script');
+  return source.split('\n').map((line) => line.replace(/^          /, '')).join('\n');
+}
+
+function signedCommit(sha, message = 'feat: change') {
+  return {
+    sha,
+    parents: [{ sha: '0'.repeat(40) }],
+    author: { login: 'alice', type: 'User' },
+    commit: {
+      message: `${message}\n\nSigned-off-by: Alice <alice@example.test>\n`,
+      author: { name: 'Alice', email: 'alice@example.test' },
+    },
+  };
+}
+
+function runGuidance(t, overrides = {}) {
+  const fixture = mkdtempSync(path.join(os.tmpdir(), 'cindy-pr-guidance-'));
+  t.after(() => rmSync(fixture, { recursive: true, force: true }));
+  const work = path.join(fixture, 'work');
+  const data = path.join(fixture, 'data');
+  const bin = path.join(fixture, 'bin');
+  mkdirSync(work);
+  mkdirSync(data);
+  mkdirSync(bin);
+  const files = {
+    'pull.json': {
+      draft: false,
+      body: '',
+      user: { login: 'alice' },
+      author_association: 'FIRST_TIMER',
+      head: { sha: GUIDANCE_HEAD },
+    },
+    'files.json': [],
+    'tree.json': { tree: [{ path: 'qq-mail/ghost.json' }, { path: 'LICENSE' }] },
+    'commits.json': [signedCommit(GUIDANCE_HEAD)],
+    'check-runs.json': { check_runs: [] },
+    'runs.json': { workflow_runs: [] },
+    'comments.json': [],
+    ...overrides,
+  };
+  for (const [name, value] of Object.entries(files)) {
+    writeFileSync(path.join(data, name), typeof value === 'string' ? value : JSON.stringify(value));
+  }
+  writeFileSync(path.join(bin, 'gh'), `#!/usr/bin/env node
+const { execFileSync } = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const args = process.argv.slice(2).filter((a) => a !== 'api' && a !== '--paginate' && a !== '--silent');
+const fixture = process.env.GUIDANCE_FIXTURE;
+const jqIdx = args.indexOf('--jq');
+let filter = null;
+if (jqIdx >= 0) {
+  filter = args[jqIdx + 1];
+  args.splice(jqIdx, 2);
+}
+const methodIdx = args.indexOf('-X');
+const method = methodIdx >= 0 ? args[methodIdx + 1] : 'GET';
+const bodyIdx = args.indexOf('-F');
+const bodyArg = bodyIdx >= 0 ? args[bodyIdx + 1] : null;
+const endpoint = args.find((a) => typeof a === 'string' && a.startsWith('repos/')) || '';
+if (method === 'PATCH' || method === 'POST') {
+  const dest = path.join(fixture, method === 'PATCH' ? 'patched.md' : 'posted.md');
+  const src = bodyArg && bodyArg.startsWith('body=@') ? bodyArg.slice(6) : null;
+  if (src) fs.copyFileSync(src, dest);
+  else fs.writeFileSync(dest, '');
+  process.exit(0);
+}
+let file = 'pull.json';
+if (endpoint.includes('/files')) file = 'files.json';
+else if (endpoint.includes('check-runs')) file = 'check-runs.json';
+else if (endpoint.includes('/commits')) file = 'commits.json';
+else if (endpoint.includes('/git/trees')) file = 'tree.json';
+else if (endpoint.includes('/actions/runs')) file = 'runs.json';
+else if (endpoint.includes('/comments')) file = 'comments.json';
+const json = fs.readFileSync(path.join(fixture, file), 'utf8');
+if (filter) {
+  process.stdout.write(execFileSync('jq', ['-r', filter], { input: json, encoding: 'utf8' }));
+} else {
+  process.stdout.write(json.endsWith('\\n') ? json : json + '\\n');
+}
+`, { mode: 0o755 });
+  const result = spawnSync('bash', ['-c', extractGuidanceScript()], {
+    cwd: work,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      PATH: bin + path.delimiter + process.env.PATH,
+      GH_TOKEN: 'fixture',
+      REPO: 'makecindy/cindy-official-plugins',
+      PR: '161',
+      GUIDANCE_FIXTURE: data,
+      GUIDANCE_RETRY_SLEEP: '0',
+    },
+  });
+  const posted = existsSync(path.join(data, 'posted.md'))
+    ? readFileSync(path.join(data, 'posted.md'), 'utf8')
+    : existsSync(path.join(data, 'patched.md'))
+      ? readFileSync(path.join(data, 'patched.md'), 'utf8')
+      : '';
+  return { result, posted, fixture: data, work };
+}
+
+test('contributor guidance never checks out PR code and refreshes when Verify completes', () => {
+  assert.match(guidanceWorkflow, /^name: PR contributor guidance$/m);
+  assert.match(guidanceWorkflow, /pull_request_target:/);
+  assert.match(guidanceWorkflow, /workflow_run:/);
+  assert.match(guidanceWorkflow, /workflows: \["Verify pull request"\]/);
+  assert.match(guidanceWorkflow, /types: \[requested, completed\]/);
+  assert.doesNotMatch(guidanceWorkflow, /actions\/checkout/);
+  assert.doesNotMatch(guidanceWorkflow, /github\.event\.pull_request\.body/);
+  assert.doesNotMatch(guidanceWorkflow, /id-token: write|secrets\./);
+  assert.match(guidanceWorkflow, /contents: read/);
+  assert.match(guidanceWorkflow, /checks: read/);
+  assert.match(guidanceWorkflow, /jq -s 'add \/\/ \[\]'/);
+  assert.match(guidanceWorkflow, /MUST NEVER check out/);
+  for (const publisher of [globalWorkflow]) {
+    assert.doesNotMatch(publisher, /pr-guidance|workflow_run:/);
+  }
+});
+
+test('contributor guidance treats verification equally and recomputes DCO each run', (t) => {
+  // Old unchecked/checked/contradictory templates and prose must not turn a
+  // guidance comment into approval or make an external author fix a checkbox.
+  for (const association of ['OWNER', 'MEMBER', 'COLLABORATOR', 'FIRST_TIMER', 'NONE']) {
+    for (const body of ['', '- [ ] **Cindy device verification / Cindy 实机验证**',
+      '- [x] **Cindy device verification / Cindy 实机验证**\nNot yet verified']) {
+      const check = runGuidance(t, {
+        'files.json': [{ status: 'modified', filename: 'LICENSE' }],
+        'pull.json': { draft: false, body, user: { login: 'alice' },
+          author_association: association, head: { sha: GUIDANCE_HEAD } },
+      });
+      assert.equal(check.result.status, 0, check.result.stderr);
+      assert.doesNotMatch(check.posted, /is unchecked|check the box|已实测|可安全合并/);
+      assert.match(check.posted, /this comment is not merge approval/);
+      assert.match(check.posted, /Runtime evidence and applicable approvals are assessed in review/);
+    }
+  }
+
+  const unsigned = runGuidance(t, {
+    'commits.json': [{
+      sha: GUIDANCE_UNSIGNED,
+      parents: [{ sha: '0'.repeat(40) }],
+      author: { login: 'alice', type: 'User' },
+      commit: { message: 'feat: unsigned\n', author: { name: 'Alice', email: 'alice@example.test' } },
+    }],
+    'pull.json': {
+      draft: false,
+      body: '',
+      user: { login: 'alice' },
+      author_association: 'FIRST_TIMER',
+      head: { sha: GUIDANCE_UNSIGNED },
+    },
+  });
+  assert.equal(unsigned.result.status, 0, unsigned.result.stderr);
+  assert.match(unsigned.posted, /Commits without DCO sign-off/);
+  assert.match(unsigned.posted, new RegExp(GUIDANCE_UNSIGNED.slice(0, 7)));
+
+  const remediated = runGuidance(t, {
+    'commits.json': [
+      {
+        sha: GUIDANCE_UNSIGNED,
+        parents: [{ sha: '0'.repeat(40) }],
+        author: { login: 'alice', type: 'User' },
+        commit: { message: 'feat: unsigned\n', author: { name: 'Alice', email: 'alice@example.test' } },
+      },
+      {
+        sha: GUIDANCE_REMEDIATE,
+        parents: [{ sha: GUIDANCE_UNSIGNED }],
+        author: { login: 'alice', type: 'User' },
+        commit: {
+          message:
+            `I, Alice <alice@example.test>, hereby add my Signed-off-by to this commit: ${GUIDANCE_UNSIGNED}\n\n`
+            + 'Signed-off-by: Alice <alice@example.test>\n',
+          author: { name: 'Alice', email: 'alice@example.test' },
+        },
+      },
+    ],
+    'pull.json': {
+      draft: false,
+      body: '',
+      user: { login: 'alice' },
+      author_association: 'FIRST_TIMER',
+      head: { sha: GUIDANCE_REMEDIATE },
+    },
+  });
+  assert.equal(remediated.result.status, 0, remediated.result.stderr || remediated.result.stdout);
+  assert.doesNotMatch(remediated.posted, /Commits without DCO sign-off/);
+
+  const wrongRemediation = runGuidance(t, {
+    'commits.json': [
+      {
+        sha: GUIDANCE_UNSIGNED,
+        parents: [{ sha: '0'.repeat(40) }],
+        author: { login: 'alice', type: 'User' },
+        commit: { message: 'feat: unsigned\n', author: { name: 'Alice', email: 'alice@example.test' } },
+      },
+      {
+        sha: GUIDANCE_REMEDIATE,
+        parents: [{ sha: GUIDANCE_UNSIGNED }],
+        author: { login: 'alice', type: 'User' },
+        commit: {
+          message:
+            `I, Alice <wrong@example.test>, hereby add my Signed-off-by to this commit: ${GUIDANCE_UNSIGNED}\n\n`
+            + 'Signed-off-by: Alice <alice@example.test>\n',
+          author: { name: 'Alice', email: 'alice@example.test' },
+        },
+      },
+    ],
+    'pull.json': {
+      draft: false,
+      body: '',
+      user: { login: 'alice' },
+      author_association: 'FIRST_TIMER',
+      head: { sha: GUIDANCE_REMEDIATE },
+    },
+  });
+  assert.equal(wrongRemediation.result.status, 0, wrongRemediation.result.stderr || wrongRemediation.result.stdout);
+  assert.match(wrongRemediation.posted, /Commits without DCO sign-off/);
+  assert.match(wrongRemediation.posted, new RegExp(GUIDANCE_UNSIGNED.slice(0, 7)));
+
+  const pagedRemediation = runGuidance(t, {
+    'commits.json': `${JSON.stringify([{
+      sha: GUIDANCE_UNSIGNED,
+      parents: [{ sha: '0'.repeat(40) }],
+      author: { login: 'alice', type: 'User' },
+      commit: { message: 'feat: unsigned\n', author: { name: 'Alice', email: 'alice@example.test' } },
+    }])}\n${JSON.stringify([{
+      sha: GUIDANCE_REMEDIATE,
+      parents: [{ sha: GUIDANCE_UNSIGNED }],
+      author: { login: 'alice', type: 'User' },
+      commit: {
+        message:
+          `I, Alice <alice@example.test>, hereby add my Signed-off-by to this commit: ${GUIDANCE_UNSIGNED}\n\n`
+          + 'Signed-off-by: Alice <alice@example.test>\n',
+        author: { name: 'Alice', email: 'alice@example.test' },
+      },
+    }])}\n`,
+    'pull.json': {
+      draft: false,
+      body: '',
+      user: { login: 'alice' },
+      author_association: 'FIRST_TIMER',
+      head: { sha: GUIDANCE_REMEDIATE },
+    },
+  });
+  assert.equal(pagedRemediation.result.status, 0, pagedRemediation.result.stderr || pagedRemediation.result.stdout);
+  assert.doesNotMatch(pagedRemediation.posted, /Commits without DCO sign-off/);
+
+  const waiting = runGuidance(t, {
+    'runs.json': {
+      workflow_runs: [{ name: 'Verify pull request', status: 'waiting', conclusion: null }],
+    },
+  });
+  assert.equal(waiting.result.status, 0, waiting.result.stderr);
+  assert.match(waiting.posted, /waiting for a maintainer to approve/);
+
+  const afterApproval = runGuidance(t, {
+    'runs.json': {
+      workflow_runs: [{ name: 'Verify pull request', status: 'completed', conclusion: 'success' }],
+    },
+  });
+  assert.equal(afterApproval.result.status, 0, afterApproval.result.stderr);
+  assert.doesNotMatch(afterApproval.posted, /waiting for a maintainer to approve/);
+});
+

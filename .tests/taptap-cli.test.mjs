@@ -60,6 +60,10 @@ const FIXTURE_TREE = {
     ['+rules', 'Show the generation rules'],
     ['+validate', 'Validate generated files'],
   ],
+  'community-management': [
+    ['get-community-moment', 'Get one community moment'],
+    ['list-community-moments', 'List community moments'],
+  ],
   'dashboard-stats': [
     ['get-dashboard-stats', 'Query dashboard stats metrics'],
     ['get-dashboard-position-options', 'List the positions a metric accepts'],
@@ -113,6 +117,7 @@ const FIXTURE_SCHEMA = [
   { name: 'app submit-app-review', description: 'Submit review', _meta: { risk: 'high-risk-write' } },
   { name: 'app create-app', description: 'Create', _meta: { risk: 'write' } },
   { name: 'asset-library search-assets', description: 'Search', _meta: { risk: 'read' } },
+  { name: 'community-management list-community-moments', description: 'Community moments', inputSchema: { type: 'object', properties: { moment_intent: { type: 'array', items: { type: 'string' } } } }, _meta: { risk: 'read' } },
   { name: 'dashboard-stats get-dashboard-stats', description: 'Stats', _meta: { risk: 'read' } },
 ];
 
@@ -168,6 +173,31 @@ if (args[1] === 'partial-op') {
 // arbitrary command to the control-flag test, which expects the echo below.
 if (args.length === 1 && args[0] === 'version') {
   write(JSON.stringify({ ok: true, data: { name: '@taptap/cli', version: '1.2.3', contract: '3' } }));
+  process.exit(0);
+}
+if (args[0] === 'auth' && args[1] === 'login') {
+  const notice = process.env.FIXTURE_NOTICE
+    ? { update: { current: '1.0.0', latest: '9.9.9', command: 'taptap-cli update' } }
+    : null;
+  const isWait = args.includes('--device-code');
+  if (process.env.FIXTURE_LOGIN_FAIL === (isWait ? 'wait' : 'start')) {
+    process.stderr.write(JSON.stringify({
+      ok: false,
+      error: { type: 'auth', subtype: 'failed', message: 'login failed' },
+      ...(notice ? { _notice: notice } : {}),
+    }));
+    process.exit(2);
+  }
+  write(JSON.stringify({
+    ok: true,
+    data: isWait ? {} : {
+      verification_url: 'https://example.test/device',
+      device_code: 'device-secret',
+      expires_at: 1893456000,
+      interval: 1,
+    },
+    ...(notice ? { _notice: notice } : {}),
+  }));
   process.exit(0);
 }
 if (args[0] === 'auth' && args[1] === 'status') {
@@ -249,6 +279,59 @@ function callWorker(requests, options) {
       reject(error);
     });
     for (const request of pending) child.stdin.write(JSON.stringify(request) + '\n');
+  });
+}
+
+// Like callWorker, but sends the next request only after the previous reply.
+// Login-wait needs the in-memory handle that login-start just created, so the
+// two calls cannot be in flight together. A request may also be a function of
+// the replies so far, which is how the handle is threaded into the second call.
+function callWorkerSequential(requests, options) {
+  const env = Object.assign({}, process.env, (options && options.env) || {});
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [workerPath], { stdio: ['pipe', 'pipe', 'pipe'], env });
+    const replies = [];
+    let buffer = '';
+    let index = 0;
+    let settled = false;
+    const timer = setTimeout(() => done(new Error('worker did not answer in time')), 20000);
+
+    const done = (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.kill();
+      if (error) reject(error);
+      else resolve(replies);
+    };
+
+    const sendNext = () => {
+      const request = typeof requests[index] === 'function' ? requests[index](replies) : requests[index];
+      child.stdin.write(JSON.stringify({ ...request, id: index + 1 }) + '\n');
+    };
+
+    child.stdout.on('data', (chunk) => {
+      buffer += chunk.toString();
+      let newline;
+      while ((newline = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, newline).trim();
+        buffer = buffer.slice(newline + 1);
+        if (!line) continue;
+        let reply;
+        try {
+          reply = JSON.parse(line);
+        } catch (_) {
+          continue;
+        }
+        if (!reply || reply.result === undefined) continue;
+        replies.push(reply);
+        index += 1;
+        if (index >= requests.length) return done();
+        sendNext();
+      }
+    });
+    child.on('error', done);
+    sendNext();
   });
 }
 
@@ -409,14 +492,18 @@ test('an unreadable alias list closes the alias route', async () => {
 });
 
 test('only the read-only skills paths skip risk resolution', async () => {
-  // `skills list` / `skills read` print documentation and are read by
-  // definition. Any other subcommand — a future one the CLI may add — goes
-  // through the ordinary lookup, which fails closed when nothing classifies it.
-  const [listed, other] = await callWorker([
+  // `skills list` / `read` / `status` print documentation or local sync state
+  // and are read by definition. Any other subcommand — a future one the CLI may
+  // add — goes through the ordinary lookup, which fails closed when nothing
+  // classifies it.
+  const [listed, status, other] = await callWorker([
     callTool('skills', { cli_path: fakeCli, args: { _positional: ['read', 'taptap-materials'] } }),
     callTool('skills', { cli_path: fakeCli, args: { _positional: ['status'] } }),
+    callTool('skills', { cli_path: fakeCli, args: { _positional: ['install'] } }),
   ]);
   assert.equal(listed.result.ok, true);
+  assert.equal(status.result.ok, true);
+  assert.equal(other.result.ok, false);
   assert.equal(other.result.errorCode, 'CONFIRM_REQUIRED');
 });
 
@@ -672,6 +759,149 @@ test('the data-query domain is served like any other read domain', async () => {
   assert.equal(reply.result.ok, true, `a read data-query operation executes: ${JSON.stringify(reply.result.echo || reply.result).slice(0, 300)}`);
 });
 
+test('a new read domain keeps its catalogue schema in the drill-down', async () => {
+  // Services listed in SERVICE_DESCRIPTIONS have the OpenAPI catalogue merged
+  // into their drill-down (inputSchema and risk per operation); a service
+  // missing from it only shows completion children, so the agent cannot see
+  // enum, pattern or required fields without a separate schema call. The forum
+  // domain ships with a bundled manual that routes through
+  // list_tools(category:"community-management"), so it must be listed.
+  assert.match(workerSource, /'community-management':/, 'the forum service has a display description');
+
+  const [reply] = await callWorker([listTools('community-management', { cli_path: fakeCli })]);
+  const operations = reply.result.data.operations;
+  const fromCatalog = operations.find((op) => op.name === 'community-management list-community-moments');
+  assert.ok(fromCatalog, 'the catalogue operation is listed');
+  assert.ok(fromCatalog.inputSchema, 'the catalogue operation keeps its argument schema');
+  const completionOnly = operations.find((op) => op.name === 'community-management get-community-moment');
+  assert.ok(completionOnly, 'completion-only commands stay reachable');
+});
+
+test('forum data statistics route through the data manual, not the post manual', () => {
+  // `get-forum-stats` is an independent read endpoint under dashboard-stats: it
+  // returns counters (visits, active users, posts/deletes/moves, replies,
+  // follows and content totals), never post bodies. The reply count it returns
+  // and the replies read through community-management are different interfaces
+  // with different definitions, so the routing must not collapse them.
+  const manualRoot = path.join(root, 'taptap-cli', 'manual');
+  const read = (relative) => fs.readFileSync(path.join(manualRoot, relative), 'utf8');
+  const dashboard = read('taptap-suite/references/taptap-dashboard-stats/MANUAL.md');
+  const cheatsheet = read(
+    'taptap-suite/references/taptap-dashboard-stats/references/forum-stats-cheatsheet.md',
+  );
+  const routing = read('taptap-suite/references/business-routing.md');
+  const top = read('taptap-suite/MANUAL.md');
+
+  // The domain manual and the top-level routing table both send forum metrics
+  // to the dedicated reference instead of leaving them to the post manual.
+  assert.match(dashboard, /get-forum-stats/, 'dashboard-stats must name the forum endpoint');
+  assert.match(dashboard, /forum-stats-cheatsheet\.md/, 'dashboard-stats must link the forum reference');
+  assert.match(
+    top,
+    /\| 查论坛[^|]*\| `dashboard-stats`/,
+    'the routing table must send forum metrics to dashboard-stats',
+  );
+  assert.match(
+    routing,
+    /论坛数据统计 ≠ 论坛帖子\/回复内容/,
+    'business routing must separate forum metrics from post content',
+  );
+  assert.match(
+    routing,
+    /全论坛回复新增量[\s\S]*moment\.stat\.comments/,
+    'business routing must keep per-post reply totals on community-management',
+  );
+
+  // The reference has to stay on the plugin path: call_tool, not a shell call.
+  assert.match(cheatsheet, /call_tool\(name:"dashboard-stats get-forum-stats"/);
+  assert.doesNotMatch(cheatsheet, /taptap-cli dashboard-stats/, 'the reference must not hand over a shell command');
+  assert.match(cheatsheet, /data:\{type:/, 'the forum metric dimension travels in args.data');
+
+  // The definitions that make the numbers usable.
+  assert.match(cheatsheet, /最多 8 个/, 'at most eight metric dimensions per call');
+  assert.match(cheatsheet, /366 天/, 'the longest query window must stay stated');
+  assert.match(cheatsheet, /活跃人次/, 'forum_uv is a sum of daily uniques, not a range unique');
+  assert.match(
+    cheatsheet,
+    /content_total[\s\S]*content_create[\s\S]*不是同一口径/,
+    'content_total and content_create are different definitions',
+  );
+  assert.match(cheatsheet, /`columns` 为空数组/, 'no-data must be scoped to the selected range');
+  assert.match(
+    cheatsheet,
+    /`moment\.stat\.comments`[\s\S]*community-management/,
+    'the reference must send per-post reply totals to community-management',
+  );
+});
+
+test('the 2026.10.20 recovery guidance stays on the plugin path', () => {
+  // CLI 2026.10.20 adds upgrade notices and tightens the app-edit recovery
+  // contract. The bundled manual has to carry both, but the CLI's own text
+  // assumes the agent runs `taptap-cli` directly — which this plugin refuses.
+  // The upgrade guidance must therefore name the user as the executor.
+  const manualRoot = path.join(root, 'taptap-cli', 'manual');
+  const read = (relative) => fs.readFileSync(path.join(manualRoot, relative), 'utf8');
+  const shared = read('taptap-suite/references/shared-execution.md');
+  const top = read('taptap-suite/MANUAL.md');
+  const appEdit = read('taptap-suite/references/taptap-app-edit/MANUAL.md');
+  const analysis = read('taptap-suite/references/taptap-app-edit/references/app-edit-analysis.md');
+  const audit = read('taptap-suite/references/taptap-app-edit/references/app-edit-audit-and-history.md');
+  const rules = read('taptap-suite/references/taptap-app-edit/references/app-edit-execution-rules.md');
+  const fields = read('taptap-suite/references/taptap-app-edit/references/app-edit-fields-and-packages.md');
+
+  // Upgrade notices: both notice kinds, and the upgrade stays the user's job.
+  assert.match(shared, /_notice\.update/, 'the manual must handle an upgrade notice');
+  assert.match(shared, /_notice\.update_check/, 'the manual must handle a failed automatic check');
+  assert.match(shared, /由插件编排、不返回 CLI envelope/, 'the login tools need their own notice path');
+  assert.match(shared, /由用户在终端执行 `taptap-cli update`/, 'the upgrade stays the user\'s action');
+  assert.match(shared, /skills", args:\{_positional:\["status"\], json:true\}/, 'the sync check must stay readable JSON');
+  assert.doesNotMatch(shared, /call_tool\(name:\s*["']update/, 'the plugin refuses CLI self-update');
+  assert.match(top, /_notice\.update/, 'the top-level rules must flag notices before business work starts');
+  assert.match(shared, /成功结果的 CLI envelope 位于 `result\.envelope`/);
+  assert.match(workerSource, /result\.envelope 是 CLI 的 JSON envelope/, 'the rule text must name the real result path');
+  // The same document must not hand out a second, wrong path for the envelope.
+  assert.doesNotMatch(shared, /`data\.envelope`/, 'a successful envelope lives under result, not data');
+  assert.doesNotMatch(top, /`data\.envelope`/, 'the top-level manual must agree with the worker');
+
+  // A permission failure is scoped to the resource that failed.
+  assert.match(
+    shared,
+    /不要把一个 app 的拒绝扩大为整个厂商不可访问/,
+    'a permission denial must not be repeated for the same resource',
+  );
+
+  // Precheck: HTTP success and a failed content preaudit are separate facts,
+  // and the preaudit alone does not forbid submission.
+  assert.match(appEdit, /预检 HTTP 200 \/ 顶层成功不等于内容预审通过/);
+  assert.match(appEdit, /预审不通过本身不禁止提审/);
+  assert.match(audit, /且本次 `blockers` 明确为空时/);
+  assert.match(rules, /预审不通过本身不禁止提审/);
+  assert.match(rules, /完成判据按用户目标和同一资源核对/);
+
+  // Version detail returns logs; a field snapshot is not part of the contract.
+  assert.match(analysis, /get-app-version\.result\.logs/);
+  assert.doesNotMatch(analysis, /读取只读的 `detail\.form_data`/, 'the detail snapshot is not a promise');
+  assert.match(analysis, /`state="required"`/);
+  assert.match(audit, /对目标 item 的 `version` 调用 `get-app-version` 读取详情 `logs`/);
+  assert.doesNotMatch(audit, /读取 `detail\.form_data` 作为该历史版本的只读字段快照/);
+
+  // Save and binding failures: partial success is reported per field, and a
+  // readback is the only binding evidence.
+  assert.match(fields, /### 保存失败与部分完成/);
+  assert.match(fields, /不得自动 `force`/);
+  assert.match(fields, /二维码成功、上传成功或开发包创建成功均不能替代绑定读回/);
+
+  // Field-level requiredness has one spelling across the whole app-edit manual.
+  const appEditManual = [
+    appEdit, analysis, audit, rules, fields,
+    read('taptap-suite/references/taptap-app-edit/references/app-edit-field-map.md'),
+    read('taptap-suite/references/taptap-app-edit/references/review-risk-checklist.md'),
+    read('taptap-suite/references/taptap-app-edit/references/publish-game-creation.md'),
+  ].join('\n');
+  assert.doesNotMatch(appEditManual, /字段 `required`/, 'field requiredness must use state="required"');
+  assert.doesNotMatch(appEditManual, /`visible` \/ `required`/, 'visibility and requiredness must both use state');
+});
+
 test('nothing shipped points at the internal taptap/cli repository', () => {
   // The GitHub repository is internal; only the npm package is public. Any
   // link to the repository is therefore a dead end for the people who install
@@ -683,6 +913,48 @@ test('nothing shipped points at the internal taptap/cli repository', () => {
     }
   }
   assert.deepEqual(offenders, [], 'the internal repository must not be linked from shipped files');
+});
+
+test('the image handoff always carries the upload info on field writes', () => {
+  // The server tolerates a bare URL (it reuses stored metadata for the same
+  // URL, or stores the URL alone), but the C-side detail page then has no
+  // width/height and portrait screenshots fall back to a 16:9 crop. Every
+  // manual that hands an uploaded image to `save-changes` must therefore keep
+  // `data.url` and `data.info` together.
+  const manualRoot = path.join(root, 'taptap-cli', 'manual');
+  const read = (relative) => fs.readFileSync(path.join(manualRoot, relative), 'utf8');
+  const appEdit = read(
+    'taptap-suite/references/taptap-app-edit/references/app-edit-fields-and-packages.md',
+  );
+  const materials = read('taptap-suite/references/taptap-materials/MANUAL.md');
+  const ingest = read(
+    'taptap-suite/references/taptap-materials/references/asset-library-ingest.md',
+  );
+
+  for (const [label, text] of [
+    ['app-edit', appEdit],
+    ['materials', materials],
+    ['asset-library ingest', ingest],
+  ]) {
+    assert.match(text, /data\.info/, `${label} must hand over the upload info`);
+  }
+  assert.match(appEdit, /"info": <图片元数据>/, 'app-edit must state the value shape');
+  assert.match(appEdit, /value:\{url:.*info:\{width:/, 'app-edit must show an info-bearing example');
+  assert.match(appEdit, /remove.*不需要 `info`/, 'remove selectors stay bare URLs');
+  assert.match(appEdit, /value: null/, 'clearing an iOS override keeps its null value');
+  assert.match(materials, /不带 info 会回落 16:9/, 'materials must state the fallback');
+  assert.match(materials, /资质草稿/, 'materials must scope the object shape to app save-changes');
+  assert.match(ingest, /不带 info 不会报错/, 'ingest must state the tolerated-but-worse path');
+
+  // Rollback: `changes[].from` is a bare URL for image fields; writing it back
+  // works, but an image without info still falls back to the 16:9 crop, so the
+  // manual must offer the fresh-upload repair path.
+  const rollback = read(
+    'taptap-suite/references/taptap-app-edit/references/app-edit-audit-and-history.md',
+  );
+  assert.match(rollback, /`from` 对图片字段只给出纯 URL/);
+  assert.match(rollback, /直接把它写回去即可/);
+  assert.match(rollback, /重新收录/);
 });
 
 test('the install guidance lists commands that actually work', () => {
@@ -870,18 +1142,22 @@ test('every locale discloses what the catalogue leaves out', () => {
 
 test('discovery text covers every domain the catalogue now serves', () => {
   // whenToUse is what the agent uses to decide whether this plugin answers a
-  // question. Data querying and player reviews are served now, so a whenToUse
-  // that stays silent about them routes those questions to another tool and the
-  // user is told the plugin cannot help — the same defect as the opposite one.
+  // question. Data querying, player reviews and forum reading are served now,
+  // so a whenToUse that stays silent about them routes those questions to
+  // another tool and the user is told the plugin cannot help — the same defect
+  // as the opposite one.
   const ADVERTISES = /数据表现|query data metrics|データ指標|데이터 지표/;
+  const ADVERTISES_COMMUNITY = /论坛|forum|フォーラム|포럼/;
 
   const manifestFile = JSON.parse(fs.readFileSync(path.join(root, 'taptap-cli', 'ghost.json'), 'utf8'));
   assert.ok(ADVERTISES.test(manifestFile.whenToUse), 'manifest whenToUse must cover data querying');
+  assert.ok(ADVERTISES_COMMUNITY.test(manifestFile.whenToUse), 'manifest whenToUse must cover forum reading');
 
   for (const locale of ['zh-CN', 'en', 'ja', 'ko']) {
     const resource = JSON.parse(
       fs.readFileSync(path.join(root, 'taptap-cli', 'locales', `${locale}.json`), 'utf8'));
     assert.ok(ADVERTISES.test(resource.whenToUse), `${locale} whenToUse must cover data querying`);
+    assert.ok(ADVERTISES_COMMUNITY.test(resource.whenToUse), `${locale} whenToUse must cover forum reading`);
   }
 });
 
@@ -1044,6 +1320,48 @@ test('a read-only session refuses to start a login', async () => {
   const [reply] = await callWorker([callTool('auth login-start', { read_only: true })]);
   assert.equal(reply.result.ok, false);
   assert.equal(reply.result.errorCode, 'SESSION_READ_ONLY');
+});
+
+test('the orchestrated login forwards upgrade notices without the device code', async () => {
+  // The login tools return a whitelisted payload instead of the CLI envelope,
+  // so a notice would be silently dropped — an upgrade that happens to be found
+  // during login would never reach the user. The device code itself must still
+  // never leave the worker.
+  const [start, wait] = await callWorkerSequential([
+    callTool('auth login-start', { cli_path: fakeCli }),
+    (replies) => callTool('auth login-wait', {
+      cli_path: fakeCli,
+      args: { login_handle: replies[0].result.data.login_handle },
+    }),
+  ], { env: { FIXTURE_NOTICE: '1' } });
+
+  assert.equal(start.result.ok, true);
+  assert.equal(start.result.data._notice.update.latest, '9.9.9');
+  assert.doesNotMatch(JSON.stringify(start.result), /device-secret/, 'the device code must not reach the model');
+  assert.equal(wait.result.ok, true);
+  assert.equal(wait.result.data.status, 'authorized');
+  assert.equal(wait.result.data._notice.update.latest, '9.9.9');
+});
+
+test('login failures still carry the upgrade notice', async () => {
+  const [startFailure] = await callWorker(
+    [callTool('auth login-start', { cli_path: fakeCli })],
+    { env: { FIXTURE_NOTICE: '1', FIXTURE_LOGIN_FAIL: 'start' } },
+  );
+  assert.equal(startFailure.result.ok, false);
+  assert.equal(startFailure.result.data._notice.update.latest, '9.9.9');
+
+  const [start, wait] = await callWorkerSequential([
+    callTool('auth login-start', { cli_path: fakeCli }),
+    (replies) => callTool('auth login-wait', {
+      cli_path: fakeCli,
+      args: { login_handle: replies[0].result.data.login_handle },
+    }),
+  ], { env: { FIXTURE_NOTICE: '1', FIXTURE_LOGIN_FAIL: 'wait' } });
+  assert.equal(start.result.ok, true);
+  assert.equal(wait.result.ok, false);
+  assert.equal(wait.result.execution_state, 'unknown');
+  assert.equal(wait.result.data._notice.update.latest, '9.9.9');
 });
 
 test('unknown methods are reported instead of crashing the worker', async () => {

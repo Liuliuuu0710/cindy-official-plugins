@@ -29,12 +29,15 @@ test("upstream OpenDesign viewer renders and exposes native interaction tools", 
     });
     let handler;
     const sent = [];
+    const draftId = crypto.randomUUID();
+    let openedPreview;
     const disk = new Map([
+      ['cards/recovery-card.json', JSON.stringify({ sessionId: sid, draftId })],
       [
         "sessions/" + sid + ".json",
         JSON.stringify({
           sessionId: sid,
-          id: "draft-test",
+          id: draftId,
           root: p.dir,
           file: "design.html",
           title: "Design",
@@ -51,6 +54,7 @@ test("upstream OpenDesign viewer renders and exposes native interaction tools", 
         cindy: {
           request: async () => ({ context: { locale: "zh-CN" } }),
           onHostMessage: (h) => (handler = h),
+          preview: async (p) => { openedPreview = p; return { ok: true }; },
           node: {
             request: async (x) => ({
               ok: true,
@@ -78,6 +82,12 @@ test("upstream OpenDesign viewer renders and exposes native interaction tools", 
         params: n.params,
       }),
     );
+    // Simulate an old card whose hidden marker was lost. The persisted Host
+    // binding is retained; the real main/worker path must restore ownership.
+    await fs.unlink(path.join(p.dir, '.opendesign-project.json'));
+    await handler({ type: 'event', name: 'card-action', callId: 'recovery-card', actionId: 'open', sessionId: sid });
+    assert.equal(openedPreview?.sessionId, sid);
+    assert.equal(JSON.parse(await fs.readFile(path.join(p.dir, '.opendesign-project.json'), 'utf8')).sessionId, sid);
     browser = await chromium.launch({
       headless: true,
       executablePath: process.env.OPENDESIGN_CHROMIUM_PATH || undefined,
@@ -116,7 +126,7 @@ test("upstream OpenDesign viewer renders and exposes native interaction tools", 
     page.on("console", (m) => {
       if (m.type() === "error") console.log("console", m.text().slice(0, 180));
     });
-    await page.goto(b.url + "?file=design.html");
+    await page.goto(openedPreview.url);
     await page.waitForTimeout(1800);
     await page
       .frameLocator("[data-testid=artifact-preview-frame]")

@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cindy Ping</title><link rel="stylesheet" href="settings.css"></head>
+<body data-design="refined">
+<main id="prototype" class="variant-b">
+  <div class="keybar"><div><span>Wheel shortcut</span><p id="gesture-hint">Hold shortcut, move to an emote, release to send</p></div><button id="shortcut" class="secondary" aria-label="Change wheel shortcut"><kbd id="shortcut-label">⌘ G</kbd><span>Change shortcut</span></button></div>
+  <p id="input-status" class="key-warning" role="status" hidden></p>
+  <div class="workspace"><section class="wheel-section"><div class="section-head"><h2>Wheel</h2><span id="slot-count"></span></div><p class="section-hint">Click to configure · Drag to reorder · Pin position</p><div id="wheel" class="wheel" aria-label="Configurable emote wheel"></div><div id="placement-hint" class="wheel-tip" role="status">Click or hold + and move to choose a position</div></section><aside id="editor" class="editor" aria-label="Selected emote settings"></aside></div>
+  <section class="runtime-status"><div id="feedback" role="status" aria-live="polite"></div><button id="retry" class="subtle" hidden>Retry applying</button><div class="status"><span id="status-text"></span><span id="detail"></span><button id="refresh" class="subtle">Refresh status</button></div></section>
+  <div id="recovery" hidden><p>The previous delivery is unconfirmed. Check it in Cindy before resuming; it will not be resent.</p><code id="pending-id"></code><button id="reviewed" class="secondary">I checked the task — resume</button></div>
+  <details id="permissions"><summary>Input and window capture permissions</summary><p id="permission-hint">Uses Cindy's existing system permissions. Display-only does not capture content; screen recording is only used for task screenshots.</p><p id="permission-status"></p></details>
+</main>
+<div id="placement-cursor" aria-hidden="true" hidden>+</div>
+<dialog id="assets"><div class="dialog-heading"><h3>Choose an emote</h3><button class="icon-button" data-close="assets" aria-label="Close emote picker">×</button></div><p id="asset-hint" class="dialog-intro"></p><div id="asset-grid" class="asset-grid"></div><button id="custom-image" class="file-button">Choose a local image</button><p class="dialog-hint">Keep the original local image file. Built-in emotes are included with the plugin.</p></dialog>
+<dialog id="keys"><div class="dialog-heading"><h3>Wheel shortcut</h3><button class="icon-button" data-close="keys" aria-label="Close shortcut recorder">×</button></div><p class="dialog-intro">Press a key or a combination.</p><div id="record-key" tabindex="0">⌘ G</div><div class="key-presets"><button data-key="option">⌥ Option</button><button data-key="control">⌃ Control</button><button data-key="g">G</button><button data-key="f8">F8</button></div><p id="key-warning" class="key-warning"></p><div class="dialog-footer"><button data-close="keys" class="secondary">Cancel</button><button id="use-key" class="primary">Use shortcut</button></div></dialog>
+
+<script src="shortcuts.js"></script><script src="wheel-layout.js"></script><script src="emote-library.js"></script><script src="assets/provider-marks.js"></script><script src="settings.js"></script>
+</body></html>

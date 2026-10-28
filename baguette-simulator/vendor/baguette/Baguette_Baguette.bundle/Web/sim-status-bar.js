@@ -9,7 +9,7 @@
 // "Clear overrides" sends `DELETE /simulators/<udid>/status-bar`. The
 // Swift side owns all domain logic (`simctl status_bar` argv, range
 // clamping). The live device stream shows the result — no client-side
-// preview. See `docs/features/status-bar.md`.
+// preview. See `docs/features/status-bar/README.md`.
 
 (function () {
   'use strict';

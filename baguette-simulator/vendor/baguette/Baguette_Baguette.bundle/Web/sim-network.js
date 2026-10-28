@@ -12,7 +12,7 @@
 // this side, deciding which of the three mutually exclusive sources a body
 // states, lives in `NetworkConditionForm` where it is unit-tested.
 //
-// See `docs/features/network.md`.
+// See `docs/features/network/README.md`.
 
 (function () {
   'use strict';

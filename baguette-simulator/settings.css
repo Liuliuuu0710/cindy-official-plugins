@@ -1,0 +1,69 @@
+/* Plugin settings page — Cindy settings-row layout. Consumes the host's
+   theme tokens where present; fallbacks mirror Cindy's default Light/Dark. */
+:root { --c-surface: var(--surface, #f8f8f6); --c-card: var(--surface-elevated, #ffffff); --c-border: var(--border-default, #d7d7d4); --c-chip: var(--surface-chip, #e5e5e5); --c-hover: var(--surface-hover, #ededeb);
+  --c-text: var(--text-primary, #262626); --c-text-2: var(--text-secondary, #737373); --c-text-3: var(--text-tertiary, #a3a3a3); --c-error: var(--error-fg, #D91F37); --c-ok: var(--status-success, #2AAE5B); --c-warn: var(--warning-fg, #F3A115);
+  --c-cta-bg: var(--accent-cta-bg-pure, #000000); --c-cta-fg: var(--accent-pure-cta-fg, #ffffff); --c-switch-on: var(--switch-track-on, #417CDD); --c-focus: var(--focus-ring, #417CDD); }
+@media (prefers-color-scheme: dark) { :root { --c-surface: var(--surface, #1f1f1e); --c-card: var(--surface-elevated, #2c2c2a); --c-border: var(--border-default, #3c3c3a); --c-chip: var(--surface-chip, #3c3c3a); --c-hover: var(--surface-hover, #363634);
+  --c-text: var(--text-primary, #d4d4d4); --c-text-2: var(--text-secondary, #a3a3a3); --c-text-3: var(--text-tertiary, #737373); --c-cta-bg: var(--accent-cta-bg-pure, #ffffff); --c-cta-fg: var(--accent-pure-cta-fg, #000000); } }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; padding: 16px; font: 400 13px/1.5 Inter, system-ui, -apple-system, "Segoe UI", "PingFang SC", sans-serif; color: var(--c-text); -webkit-font-smoothing: antialiased; }
+main { max-width: 680px; margin: 0 auto; }
+h3 { margin: 0; font-size: 16px; font-weight: 500; }
+.card { background: var(--c-card); border: 1px solid var(--c-border); border-radius: 12px; }
+.rows .row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; }
+.rows .row + .row { border-top: 1px solid var(--c-border); }
+.text { min-width: 0; }
+.label { font-weight: 500; font-size: 13px; }
+.hint { color: var(--c-text-2); font-size: 12px; margin-top: 2px; }
+.section-head { display: flex; align-items: center; gap: 8px; margin: 24px 0 10px; }
+.section-head .grow { flex: 1; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer; }
+button:disabled { opacity: .6; cursor: default; }
+:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+.btn { height: 32px; padding: 0 16px; border-radius: 9999px; display: inline-flex; align-items: center; gap: 6px; font-weight: 500; font-size: 13px; background: var(--c-chip); border: 1px solid var(--c-chip); white-space: nowrap; transition: background .15s; }
+.btn:hover:not(:disabled) { background: var(--c-hover); }
+.btn.sm { height: 28px; padding: 0 12px; font-size: 12px; }
+.btn.quiet { background: var(--c-card); border-color: var(--c-border); }
+.btn.cta { background: var(--c-cta-bg); color: var(--c-cta-fg); border-color: var(--c-cta-bg); }
+.btn.cta:hover:not(:disabled) { opacity: .88; }
+.btn.danger { color: var(--c-error); background: var(--c-card); border-color: var(--c-border); }
+select { font: inherit; color: inherit; background: var(--c-card); border: 1px solid var(--c-border); border-radius: 8px; height: 32px; padding: 0 8px; max-width: 100%; }
+select:disabled { opacity: .6; }
+input[role=switch] { appearance: none; width: 36px; height: 22px; border-radius: 9999px; background: var(--c-text-3); position: relative; flex: 0 0 36px; margin: 0; cursor: pointer; transition: background .15s; }
+input[role=switch]::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+input[role=switch]:checked { background: var(--c-switch-on); }
+input[role=switch]:checked::after { transform: translateX(14px); }
+input[role=switch]:disabled { opacity: .6; cursor: default; }
+.device { display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
+.device + .device { border-top: 1px solid var(--c-border); }
+.device .glyph { color: var(--c-text-3); flex: 0 0 auto; }
+.device .text { flex: 1; }
+.device .name { font-weight: 500; overflow-wrap: anywhere; }
+.device .meta { display: flex; align-items: center; gap: 6px; color: var(--c-text-2); font-size: 12px; margin-top: 1px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c-text-3); flex: 0 0 8px; }
+.dot[data-tone="on"] { background: var(--c-ok); }
+.dot[data-tone="busy"] { animation: breathe 1.2s ease-in-out infinite; }
+@keyframes breathe { 50% { opacity: .35; } }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.empty { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 32px 20px; gap: 6px; }
+.empty .glyph { color: var(--c-text-3); margin-bottom: 6px; }
+.empty h4 { margin: 0; font-size: 14px; font-weight: 500; }
+.empty p { margin: 0; color: var(--c-text-2); font-size: 12px; max-width: 320px; }
+.empty .btn { margin-top: 12px; }
+.empty .sub { font-size: 12px; color: var(--c-text-2); margin-top: 8px; }
+.empty .sub button { color: var(--c-text); text-decoration: underline; text-underline-offset: 2px; }
+.status { margin: 10px 2px 0; font-size: 12px; color: var(--c-text-2); min-height: 18px; display: flex; align-items: center; gap: 6px; }
+.status:empty { display: none; }
+.status.error { color: var(--c-text); }
+.status.error::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--c-error); flex: 0 0 6px; }
+.more { margin-top: 20px; font-size: 12px; color: var(--c-text-2); }
+.more summary { cursor: pointer; color: var(--c-text-2); }
+.more p { margin: 8px 0 0; line-height: 1.6; }
+@media (max-width: 420px) { body { padding: 12px; } .device { flex-wrap: wrap; } .device .actions { width: 100%; justify-content: flex-start; padding-left: 36px; } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+.memory-choice { width: 100%; min-width: 0; margin: 12px 0; text-align: start; }
+.memory-choice label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; }
+.memory-choice select { max-width: 100%; font: inherit; }
+.memory-choice small { display: block; margin-top: 8px; font-size: 11px; line-height: 1.5; opacity: .7; white-space: normal; }

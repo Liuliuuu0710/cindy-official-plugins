@@ -56,6 +56,7 @@ async function sandbox(t) {
     send:async message => {state.sent.push(message);},
     confirm:async spec => {state.confirmCalls.push(spec);return {ok:true,confirmed:true};},
     node:{request:async ({method,params = {}}) => {
+      if (state.rejectSync && ['setTrustedClients','setPolicy'].includes(method)) throw new Error('worker transport closed');
       if (method === 'setTrustedClients') {
         if (armHold) {armHold=false;reachHold();await new Promise(resolve => {releaseHold=resolve;});}
         return {ok:true,result:{ok:true}};
@@ -150,6 +151,21 @@ test('a transport failure while reading reports unknown, not not_executed',async
   state.rejectNode=false;
   await callTool('browser_status',{});
   assert.equal(state.sent.at(-1).result.ok,true);
+  const guidance=state.sent.at(-1).result.how_to_install;
+  assert.match(guidance,/Directory loading is the only developer fallback included/);
+  assert.doesNotMatch(guidance,/ZIP.*fallback/i);
+});
+
+test('settings sync preserves node unavailability for client guidance',async t=>{
+  const {state,channel}=await sandbox(t);
+  state.rejectSync=true;
+  const id=crypto.randomUUID();
+  const response=channel.nextResponse(id);
+  await channel.onmessage({data:{type:'status-request',id}});
+  const result=await response;
+  assert.equal(result.ok,false,JSON.stringify(result));
+  assert.equal(result.error,'NODE_UNAVAILABLE');
+  assert.equal(result.execution,'not_executed');
 });
 
 test('browser_act validation failures before dispatch are not_executed',async t=>{

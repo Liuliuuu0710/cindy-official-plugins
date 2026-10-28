@@ -1,0 +1,183 @@
+name: PR contributor guidance
+
+# Posts / updates ONE sticky bilingual comment telling contributors exactly what
+# needs action (DCO sign-off or maintainer approval of fork CI). Runtime
+# evidence is assessed during review, not inferred from a checkbox or identity.
+#
+# SECURITY: pull_request_target and workflow_run both run in the base-repo
+# context so they can comment on fork PRs. They therefore MUST NEVER check out,
+# build, install or execute PR code. This job only reads PR metadata through
+# the GitHub API; PR-controlled text (body, commit messages) is read as data by
+# jq and never interpolated into a shell command or `${{ }}` expression.
+# 安全约束：本工作流不 checkout、不执行任何 PR 代码，只读取 PR 元数据并评论。
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+    branches: [main]
+  # Refresh after Verify pull request starts/finishes (including when a
+  # maintainer approves a waiting fork run). Still metadata-only.
+  workflow_run:
+    workflows: ["Verify pull request"]
+    types: [requested, completed]
+
+permissions:
+  contents: read
+  checks: read
+  pull-requests: write
+  issues: write
+  actions: read
+
+concurrency:
+  group: pr-guidance-${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number }}
+  cancel-in-progress: true
+
+jobs:
+  guidance:
+    name: Contributor checklist guidance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: >
+      github.event.pull_request.draft != true &&
+      (
+        github.event_name == 'pull_request_target' ||
+        (
+          github.event_name == 'workflow_run' &&
+          github.event.workflow_run.name == 'Verify pull request' &&
+          github.event.workflow_run.event == 'pull_request' &&
+          github.event.workflow_run.pull_requests[0].number > 0
+        )
+      )
+    steps:
+      - name: Build and post checklist comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number }}
+        run: |
+          set -euo pipefail
+          marker='<!-- cindy-pr-guidance -->'
+          if [[ -z "${PR}" || "${PR}" == "null" ]]; then
+            echo "No pull request associated with this event; skipping."
+            exit 0
+          fi
+
+          # Always fetch live PR metadata this run (never reuse a previous
+          # comment's commit list, body, or head SHA).
+          gh api "repos/${REPO}/pulls/${PR}" > pull.json
+          if [[ "$(jq -r '.draft' pull.json)" == "true" ]]; then
+            echo "Draft pull request; skipping."
+            exit 0
+          fi
+          author="$(jq -r '.user.login' pull.json)"
+          HEAD_SHA="$(jq -r '.head.sha' pull.json)"
+          if [[ ! "${HEAD_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Unexpected pull request head SHA; skipping."
+            exit 1
+          fi
+
+          todo=()
+
+          # Recompute DCO from the current PR commits this run. Merge/bot
+          # commits are exempt. A remediation commit only covers a SHA when
+          # the name+email on the CONTRIBUTING line match the original commit
+          # author (and, for "I, …", the remediating commit author).
+          # --paginate prints one JSON array per page; slurp+add into a single
+          # list before matching so a remediation on a later page can cover an
+          # unsigned commit on an earlier page.
+          gh api "repos/${REPO}/pulls/${PR}/commits" --paginate > commits-pages.json
+          jq -s 'add // []' commits-pages.json > commits.json
+          dco_conclusion="$(
+            gh api "repos/${REPO}/commits/${HEAD_SHA}/check-runs?per_page=100" > check-runs.json 2>/dev/null \
+              && jq -r '[.check_runs[] | select((.app.slug // "") == "dco" or .name == "DCO")] | first | .conclusion // "none"' check-runs.json \
+              || echo none
+          )"
+          jq -r '
+            def is_merge: (.parents | length) > 1;
+            def is_bot:
+              ((.author.login // "") | test("\\[bot\\]$"))
+              or ((.author.type // "") == "Bot");
+            def ident($c): "\($c.name) <\($c.email)>";
+            def author_ident: ident(.commit.author);
+            def committer_ident: ident(.commit.committer // {name: "", email: ""});
+            def signoff_idents:
+              [ .commit.message | scan("(?m)^Signed-off-by: (.+) <(.+)>$") | "\(.[0]) <\(.[1])>" ];
+            def has_matching_signoff:
+              author_ident as $a
+              | committer_ident as $c
+              | signoff_idents as $s
+              | (($s | index($a)) != null)
+                or (($s | index($c)) != null);
+            . as $all
+            | ($all | map({key: .sha, value: author_ident}) | from_entries) as $authors
+            | [
+                $all[]
+                | select(has_matching_signoff)
+                | . as $rem
+                | $rem | author_ident as $me
+                | (
+                    [
+                      ($rem.commit.message | scan("(?m)^I, (.+) <(.+)>, hereby add my Signed-off-by to this commit: ([0-9a-f]{40})$"))
+                      | select(("\(.[0]) <\(.[1])>" == $me) and (($authors[.[2]] // "") == $me))
+                      | .[2]
+                    ],
+                    [
+                      ($rem.commit.message | scan("(?m)^On behalf of (.+) <(.+)>, I, (.+) <(.+)>, hereby add my Signed-off-by to this commit: ([0-9a-f]{40})$"))
+                      | select(("\(.[2]) <\(.[3])>" == $me) and (($authors[.[4]] // "") == "\(.[0]) <\(.[1])>"))
+                      | .[4]
+                    ]
+                  )[]
+              ] as $remediated
+            | [
+                $all[]
+                | select((is_merge or is_bot or has_matching_signoff) | not)
+                | .sha
+              ] - $remediated
+            | .[]
+          ' commits.json > still-unsigned.txt
+          unsigned=""
+          if [[ "${dco_conclusion}" != "success" && -s still-unsigned.txt ]]; then
+            unsigned="$(awk '{ print substr($0, 1, 7) }' still-unsigned.txt | tr '\n' ' ')"
+          fi
+          if [[ -n "${unsigned// }" ]]; then
+            todo+=("Commits without DCO sign-off: \`${unsigned% }\`. Use \`git commit -s\`, or push a remediation commit as described in CONTRIBUTING (DCO section). / 以下 commit 缺少 DCO 签名，用 \`git commit -s\` 或按 CONTRIBUTING 的 DCO 一节推一个补签 commit。")
+          fi
+
+          verify_status="none"
+          verify_conclusion="none"
+          for _ in 1 2 3 4 5; do
+            gh api "repos/${REPO}/actions/runs?head_sha=${HEAD_SHA}&event=pull_request" > runs.json || true
+            verify_status="$(jq -r '[.workflow_runs[] | select(.name == "Verify pull request")] | first | .status // "none"' runs.json 2>/dev/null || echo none)"
+            verify_conclusion="$(jq -r '[.workflow_runs[] | select(.name == "Verify pull request")] | first | .conclusion // "none"' runs.json 2>/dev/null || echo none)"
+            if [[ "${verify_status}" != "none" ]]; then
+              break
+            fi
+            sleep "${GUIDANCE_RETRY_SLEEP:-2}"
+          done
+          if [[ "${verify_status}" == "waiting" || "${verify_conclusion}" == "action_required" ]]; then
+            todo+=("CI (*Verify pull request*) is waiting for a maintainer to approve workflows for this fork PR — nothing for you to fix; maintainer action is required. / CI 正在等待维护者批准 fork PR 的工作流运行，你无需操作。")
+          fi
+
+          {
+            echo "${marker}"
+            echo "### 🤖 Contributor checklist / 贡献检查清单"
+            echo
+            if [[ ${#todo[@]} -eq 0 ]]; then
+              echo "✅ No DCO or fork-run action detected. See **Verify pull request** for build results. Runtime evidence and applicable approvals are assessed in review; this comment is not merge approval. / 未发现 DCO 或 fork 运行待办；构建结果见 **Verify pull request**。运行证据和适用批准由 review 核对，本评论不代表可合并。"
+            else
+              echo "Hi @${author}, the following items are still open / 以下事项尚待处理："
+              echo
+              for item in "${todo[@]}"; do echo "- [ ] ${item}"; done
+              echo
+              echo "Version bump (\`ghost.json\` \`version\` > main), tests and packaging are checked by **Verify pull request**; open its failed step for the exact message. / 版本号 bump、测试与打包由 **Verify pull request** 检查，失败时点开对应步骤查看具体原因。"
+            fi
+            echo
+            echo "<sub>Updated automatically for ${HEAD_SHA:0:7}. See CONTRIBUTING.md / CONTRIBUTING.zh-CN.md. 本评论自动更新。</sub>"
+          } > comment.md
+
+          existing="$(gh api "repos/${REPO}/issues/${PR}/comments" --paginate \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"${marker}\"))) | .id" | head -n1)"
+          if [[ -n "${existing}" ]]; then
+            gh api -X PATCH "repos/${REPO}/issues/comments/${existing}" -F body=@comment.md --silent
+          else
+            gh api -X POST "repos/${REPO}/issues/${PR}/comments" -F body=@comment.md --silent
+          fi

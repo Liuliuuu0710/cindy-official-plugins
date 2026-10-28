@@ -20,7 +20,7 @@
 
 **首轮素材说明 — 用户首次询问新游戏创建流程或所需资料时,在当前唯一确认问题之外主动说明后续素材类别,并直接提供 TapTap 官方素材规范;官方入口为 `https://developer.taptap.cn/docs/store/release/publish/material/`,面向用户时按共享规范单独一行输出。规范来源、appId 前后处理和冲突口径统一按游戏物料要求(`ghost_manual({ghost_id:"taptap-cli", path:"taptap-suite/references/material-requirements.md"})`)执行。**
 
-**创建后素材提醒 — 创建成功拿到 `appId` 后,必须在同一轮 handoff 主动提示用户按规范完善游戏图标、简介、开发者的话、游戏截图、宣传图、实机视频及当前页面可见且适用的首页推荐素材选项。系统默认图标仅用于完成游戏创建,不代表已通过素材审核。是否构成提审 blocker 必须按当前字段 `required`、服务端预检结果或适用的官方物料要求判断,不得把整张清单无条件标为必填。**
+**创建后素材提醒 — 创建成功拿到 `appId` 后,必须在同一轮 handoff 主动提示用户按规范完善游戏图标、简介、开发者的话、游戏截图、宣传图、实机视频及当前页面可见且适用的首页推荐素材选项。系统默认图标仅用于完成游戏创建,不代表已通过素材审核。是否构成提审 blocker 必须按当前字段 `state="required"`、服务端预检结果或适用的官方物料要求判断,不得把整张清单无条件标为必填。**
 
 ### 创建快速决策
 
@@ -109,7 +109,7 @@
 - 提审意图必须单独确认:泛化准备请求和"正式上线"目标只能触发准备状态检查或提审选项提示;只有用户明确表达"提交审核 / 提审"后才可调用 `app prepare-review-snapshot`,预审结果后仍须再次确认才可调用 `app submit-app-review`。
 - 提审固定三步:`app prepare-review-snapshot`(read)→ `app precheck-app-review`(read)→ 用户最终确认后 `app submit-app-review`(write,`yes:true` + 稳定幂等键)。`release_schedule` 只在第 2、3 步传递且必须完全相同(第 1 步不接受);上线方式只支持立即上线或精确定时,模糊季度/档期必须追问具体时间或改为立即上线。任一步 `version_id` 与第一步不一致时回到第一步重读,禁止沿用旧快照。
 - 普通游戏提审前同时检查上架资质和开发者认证;未认证时按服务端 blocker 停止提审并引导办理。关卡游戏是否豁免以服务端当次返回为准。
-- 正式预检成功(`preaudit_passed=true` 且 `blockers` 为空)时,面向用户固定展示"阻塞项:无"和"提交状态:可提交审核";不成功时逐项展示 `blockers` / `warnings` 并询问是否「强制提交」(预检可跳过)。`preaudit_passed` 仅用于内部判断,不得原样输出 `Blocker`、`preaudit_passed=true` 等机器字段;复核返回风险数据不可用且要求确认时展示 warning,`yes:true` 不代表已核对。
+- 预检 HTTP 200 / 顶层成功不等于内容预审通过;分别解释预审结果、阻断项和风险。预审不通过本身不禁止提审,展示问题后用户明确继续/「强制提交」即可进入提交,由服务端裁决。仅在本次 `blockers` 明确为空时说"阻塞项:无";预审通过且无阻断时说明"提交状态:可提交审核",预审未通过时同时说明内容风险。不得原样输出 `Blocker`、`preaudit_passed=true` 等机器字段;完整组合见 audit and history 手册(`ghost_manual({ghost_id:"taptap-cli", path:"taptap-suite/references/taptap-app-edit/references/app-edit-audit-and-history.md"})`);复核返回风险数据不可用且要求确认时展示 warning,`yes:true` 不代表已核对。
 - `precheck-app-review` 不再返回 `required_consents`。SCE《创意工坊内容授权协议》改由 `analyze-app-status` 提前暴露:关卡 / TapTap 制造游戏未签署时返回 `SCE_AGREEMENT_REQUIRED` blocker,体检阶段就展示协议名称与 url,用户明确同意后调 `app agree-sce-agreement`,再重查确认 blocker 消失;`yes:true` 不代表协议同意。
 - 发布前逐项说明可见 `region_flag_*` 的真实状态。统一说明:"发布版本不会自动改变分发入口状态。当前仍是'敬请期待'的入口,发布后也会保持'敬请期待';如需开放下载或游玩,请在提审前先调整对应分发状态,随本次版本一起审核生效。"
 - 生命周期动作先用 `app list-app-versions` / `app get-app-version` 读取当前状态;业务事件以 `get-app-version` 的 `last_event`(或 `logs[].event`)为准,`schedule_cancelled` 不是审核驳回。定时版本通常由平台自动发布;若 `status="scheduled"` 且 `release_time <= 当前时间` 仍未上线,可在展示影响并取得明确确认后调用 `app publish-scheduled-release`,成功后重新读取版本与分发状态。人工确认后状态漂移必须重新读取。

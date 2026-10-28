@@ -1,0 +1,299 @@
+{
+  "schemaVersion": 3,
+  "minCindyVersion": "0.1.114",
+  "id": "cindy-ping",
+  "name": "Cindy Ping",
+  "description": "戳一下猫，给 Cindy 发个 Ping。你正在看的东西、要交代的事，一起捎过去，Cindy 收到后接着做。当前仅支持 macOS 14+。",
+  "whenToUse": "在鼠标位置立即发表情；采集原窗口内容后，按表情配置选择或直达项目、任务和伙伴。当前版本仅支持 macOS 14+ 设备。",
+  "version": "0.3.10",
+  "releaseNotes": "更新插件介绍；优化逐表情模型选择，支持搜索、来源分组与紧凑调参，显示供应商来源图标。",
+  "kind": "chip",
+  "entry": "main.js",
+  "launch": "resident",
+  "settingsHtml": "settings.html",
+  "agent": { "tasks": true, "targets": true },
+  "showTaskPreferences": false,
+  "locales": { "en": "locales/en.json", "zh-CN": "locales/zh-CN.json", "ja": "locales/ja.json", "ko": "locales/ko.json" },
+  "icon": "assets/icon.png",
+  "tools": [
+    {
+      "name": "status",
+      "description": "只读查看轮盘、窗口取材权限与最近投递状态。当前版本仅支持 macOS 14+ 设备。每个表情可选择新建项目任务、向已有任务补充信息或发送给伙伴，目标支持每次选择和预先指定；需要支持 cindy.targets 的客户端。旧配置保留原自有任务方式。只展示不取材；动作可产生模型费用，截图通过 Cindy 媒体链路作为消息附件，窗口文字与落点直接进入正文，不返回任务历史。",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_config",
+      "description": "读取 Cindy Ping 的完整当前配置和 revision。配置前先调用本工具，保留用户未要求改变的字段；默认不含任务指令模板。",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "configure",
+      "description": "Agent 修改 Cindy Ping 的轮盘、逐表情图案／指令／动作／模型／目标、插话或排队，以及快捷键。先 get_config，将其完整 config 只改用户要求的字段，再携带返回的 revision 提交。新增表情默认 action=none、prompt为空；至少四项，增删时显式安排无重复的角度，已 Pin 的角度保留。固定目标先 list_targets 获取准确 kind/id，显式模型先 list_models。状态已被界面修改时返回 STALE_REVISION，必须重新读取，不能覆盖旧快照。仅保存配置，不立即发表情、取材、创建任务或发送消息。",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision",
+          "config"
+        ],
+        "properties": {
+          "revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "config": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "version",
+              "emotes",
+              "wheelShortcut"
+            ],
+            "properties": {
+              "version": {
+                "const": 2
+              },
+              "emotes": {
+                "type": "array",
+                "minItems": 4,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "id",
+                    "label",
+                    "emoji",
+                    "action"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z0-9_-]{1,64}$"
+                    },
+                    "label": {
+                      "type": "string",
+                      "maxLength": 40
+                    },
+                    "emoji": {
+                      "type": "string",
+                      "maxLength": 32
+                    },
+                    "imagePath": {
+                      "type": "string",
+                      "maxLength": 4096
+                    },
+                    "action": {
+                      "enum": [
+                        "none",
+                        "new",
+                        "existing",
+                        "bot"
+                      ]
+                    },
+                    "prompt": {
+                      "type": "string",
+                      "maxLength": 8000
+                    },
+                    "taskId": {
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "screenshot": {
+                      "type": "boolean"
+                    },
+                    "route": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "agentKind",
+                            "providerId",
+                            "model",
+                            "effort",
+                            "fastMode"
+                          ],
+                          "properties": {
+                            "agentKind": {
+                              "enum": [
+                                "cc",
+                                "codex",
+                                "pi"
+                              ]
+                            },
+                            "providerId": {
+                              "type": "string",
+                              "maxLength": 128
+                            },
+                            "model": {
+                              "type": "string",
+                              "maxLength": 256
+                            },
+                            "effort": {
+                              "type": "string",
+                              "maxLength": 32
+                            },
+                            "fastMode": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "const": "ultrafast"
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "target": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "mode"
+                          ],
+                          "properties": {
+                            "mode": {
+                              "enum": [
+                                "pick",
+                                "recent",
+                                "fixed"
+                              ]
+                            },
+                            "ref": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "kind",
+                                "id"
+                              ],
+                              "properties": {
+                                "kind": {
+                                  "enum": [
+                                    "project",
+                                    "task",
+                                    "bot"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "maxLength": 8192
+                                }
+                              }
+                            },
+                            "label": {
+                              "type": "string",
+                              "maxLength": 200
+                            },
+                            "bindingId": {
+                              "type": "string",
+                              "maxLength": 200
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "delivery": {
+                      "enum": [
+                        "queue",
+                        "steer"
+                      ]
+                    },
+                    "angle": {
+                      "type": "number",
+                      "minimum": 0,
+                      "exclusiveMaximum": 360
+                    },
+                    "pinAngle": {
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "exclusiveMaximum": 360
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "wheelShortcut": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "code",
+                  "modifiers"
+                ],
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "description": "KeyboardEvent.code，例如 KeyG；默认 Command+G 为 code=KeyG、modifiers=8。"
+                  },
+                  "modifiers": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 15,
+                    "description": "Control=1、Option=2、Shift=4、Command=8，位或组合。"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "list_targets",
+      "description": "只读查询可配置的项目、会话或伙伴，返回准确 kind/id、名称和说明；宿主按活动顺序排列，不含消息历史。用于固定目标配置，禁止仅根据名称猜测 ID。",
+      "parameters": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "project",
+              "task",
+              "bot"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "list_models",
+      "description": "只读查询插件当前可用模型及完整 route、推理强度和 Fast 能力；配置模型时沿用返回的真实标识，不猜模型或供应商。",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    }
+  ],
+  "node": {
+    "entry": "node/worker.cjs",
+    "protocol": "json-rpc-stdio",
+    "lifecycle": "resident"
+  }
+}

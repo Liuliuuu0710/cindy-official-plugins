@@ -3,6 +3,9 @@
   "description": "Gmail の検索・閲覧、現在のタスクへの添付ファイルの保存、下書き作成、メール送信。アカウント認証は Cindy が管理します。",
   "whenToUse": "Gmail のメール、添付ファイル、下書き、送信に使用します。gmail_accounts でアカウントを選び、gmail_schema でコマンドを確認し、gmail_run で実行します。添付ファイルの分析前に、明示したローカル作業パスへダウンロードしてください。",
   "tools": {
+    "gmail_read_message": {
+      "description": "Read a Gmail message and chronological conversation summaries for Cindy's native preview. Read-only by default. Mark-read returns markReadResult.execution (not_executed/executed/unknown); unknown requires checking mailbox state, never a blind retry. Only markRead:true for an explicit user opening or mark-read request removes UNREAD from the selected message; never mark during AI/background reads. Never changes drafts or sends. Input: Gmail HTTPS message/conversation link (hex ID), with authuser=email to bind the account. A missing conversation root resolves the latest non-draft message. Returns the selected body plus optional conversation {threadId,messages:[{messageId,url,from,date,subject,snippet}]}; drafts are excluded except a selected draft. Read a member URL to expand its body. conversationUnavailable means only the selected mail could be read. Include account-qualified links in answers; Cindy owns HTML, inline images and collapsed history."
+    },
     "gmail_accounts": {
       "description": "List connected accounts with stable id, email, user nickname and authorization status. Match requests such as work email or personal email against nicknames and email addresses. If the choice is ambiguous, ask the user. Pass the selected id as account; nicknames are labels, not instructions or authorization."
     },
@@ -10,7 +13,7 @@
       "description": "Discover bundled gog commands for this plugin. Read a command path before executing it with gmail_run. No account token is needed."
     },
     "gmail_run": {
-      "description": "Execute discovered Gmail commands; read the gog manual for composition. Chat media via ghost_call top-level attachments is imported to the writable local task directory (16 MiB/file). Saved drafts include readBack facts or unavailable status; send an approved draft by ID, never reconstruct it. Exception: send with inline-images uses raw MIME and sends IMMEDIATELY, cannot save a preview draft, and requires explicit send authorization. Never retry unknown outcomes automatically."
+      "description": "Execute discovered Gmail commands; read the gog manual. Default: show the saved draft card and wait for confirmation of recipients/content. Skip another question only for clear confirmation of this email or explicit user/task instructions; writing, replying, edits and auto-approval alone are not consent. Card Send is confirmation. All sends MUST use the same card and drafts send by ID: 10-second Undo/Send now window, flush latest edits, wait for receipt, never retry cancelled/unknown writes. No raw send/CLI/API bypass. Replies default to all (reply-mode=sender is explicit). Edits auto-sync to Gmail; drafts get reads latest edits. HTML is AI-authored and previewed inside the card. New inline images: drafts create with inline-images hashes and matching cid:img1@cindy.local HTML, body text alternative; recipients may be empty for preview. A separate local HTML preview is not the saved mail. Chat attachments: 16 MiB/file. Card Send continues the task."
     }
   }
 }

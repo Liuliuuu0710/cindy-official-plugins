@@ -63,6 +63,11 @@
       root: d.root,
       readOnly: false,
       locale: await hostLocale(),
+      // This record came from Host-private storage, never tool arguments or
+      // the authored page. It is the second ownership record for old cards.
+      ...(d.initialization !== "pending" ? {
+        registeredDraft: { id: d.id, sessionId: d.sessionId, root: d.root, file: d.file },
+      } : {}),
     });
   }
   function requireReady(d) {
@@ -99,7 +104,7 @@
     if (!ref || !msg.sessionId || ref.sessionId !== msg.sessionId)
       throw Error("Card session binding mismatch; preview was not opened.");
     const d = await read(stateKey(ref.sessionId));
-    if (!d || d.id !== ref.draftId)
+    if (!d || d.id !== ref.draftId || d.sessionId !== ref.sessionId)
       throw Error(
         "Draft binding unavailable. Reopen from its original conversation.",
       );

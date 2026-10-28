@@ -1,6 +1,7 @@
 import './opendesign/session.cjs';
 import './opendesign/worker.cjs';
 import './opendesign/feedback.cjs';
+import './opendesign/recovery.cjs';
 
 import assert from 'node:assert/strict';
 import test from 'node:test';

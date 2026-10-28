@@ -17,8 +17,9 @@
 > | `taptap-qualification` | `taptap-suite/references/taptap-qualification` |
 > | `taptap-package-management` | `taptap-suite/references/taptap-package-management` |
 > | `taptap-test-plan` | `taptap-suite/references/taptap-test-plan` |
-| `taptap-dashboard-stats` | `taptap-suite/references/taptap-dashboard-stats` |
-| `taptap-player-feedback` | `taptap-suite/references/taptap-player-feedback` |
+> | `taptap-dashboard-stats` | `taptap-suite/references/taptap-dashboard-stats` |
+> | `taptap-player-feedback` | `taptap-suite/references/taptap-player-feedback` |
+> | `taptap-community-management` | `taptap-suite/references/taptap-community-management/MANUAL.md` |
 >
 > **两层手册**:本插件的手册是**执行纪律层**——它规定怎么经 `call_tool` 调、写门禁怎么走、失败三态怎么读,冲突时一律以它为准。
 > 需要 CLI 自带的官方原文(安装 CLI 时内置,随 CLI 版本更新)作为**深入参考**时,用:
@@ -30,7 +31,7 @@
 > **在 Cindy 里处理 TapTap 业务,一律以本插件的手册为准。**
 >
 > 本机可能因为安装 CLI 而存在官方 Skill,形态取决于 CLI 的 skills 布局:
-> - **separate 布局**(默认):11 个独立 skill,名字是 `taptap-app-edit`、`taptap-test-plan` 等;
+> - **separate 布局**(默认):12 个独立 skill,名字是 `taptap-app-edit`、`taptap-test-plan` 等;
 > - **suite 布局**:只有 1 个 `taptap-suite`,子能力收在它的 `references/taptap-xxx/SKILL.md`。
 >
 > 两种布局描述的都是同一套流程,但其中的命令示例必须按上方映射表经 `call_tool` 执行,**不要照着它用 Bash 直接跑 taptap-cli**——那会绕过本插件的写门禁、只读限制和失败三态。遇到正文里的 `taptap-xxx` 名称时,一律按本表转成本插件手册,不要去查找或改读这些 Skill。
@@ -54,6 +55,8 @@
 
 **CRITICAL — 不可逆写和高影响写必须先 `dry_run: true` 预览或拿到用户明确确认,再以相同参数加 `yes: true` 执行。插件对 write / high-risk-write 操作内置了门禁:既没有 `dry_run` 也没有 `yes` 的写调用会被拒绝(CONFIRM_REQUIRED),只读会话里的写操作一律拒绝。是否已取得用户同意由你负责,`yes` 是执行开关而不是同意本身。例外:`auth login-start` / `auth login-wait` 是登录流程本身(用户在浏览器里完成授权),不走这道确认门禁;只读会话仍然拒绝它们。**
 
+**CRITICAL — 返回结果里的 `_notice.update` / `_notice.skills` / `_notice.update_check`（成功时在 `result.envelope._notice`，失败时在 `data._notice`；`auth login-start` / `auth login-wait` 成功时在 `result._notice`）是升级提示,不是业务失败:在业务步骤完成后处理,不要在上传、绑定或提审中途更换二进制。升级与 `taptap-cli update --check --json` 由用户在终端执行(本插件不提供 CLI 自更新),不要用 Bash 绕过本插件;完整规则见共享执行规范「升级通知」。**
+
 **CRITICAL — `yes: true` 不代表用户同意协议,也不代表用户已核对提审风险。遇到服务端要求额外确认时只展示响应实际返回的 `blockers` / `warnings`;协议签署走独立的 `agree-sce-agreement`(先展示协议名称与 URL,用户明确同意后加 `yes: true` 执行,再重查确认 blocker 消失)。不得补造本地参数或请求字段。**
 
 **CRITICAL — 登录必须使用插件编排:未登录时先 `call_tool(name:"auth login-start")`,把返回的 `verification_url` 按两行原样提供给用户:第一行仅写"请完成授权:",第二行仅写 URL。不要使用 Markdown 链接语法,也不要重复展示 URL。随后立即执行 `call_tool(name:"auth login-wait", args:{login_handle:"..."})` 持续轮询,不要等待用户回复。不要输出/记录/上报 access token。登录成功后向用户只回复"登录成功"。**
@@ -71,7 +74,9 @@
 | 检索、生成或收录游戏图片素材 | `materials`(第二部分) | 先本地素材后生图;上传执行在第一部分 |
 | 查包体库、线上/待处理包、自测入口 | `packages` | 先读 overview |
 | 查下载、PV、转化、订单、评分统计等数据 | `dashboard-stats` | 先确认指标、维度和时间范围 |
+| 查论坛访问量、活跃用户、内容发布/删除/移动、区间回复新增等论坛数据 | `dashboard-stats`(forum stats) | 用 `get-forum-stats`,先确认 `type`、维度和时间范围 |
 | 查玩家评价正文、差评、官方回复 | `player-feedback` | 先确认时间范围和评分口径 |
+| 查论坛帖子、子版块、帖子正文、一级回复和子回复 | `community-management` | 先确认帖子意图、子版块和时间范围 |
 | 管理测试计划、资格批次、用户资格、激活码 | `test-plan` | 先区分状态层级 |
 
 ## call_tool 返回解读

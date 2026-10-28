@@ -1,5 +1,5 @@
 name: New plugin proposal / 新插件提案
-description: Propose a new official plugin and align on scope before writing code / 提议新的官方插件，动手写代码前先对齐定位与边界
+description: Optional design notes for a new official plugin / 新官方插件的可选设计说明
 labels: [new-plugin]
 body:
   - type: input
@@ -45,10 +45,10 @@ body:
   - type: markdown
     attributes:
       value: |
-        A maintainer will confirm positioning here before you invest in code.
-        Once aligned, follow the full path in
-        [README → Submit your plugin](https://github.com/makecindy/cindy-official-plugins#submit-your-plugin).
+        This issue is optional. Admission and audience are judged against the
+        repository standard; a plugin that fits needs no prior approval from
+        the maintainers. See
+        [Submit your plugin](https://github.com/makecindy/cindy-official-plugins#submit-your-plugin).
 
-        维护者会先在这里确认定位，再建议你投入开发。对齐后按
-        [README → 提交你的插件](https://github.com/makecindy/cindy-official-plugins/blob/main/README.zh-CN.md#提交你的插件)
-        的完整路径推进。
+        本 issue 可选。准入与受众按仓库标准判定；符合标准不需要维护者事先批准。见
+        [提交你的插件](https://github.com/makecindy/cindy-official-plugins/blob/main/README.zh-CN.md#提交你的插件)。

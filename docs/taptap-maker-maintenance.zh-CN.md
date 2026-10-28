@@ -4,8 +4,52 @@
 
 ## 先读结论
 
+### 2.1.25：Runtime 0.0.39 与请求窗口
+
+使用本机缓存中的正式 npm 发布包及独立 0.0.39 配方，保留 V1–V8；
+所有动态工具、工具发现和长耗时账号操作的原 60 秒窗口改为 120 秒。
+短请求仍为 30 秒，既有进度续期及 15 分钟总上限不变，不新增定时心跳。
+没有进度的长调用仍可能超时，不能宣称已支持无限等待。
+
+以 0.0.39 的分叉自动合并及云端脏改动自动提交为准，说明与回归同步新版。
+V9 补齐云端提交未知结果及恢复提示，兼容新旧云端阻塞文本；不增加 Git 实现或重试层。
+V10 保留画布未知请求和识图 pendingId，自动恢复等待超限时暂停；015 的停止入口覆盖准备和恢复等待，停止后迟到回包不得启动后续请求。
+tools/list 内部路由为 115 秒，保留外层 120 秒前的回收余量；云端提交后 merge/HEAD 异常保留 executed。Git 提示改用获授权的通用 Git 同步、maker_build 提交构建和 Maker 项目页面核对云端状态，不推荐不可用的独立 CLI 子命令。
+普通 Git 与 Cindy 保存点继续共用原生仓库，实际验证范围见 PR 运行记录。
+
+### 2.1.19：验证参数与证据边界
+
+验证前只读检查 Git 忽略规则和索引；证据目录未忽略、已有文件被跟踪或检查失败时拒绝派发，
+不自动修改项目忽略规则或索引。按模式拒绝无效参数组合；返回值移除 Runtime 的结构化绝对路径字段，
+保留相对证据位置和磁盘原始报告。
+
+### 2.1.18：大验证报告交付
+
+仅本地验证的 CLI stdout 容量扩大为 8 MiB，以接收 Runtime 允许的 4 MiB 报告及包装；
+账号命令与 stderr 仍维持 2 MiB 上限。超过 64 KiB 的结果返回明确标记的摘要与原始归档路径，
+不把多 MiB 报告复制进 MCP 的 text 和 structuredContent。完整报告仍须从证据文件读取。
+保留 14 分钟 CLI 总时限和宿主 15 分钟上限；单轮预算不承诺所有自动重试都能跑完。
+
+### 2.1.17：Cindy 本地验证入口
+
+`maker_validate` 通过现有固定 Node 入口调用同包 `preview status`、`preview validate`，
+不修改 vendor、独立 MCP 或项目 Skill。Manual 承接 Cindy 的验证工作流；源目录缺失、
+已安装副本和异常链接分别返回。官方 0.0.37 的 Skill 源目录检查与本包相同，
+不能将其直接归为 Cindy 特有缺陷。
+
+必须保留：当前可信工作区覆盖输入、只读拦截、活动/未确认预览不接管；固定 CLI 参数；
+完整终态 JSON 后才回收 Electron CLI；非零退出的有效失败报告及部分证据；
+COMPLETED 不等于 PASS。证据固定归档到项目 `.maker/validation-evidence/`，拒绝目录链接。
+不自动下载安装 Runtime、更新开发工具包或修复项目占用文件。
+验证 CLI 的带值选项使用单个 `--flag=value` 参数；全部选项同时启用时仍须满足
+Cindy childSpawn 的 16 项 argv 上限，避免宿主丢弃请求后表现为启动超时。
+
+前次升级为插件 2.1.22 / Runtime 0.0.37；八项 bundle 补丁见仓库 README，
+另有子进程兼容适配。下文五项补丁清单与实机结果属于
+0.0.33/0.0.34 历史基线，不代表 0.0.37 已完成实机验收。
+
 - 不能为了让 vendor 与官方包完全一致，直接删除 Cindy 的修复。
-- 当前 vendor 有 **五项**兼容补丁，不是只有 executed 一项。
+- 历史 0.0.34 vendor 有 **五项**兼容补丁，不是只有 executed 一项；0.0.37 为八项。
 - **日志没有整体关闭**：移除的是 Cindy 对远端日志 watcher 的接管和空闲回收；watcher 改用系统 Node，由 Maker 管生命周期。
 - PAT 保存和校验已经调用 Maker CLI；Cindy 额外承担状态判断、脱敏、界面和进程兼容，不能把这些全当成重复实现删除。
 - 新版本号或相同关键词不能证明旧问题已修复。必须核对实际发布包和回归行为。
@@ -113,7 +157,7 @@ Skill 写入保护是否有其他等价实现需另做行为核查，不能只�
 | T4 错误三态 | 兼容 structuredContent、remote_result、error_details 和固定错误文本；初始化与重试后 unknown 同样保留并要求先核对远端。 | 891868e、d0b428c、7465ceb；main.js | 脱敏不丢状态、不泄露凭证/路径/堆栈；保留精确积分不足信号，不把普通错误当余额不足。 |
 | T5 状态/目录 | 固定工具映射为 maker_status/maker_build 并从动态入口排除；列表是随包快照。状态摘要有 /tracking 遥测。 | 891868e、bdc6bdd；main.js、manifest、locales | 保留 detail/skip_remote_sync；不宣称零网络，不因列表有工具就跳过账号/项目检查。 |
 | T6 引导 | 独立 CLI/npm/环境变量建议转为 Cindy 入口；区分 Python/LSP 未就绪、已就绪、建议升级；主/子入口设置 cindy_plugin。 | 891868e；main.js、node/maker-mcp.cjs、node/maker-child.cjs | 不误导用户用独立 npm 覆盖随包版本；文字解析是兼容债务，不可直接删除行为。 |
-| U1 构建 UI | 校验官方 maker_url，保留 localDev=1，加 hide_chat=1/sessionId，右侧打开并返回可点击链接。 | 41d53ce、df08857；main.js | 打开预览失败不覆盖构建成功、不重新提交；这是远端预览，不是 UrhoX 本地窗口。 |
+| U1 构建 UI | 校验官方 maker_url，保留 localDev=1，加 hide_chat=1/sessionId，右侧打开（用户关闭 `makerPreviewEnabled` 设置时不打开）并返回可点击链接。 | 41d53ce、df08857；main.js、settings.js | 打开预览失败不覆盖构建成功、不重新提交；设置关闭或读取失败时不打开右侧预览，仍返回链接（`preview.skipped`）；这是远端预览，不是 UrhoX 本地窗口。 |
 | U2 文档/UI | 四语言、错误码映射、Skill 转 Manual、限定 Maker 召回、固定广告指南、UrhoX 标准库限制指引。 | e5e1396、7f00a60、a887ccc、20b0b06 | 不因升级引导 Agent 绕过插件；不是 Runtime 补丁但仍属于交付行为。 |
 
 ## 四、历史分支和已替换方案

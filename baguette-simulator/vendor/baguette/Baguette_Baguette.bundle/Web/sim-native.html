@@ -69,6 +69,17 @@
     overflow: hidden;
     -webkit-user-select: none; user-select: none;
   }
+  /* A Home Screen launch: the iPhone's status bar is translucent over
+     the top of the page and the home indicator over the bottom, so the
+     workbench keeps its 12px inside the safe area rather than under
+     them. sim-native.js sets the attribute and `viewport-fit=cover`,
+     without which every inset reads 0. */
+  #simNativeView[data-standalone] {
+    padding: calc(env(safe-area-inset-top, 0px) + 12px)
+             calc(env(safe-area-inset-right, 0px) + 12px)
+             calc(env(safe-area-inset-bottom, 0px) + 12px)
+             calc(env(safe-area-inset-left, 0px) + 12px);
+  }
   /* Light + dark token blocks. Defined as both a media query (for
      "follow system" mode) and a `data-theme` attribute selector
      (for the manual toggle). The attribute selector has higher
@@ -171,6 +182,12 @@
      what it did at the narrowest widths. */
   #simNativeView {
     --nv-vh: 1vh;
+    /* Where the floating panels start. The toolbar sits in the device's
+       vertically centred column, so in a window taller than the device
+       needs it lands well below the top — `placeFloatingPanels` in
+       sim-native.js moves this under it. 84px is the toolbar-at-top
+       resting place, and the floor. */
+    --nv-panel-top: 84px;
     --nv-device-max-w:    min(100%, 96vw);
     --nv-device-max-h:    calc(100 * var(--nv-vh) - 68px);
     --nv-companion-max-w: min(100%, 720px, 88vw);
@@ -345,7 +362,8 @@
        a level of its own the bar sits at 0, which puts the popover
        under the floating cards (z-index 40) and under the device
        wrapper once `applyOrientation` gives it a transform. 50 clears
-       both; the bar and the cards never overlap geometrically. */
+       both; the cards start below the bar (`--nv-panel-top`), so the
+       two never overlap geometrically. */
     position: relative;
     z-index: 50;
   }
@@ -1095,7 +1113,7 @@
      exact area. */
   #simNativeView .camera-host {
     position: absolute;
-    top: 84px;
+    top: var(--nv-panel-top);
     left: 24px;
     z-index: 40;
     width: 260px;
@@ -1151,11 +1169,11 @@
      .sb-pill …) can't leak into the rest of the focus chrome. */
   #simNativeView .status-bar-host {
     position: absolute;
-    top: 84px;
+    top: var(--nv-panel-top);
     right: 24px;
     z-index: 40;
     width: 332px;
-    max-height: calc(100dvh - 120px);
+    max-height: calc(100dvh - var(--nv-panel-top) - 36px);
     display: flex; flex-direction: column;
     background: var(--nv-bar-bg);
     border: 1px solid var(--nv-bar-border);
@@ -1194,11 +1212,11 @@
      can't leak into the rest of the focus chrome. */
   #simNativeView .network-host {
     position: absolute;
-    top: 84px;
+    top: var(--nv-panel-top);
     right: 24px;
     z-index: 40;
     width: 332px;
-    max-height: calc(100dvh - 120px);
+    max-height: calc(100dvh - var(--nv-panel-top) - 36px);
     display: flex; flex-direction: column;
     background: var(--nv-bar-bg);
     border: 1px solid var(--nv-bar-border);
@@ -1230,6 +1248,279 @@
   #simNativeView .network-host-title svg { color: var(--nv-text-muted); }
   #simNativeView .network-host-close { width: 24px; height: 22px; color: var(--nv-text-muted); }
   #simNativeView #nativeNetworkHost { overflow-y: auto; padding: 2px 14px 12px; }
+
+  /* Notify card — same floating-glass chrome as the network card. Inner
+     styles are scoped under `.notify-host` (.nt-*). */
+  #simNativeView .notify-host {
+    position: absolute;
+    top: var(--nv-panel-top);
+    right: 24px;
+    z-index: 40;
+    width: 332px;
+    max-height: calc(100dvh - var(--nv-panel-top) - 36px);
+    display: flex; flex-direction: column;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 14px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-4px);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+  }
+  #simNativeView[data-notify="open"] .notify-host {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+  #simNativeView .notify-host-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 12px 9px 14px;
+    border-bottom: 1px solid var(--nv-divider);
+  }
+  #simNativeView .notify-host-title {
+    display: inline-flex; align-items: center; gap: 8px;
+    font: 600 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.01em;
+  }
+  #simNativeView .notify-host-title svg { color: var(--nv-text-muted); }
+  #simNativeView .notify-host-close { width: 24px; height: 22px; color: var(--nv-text-muted); }
+  #simNativeView #nativeNotifyHost { overflow-y: auto; padding: 2px 14px 12px; }
+  #simNativeView .notify-host .nt-section { padding: 10px 0 0; display: flex; flex-direction: column; gap: 5px; }
+  #simNativeView .notify-host .nt-label {
+    font: 500 11px/1.2 -apple-system, sans-serif; color: var(--nv-text-muted);
+  }
+  #simNativeView .notify-host .nt-field {
+    width: 100%; box-sizing: border-box; padding: 6px 8px; border-radius: 7px;
+    border: 1px solid var(--nv-bar-border); background: var(--nv-fmt-track-bg); color: var(--nv-text);
+    font: 12px/1.4 -apple-system, sans-serif;
+  }
+  #simNativeView .notify-host .nt-payload {
+    resize: vertical; font: 11.5px/1.45 ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  #simNativeView .notify-host .nt-field:focus { outline: none; border-color: var(--nv-accent); }
+  #simNativeView .notify-host .nt-footer { flex-direction: row; justify-content: flex-end; gap: 6px; }
+  #simNativeView .notify-host .nt-example,
+  #simNativeView .notify-host .nt-send {
+    padding: 5px 12px; border-radius: 7px; border: 1px solid var(--nv-bar-border);
+    background: transparent; color: var(--nv-text); font: 500 12px/1.2 -apple-system, sans-serif; cursor: pointer;
+  }
+  #simNativeView .notify-host .nt-send { background: var(--nv-accent); color: var(--nv-accent-text); border-color: transparent; }
+  #simNativeView .notify-host .nt-result {
+    margin: 10px 0 0; font: 11.5px/1.45 -apple-system, sans-serif; color: var(--nv-text-muted);
+  }
+  #simNativeView .notify-host .nt-result:empty { display: none; }
+  #simNativeView .notify-host .nt-result.error { color: var(--nv-danger); }
+
+  /* Defaults card — same floating-glass chrome as the status-bar and
+     network cards, a little wider for its key / type / value rows. Inner
+     styles are scoped under `.defaults-host` (.df-*). */
+  #simNativeView .defaults-host {
+    position: absolute;
+    top: var(--nv-panel-top);
+    right: 24px;
+    z-index: 40;
+    width: 384px;
+    max-height: calc(100dvh - var(--nv-panel-top) - 36px);
+    display: flex; flex-direction: column;
+    background: var(--nv-bar-bg);
+    border: 1px solid var(--nv-bar-border);
+    border-radius: 14px;
+    box-shadow: var(--nv-bar-shadow), var(--nv-bar-inset);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: var(--nv-text);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-4px);
+    transition: opacity 0.16s ease, transform 0.16s ease;
+  }
+  #simNativeView[data-defaults="open"] .defaults-host {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+  #simNativeView .defaults-host-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 12px 9px 14px;
+    border-bottom: 1px solid var(--nv-divider);
+  }
+  #simNativeView .defaults-host-title {
+    display: inline-flex; align-items: center; gap: 8px;
+    font: 600 13px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    letter-spacing: 0.01em;
+  }
+  #simNativeView .defaults-host-title svg { color: var(--nv-text-muted); }
+  #simNativeView .defaults-host-close { width: 24px; height: 22px; color: var(--nv-text-muted); }
+  #simNativeView #nativeDefaultsHost { overflow-y: auto; padding: 2px 14px 12px; }
+
+  #simNativeView .defaults-host .df-mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  #simNativeView .defaults-host .df-section { padding: 10px 0; border-top: 1px solid var(--nv-divider); }
+  #simNativeView .defaults-host .df-section:first-child { border-top: 0; }
+  #simNativeView .defaults-host .df-title {
+    display: flex; align-items: center; justify-content: space-between; margin: 0 0 8px;
+    color: var(--nv-text-faint);
+    font: 700 9.5px/1 -apple-system, sans-serif; letter-spacing: 0.10em; text-transform: uppercase;
+  }
+  #simNativeView .defaults-host .df-row { display: flex; align-items: center; gap: 10px; min-height: 30px; }
+  #simNativeView .defaults-host .df-row + .df-row { margin-top: 8px; }
+  #simNativeView .defaults-host .df-row[hidden] { display: none; }
+  #simNativeView .defaults-host .df-row > label,
+  #simNativeView .defaults-host .df-row > span:first-child {
+    flex: 0 0 44px; color: var(--nv-text-muted); font: 500 11px/1.2 -apple-system, sans-serif;
+  }
+  #simNativeView .defaults-host .df-other { align-items: flex-start; }
+  #simNativeView .defaults-host .df-other-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+  #simNativeView .defaults-host .df-field {
+    appearance: none; -webkit-appearance: none; flex: 1; min-width: 0; width: 100%; box-sizing: border-box;
+    background: var(--nv-fmt-track-bg); border: 1px solid var(--nv-bar-border);
+    border-radius: 8px; color: var(--nv-text);
+    font: 500 12px/1 -apple-system, sans-serif; padding: 6px 8px;
+  }
+  #simNativeView .defaults-host .df-field.df-mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px; }
+  #simNativeView .defaults-host select.df-field { cursor: pointer; }
+  #simNativeView .defaults-host .df-field:focus,
+  #simNativeView .defaults-host .df-value:focus,
+  #simNativeView .defaults-host textarea:focus { outline: none; border-color: var(--nv-accent); }
+  #simNativeView .defaults-host .df-hint {
+    color: var(--nv-text-muted); font: 400 11px/1.4 -apple-system, sans-serif;
+  }
+  #simNativeView .defaults-host .df-notice {
+    margin: 4px 0 2px; padding: 10px; border-radius: 9px;
+    font: 500 11.5px/1.45 -apple-system, sans-serif;
+  }
+  #simNativeView .defaults-host .df-notice[hidden] { display: none; }
+  #simNativeView .defaults-host .df-notice.df-danger { color: var(--nv-danger); border: 1px solid var(--nv-danger); }
+  #simNativeView .defaults-host .df-notice.df-warn { color: var(--nv-warn); border: 1px solid var(--nv-warn); }
+  #simNativeView .defaults-host .df-notice .df-chip { margin-top: 8px; }
+  #simNativeView .defaults-host .df-item { border-top: 1px solid var(--nv-divider); }
+  #simNativeView .defaults-host .df-item-main {
+    display: grid; grid-template-columns: minmax(0, 1fr) 46px 132px 22px;
+    align-items: center; gap: 8px; min-height: 38px;
+  }
+  #simNativeView .defaults-host .df-key {
+    font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #simNativeView .defaults-host .df-type {
+    justify-self: start; font-size: 10px; padding: 3px 6px; border-radius: 999px;
+    background: var(--nv-fmt-track-bg); color: var(--nv-text-muted);
+  }
+  #simNativeView .defaults-host .df-control {
+    display: flex; justify-content: flex-end; align-items: center; gap: 6px; min-width: 0;
+  }
+  #simNativeView .defaults-host .df-value {
+    width: 100%; min-width: 0; box-sizing: border-box;
+    background: var(--nv-fmt-track-bg); border: 1px solid var(--nv-bar-border);
+    border-radius: 7px; color: var(--nv-text); font-size: 11px; padding: 5px 7px;
+  }
+  #simNativeView .defaults-host .df-value.df-num { text-align: right; }
+  /* Not set: a setting the running app reads that nothing stores. The
+     last column says where its value comes from instead of a delete —
+     there is nothing stored to delete. An untyped one puts its type
+     picker and value on a line of their own. */
+  #simNativeView .defaults-host .df-unset .df-value::placeholder { color: var(--nv-text-faint); font-style: italic; }
+  #simNativeView .defaults-host .df-source {
+    justify-self: center; font-size: 9.5px; font-weight: 600; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--nv-text-faint); cursor: default;
+  }
+  #simNativeView .defaults-host .df-item-pick { grid-template-columns: minmax(0, 1fr) 46px 22px; }
+  #simNativeView .defaults-host .df-item-pick .df-control {
+    grid-column: 1 / -1; grid-row: 2; justify-content: stretch; padding-bottom: 8px;
+  }
+  #simNativeView .defaults-host .df-pick-type { flex: 0 0 76px; width: 76px; }
+  /* Live: the running app watches this key (@AppStorage), so a change
+     reaches it without a relaunch. A dot, not a word, so the key keeps
+     its width. */
+  #simNativeView .defaults-host .df-live-dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--nv-accent); margin: 0 6px 1px 0; vertical-align: middle;
+  }
+  #simNativeView .defaults-host .df-filter { margin-bottom: 10px; }
+  /* Monitor: a value the app itself just wrote fades in from a tint. */
+  #simNativeView .defaults-host .df-flash { animation: df-flash 1.6s ease-out; }
+  @keyframes df-flash {
+    from { background: color-mix(in srgb, var(--nv-accent) 22%, transparent); }
+    to   { background: transparent; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #simNativeView .defaults-host .df-flash { animation: none; outline: 1px solid var(--nv-accent); }
+  }
+  #simNativeView .defaults-host .df-discover {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 2px 0 4px;
+  }
+  #simNativeView .defaults-host .df-value.df-bad { border-color: var(--nv-danger); }
+  #simNativeView .defaults-host .df-row-error {
+    color: var(--nv-danger); font: 500 11px/1.3 -apple-system, sans-serif;
+    text-align: right; padding: 0 30px 8px 0;
+  }
+  #simNativeView .defaults-host .df-size { font-size: 11px; color: var(--nv-text-muted); }
+  #simNativeView .defaults-host .df-chip {
+    display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+    border: 1px solid var(--nv-bar-border); background: var(--nv-fmt-track-bg); color: var(--nv-text);
+    border-radius: 7px; font: 600 10.5px/1 -apple-system, sans-serif; padding: 5px 7px; white-space: nowrap;
+  }
+  #simNativeView .defaults-host .df-chip:hover { background: var(--nv-btn-hover); }
+  #simNativeView .defaults-host .df-chevron { display: inline-flex; transition: transform 0.12s ease; }
+  #simNativeView .defaults-host .df-chevron.df-open { transform: rotate(180deg); }
+  #simNativeView .defaults-host .df-icon {
+    appearance: none; width: 22px; height: 22px; border: 0; border-radius: 6px; cursor: pointer;
+    background: transparent; color: var(--nv-text-faint);
+    display: inline-flex; align-items: center; justify-content: center; padding: 0;
+  }
+  #simNativeView .defaults-host .df-icon:hover { background: var(--nv-btn-hover); color: var(--nv-text); }
+  #simNativeView .defaults-host .df-delete:hover { color: var(--nv-danger); }
+  #simNativeView .defaults-host .df-switch {
+    appearance: none; flex: 0 0 auto; width: 36px; height: 21px; border: 0; border-radius: 999px;
+    padding: 2px; display: flex; justify-content: flex-start; cursor: pointer;
+    background: var(--nv-btn-active); transition: background 0.12s ease;
+  }
+  #simNativeView .defaults-host .df-switch[aria-checked="true"] { justify-content: flex-end; background: var(--nv-accent); }
+  #simNativeView .defaults-host .df-switch span {
+    width: 17px; height: 17px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  }
+  #simNativeView .defaults-host .df-fragment { padding: 0 0 10px; }
+  #simNativeView .defaults-host .df-fragment textarea {
+    width: 100%; box-sizing: border-box; resize: vertical;
+    background: var(--nv-fmt-track-bg); border: 1px solid var(--nv-bar-border); border-radius: 8px;
+    color: var(--nv-text); font-size: 10.5px; line-height: 1.5; padding: 7px 8px;
+  }
+  #simNativeView .defaults-host .df-fragment-foot {
+    display: flex; justify-content: space-between; align-items: center; margin-top: 6px;
+  }
+  #simNativeView .defaults-host .df-empty { padding: 22px 12px; text-align: center; }
+  #simNativeView .defaults-host .df-empty b { display: block; font: 600 12.5px/1.3 -apple-system, sans-serif; margin-bottom: 6px; }
+  #simNativeView .defaults-host .df-add { display: grid; grid-template-columns: minmax(0, 1fr) 76px; gap: 6px; }
+  #simNativeView .defaults-host .df-add-value { grid-template-columns: minmax(0, 1fr) auto; margin-top: 6px; }
+  #simNativeView .defaults-host .df-primary {
+    appearance: none; border: 0; cursor: pointer; background: var(--nv-accent); color: var(--nv-accent-text);
+    border-radius: 8px; font: 600 12px/1 -apple-system, sans-serif; padding: 7px 14px;
+  }
+  #simNativeView .defaults-host .df-primary.df-sm { border-radius: 7px; font-size: 11px; padding: 6px 10px; }
+  #simNativeView .defaults-host .df-secondary {
+    appearance: none; cursor: pointer; border: 1px solid var(--nv-bar-border); background: transparent;
+    color: var(--nv-accent); border-radius: 8px; font: 600 12px/1 -apple-system, sans-serif; padding: 8px;
+  }
+  #simNativeView .defaults-host .df-secondary:hover { background: var(--nv-btn-hover); }
+  #simNativeView .defaults-host .df-secondary.df-sm { font-size: 11px; padding: 6px 10px; }
+  #simNativeView .defaults-host .df-relaunch { display: flex; align-items: flex-start; gap: 10px; }
+  #simNativeView .defaults-host .df-relaunch .df-switch { margin-top: 1px; }
+  #simNativeView .defaults-host .df-relaunch-title { font: 600 12px/1.3 -apple-system, sans-serif; margin-bottom: 2px; }
+  #simNativeView .defaults-host .df-status {
+    display: flex; align-items: center; gap: 6px; margin-top: 10px;
+    color: var(--nv-text-muted); font: 500 11px/1.4 -apple-system, sans-serif;
+  }
+  #simNativeView .defaults-host .df-status:empty { display: none; }
+  #simNativeView .defaults-host .df-status svg { flex: 0 0 auto; color: var(--nv-accent); }
+  #simNativeView .defaults-host .df-status.df-warn {
+    display: block; padding: 10px; border-radius: 9px; border: 1px solid var(--nv-warn); color: var(--nv-text);
+  }
+  #simNativeView .defaults-host .df-status.df-warn .df-primary { margin-top: 8px; }
+  #simNativeView .defaults-host .df-two {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 10px;
+  }
 
   #simNativeView .network-host .nw-section { padding: 10px 0 8px; }
   #simNativeView .network-host .nw-section + .nw-section {
@@ -1319,11 +1610,11 @@
      flips `[data-location="open"]`. */
   #simNativeView .location-host {
     position: absolute;
-    top: 84px;
+    top: var(--nv-panel-top);
     right: 24px;
     z-index: 40;
     width: 360px;
-    max-height: calc(100dvh - 120px);
+    max-height: calc(100dvh - var(--nv-panel-top) - 36px);
     display: flex; flex-direction: column;
     background: var(--nv-bar-bg);
     border: 1px solid var(--nv-bar-border);
@@ -1580,6 +1871,10 @@
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
+    /* Focusable so it takes the keyboard. No ring, like the flat screen:
+       typing is how this surface is used, so a :focus-visible ring would
+       frame the stage whenever you type; the app's own caret shows where. */
+    outline: none;
   }
   #simNativeView .r3d-live-stage[data-mode="pose"] .r3d-live-canvas { cursor: grab; }
   #simNativeView .r3d-live-stage[data-mode="pose"] .r3d-live-canvas:active {
@@ -1920,7 +2215,7 @@
      surfaces a selection — never the toggle itself). */
   #simNativeView .ax-host {
     position: absolute;
-    top: 84px;
+    top: var(--nv-panel-top);
     right: 24px;
     z-index: 40;
     width: 240px;
@@ -1977,7 +2272,7 @@
      The two share every shape below. What tells them apart is one
      thing: the plugin rail's emblem is drawn in the accent, baguette's
      own rail's in the muted text colour. The rails being separate is
-     the trust signal (see docs/features/plugins.md); it doesn't need a
+     the trust signal (see docs/features/plugins/README.md); it doesn't need a
      second colour system on top. */
   #simNativeView .screens-rail,
   #simNativeView .plugin-rail {
@@ -2112,20 +2407,20 @@
   }
 
   /* The open plugin panel. Anchored like the other floating panels
-     (`top: 84px`, the same height budget) but inset from the right far
+     (`top: var(--nv-panel-top)`, the same height budget) but inset from the right far
      enough to clear the rails it opens from, rather than the 24px the
      panels that have no rail beside them use. */
   #simNativeView .plugin-host {
     position: fixed;
-    top: 84px;
+    top: var(--nv-panel-top);
     right: 76px;
     z-index: 40;
     width: 340px;
-    max-height: calc(100dvh - 120px);
+    max-height: calc(100dvh - var(--nv-panel-top) - 36px);
   }
   #simNativeView .plugin-card {
     display: flex; flex-direction: column;
-    max-height: calc(100dvh - 120px);
+    max-height: calc(100dvh - var(--nv-panel-top) - 36px);
     background: var(--nv-bar-bg);
     border: 1px solid var(--nv-bar-border);
     border-radius: 14px;
@@ -2500,7 +2795,7 @@
   /* --- Capture: output size + recording -------------------------------
      One picked size drives both the Screenshot button and the recorder,
      in 2D and in 3D. The vocabulary itself lives in
-     Resources/Web/capture/ (docs/features/capture-size.md); this block
+     Resources/Web/capture/ (docs/features/capture-size/README.md); this block
      is only the focus-mode dressing.
 
      CaptureSizeMenu ships its own stylesheet, written against a generic
@@ -2621,6 +2916,179 @@
     color: #facc15; font: 700 10px -apple-system, sans-serif; letter-spacing: .14em;
   }
   body.preview #simNativeView .preview-banner { display: block; }
+
+  /* --- Handheld ------------------------------------------------------
+     The stream held in the hand. `[data-handheld]` on the root turns
+     the workbench off: everything but the device column and the
+     handheld controls leaves, and #nativeDeviceFrame becomes a black
+     stage over the whole view with the live screen contain-fit in it.
+
+     The bezel image and its hardware-button overlays go — the phone
+     in the hand IS the bezel. The screen's rounded clip goes too: the
+     glass it is shown on already has corners of its own.
+
+     The screen box is sized in JS (`--nv-hh-w` / `--nv-hh-h`, from
+     HandheldMode.fit) rather than here, because it has to fit the
+     ROTATED footprint in landscape, and the rotation degree lives in
+     an inline transform set by `applyOrientation`. Each `!important`
+     below beats an inline style the SDK Bezel writes, or the
+     `--nv-device-max-*` caps above, which are `!important` already. */
+  #simNativeView[data-handheld] > :not(.dual-pane):not(.handheld-ui):not(.handheld-hint),
+  #simNativeView[data-handheld] .dual-pane > :not(.device-column),
+  #simNativeView[data-handheld] .device-column > :not(#nativeDeviceFrame) {
+    display: none !important;
+  }
+  #simNativeView[data-handheld] #nativeDeviceFrame {
+    position: fixed; inset: 0;
+    z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+    background: #000;
+    overflow: hidden;
+    /* The workbench's `--nv-device-max-*` caps are on this element
+       too; the stage is the whole view, not the device's share of it. */
+    max-width: none !important;
+    max-height: none !important;
+    /* The page is a screen, not a document: no pull-to-refresh, no
+       rubber-banding, no double-tap zoom stealing a tap. */
+    touch-action: none;
+    overscroll-behavior: none;
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
+  }
+  #simNativeView[data-handheld] #nativeDeviceFrame > div {
+    width: var(--nv-hh-w, 100vw) !important;
+    height: var(--nv-hh-h, 100vh) !important;
+    max-width: none !important;
+    max-height: none !important;
+    flex: 0 0 auto;
+  }
+  #simNativeView[data-handheld] #nativeDeviceFrame > div > img,
+  #simNativeView[data-handheld] #nativeDeviceFrame > div > button[data-btn] {
+    display: none !important;
+  }
+  #simNativeView[data-handheld] #nativeDeviceFrame > div > div:first-child {
+    left: 0 !important; top: 0 !important;
+    width: 100% !important; height: 100% !important;
+    border-radius: 0 !important;
+    cursor: default !important;
+  }
+  #simNativeView[data-handheld] #nativeDeviceFrame canvas {
+    max-width: none !important;
+    max-height: none !important;
+  }
+
+  /* The way to the controls: one floating button over the stage
+     (`left` / `top` set inline from HandheldButton.place), faded while
+     idle so it reads as part of the glass rather than a control laid
+     over it. `.handheld-ui` spans the view only to carry the phone's
+     safe area as padding, which sim-native.js reads back for the
+     button's travel; it lets every touch through except on its
+     children. */
+  #simNativeView .handheld-ui { display: none; }
+  #simNativeView[data-handheld] .handheld-ui {
+    display: block;
+    position: fixed; inset: 0;
+    z-index: 101;
+    pointer-events: none;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+             env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+  }
+  #simNativeView .handheld-ui .hh-fab {
+    position: absolute; left: 0; top: 0;
+    width: 56px; height: 56px;
+    padding: 0;
+    display: grid; place-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 16px;
+    background: rgba(28, 28, 32, 0.72);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(16px) saturate(1.4);
+    -webkit-backdrop-filter: blur(16px) saturate(1.4);
+    pointer-events: auto;
+    cursor: pointer;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none; user-select: none;
+    opacity: 1;
+    transition: opacity 0.4s ease, left 0.22s cubic-bezier(0.32, 0.72, 0, 1),
+                top 0.22s cubic-bezier(0.32, 0.72, 0, 1), transform 0.12s ease;
+  }
+  /* AssistiveTouch's mark: rings around a white disc. */
+  #simNativeView .handheld-ui .hh-fab > span {
+    display: block; width: 30px; height: 30px; border-radius: 50%;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.22),
+                0 0 0 10px rgba(255, 255, 255, 0.10);
+  }
+  #simNativeView .handheld-ui .hh-fab[data-idle] { opacity: 0.4; }
+  #simNativeView .handheld-ui .hh-fab[data-dragging] { transition: none; transform: scale(1.06); }
+  #simNativeView .handheld-ui .hh-fab:active { transform: scale(0.94); }
+  #simNativeView .handheld-ui[data-open="true"] .hh-fab { opacity: 0; pointer-events: none; }
+
+  #simNativeView .handheld-ui .hh-scrim {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.32);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.18s ease;
+  }
+  #simNativeView .handheld-ui[data-open="true"] .hh-scrim { opacity: 1; pointer-events: auto; }
+
+  #simNativeView .handheld-ui .hh-menu {
+    position: fixed; left: 50%; top: 50%;
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;
+    padding: 12px;
+    border-radius: 30px;
+    background: rgba(24, 24, 28, 0.86);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(22px) saturate(1.5);
+    -webkit-backdrop-filter: blur(22px) saturate(1.5);
+    opacity: 0; transform: translate(-50%, -50%) scale(0.86);
+    pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  #simNativeView .handheld-ui[data-open="true"] .hh-menu {
+    opacity: 1; transform: translate(-50%, -50%); pointer-events: auto;
+  }
+  #simNativeView .handheld-ui .hh-item {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 8px;
+    width: 104px; height: 96px;   /* a thumb, not a cursor */
+    padding: 0; border: 0; border-radius: 20px;
+    background: transparent; color: #f5f5f7;
+    font: 500 12px/1.2 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #simNativeView .handheld-ui .hh-item:active { background: rgba(255, 255, 255, 0.14); }
+
+  #simNativeView .handheld-hint { display: none; }
+  #simNativeView[data-handheld] .handheld-hint:not([hidden]) {
+    display: flex; align-items: center; gap: 10px;
+    position: fixed; z-index: 101;
+    left: 50%; transform: translateX(-50%);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+    width: max-content; max-width: calc(100vw - 32px);
+    box-sizing: border-box;
+    padding: 9px 8px 9px 14px;
+    border-radius: 14px;
+    background: rgba(20, 20, 24, 0.86);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(18px) saturate(1.5);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5);
+    color: #f5f5f7;
+    font: 500 13px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  }
+  #simNativeView .handheld-hint b { font-weight: 650; }
+  #simNativeView .handheld-hint button {
+    flex: 0 0 auto;
+    width: 30px; height: 30px; padding: 0;
+    border: 0; border-radius: 999px;
+    background: rgba(255, 255, 255, 0.1); color: #f5f5f7;
+    font: 600 12px/1 -apple-system, sans-serif;
+    cursor: pointer;
+  }
 </style>
 
 <div id="simNativeView">
@@ -2693,6 +3161,24 @@
         </svg>
       </button>
 
+      <!-- Handheld — the stream held in the hand. Drops the bezel,
+           toolbar and rails and gives the live screen the whole view,
+           the way the phone it is shown on would look. Built for
+           opening this page on a phone; see handheld/handheld-mode.js. -->
+      <button class="ico-btn" id="nativeHandheldToggle"
+              title="Handheld — fill this screen with the simulator"
+              aria-label="Enter handheld mode"
+              onclick="window.__nativeEnterHandheld && window.__nativeEnterHandheld()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" width="17" height="17">
+          <!-- four corners pulled outward: "fill the screen" -->
+          <path d="M4 9V5a1 1 0 0 1 1-1h4"/>
+          <path d="M15 4h4a1 1 0 0 1 1 1v4"/>
+          <path d="M20 15v4a1 1 0 0 1-1 1h-4"/>
+          <path d="M9 20H5a1 1 0 0 1-1-1v-4"/>
+        </svg>
+      </button>
+
 <!-- Accessibility-inspector toggle. When active, a translucent
            overlay tracks the AX node under the cursor; clicking an
            element opens the AX sheet (slides up from the bottom)
@@ -2749,6 +3235,8 @@
         </svg>
       </button>
 
+<!-- Defaults toggle removed in Cindy: the private device set blocks these routes. -->
+
       <button class="ico-btn" id="nativeLocationToggle"
               title="Simulated location"
               aria-label="Toggle simulated location"
@@ -2758,6 +3246,19 @@
           <!-- Map-pin glyph. -->
           <path d="M12 21s7-5.5 7-11a7 7 0 0 0-14 0c0 5.5 7 11 7 11z"/>
           <circle cx="12" cy="10" r="2.5"/>
+        </svg>
+      </button>
+
+<!-- Notify toggle. Opens a card that delivers a remote notification to
+           an app, as if APNs had sent it. Active = card open. Bell glyph. -->
+      <button class="ico-btn" id="nativeNotifyToggle"
+              title="Remote notification"
+              aria-label="Toggle remote notification"
+              onclick="window.__nativeToggleNotify && window.__nativeToggleNotify()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" stroke-linejoin="round" width="17" height="17" aria-hidden="true">
+          <path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/>
+          <path d="M10 20.5a2.2 2.2 0 0 0 4 0"/>
         </svg>
       </button>
 
@@ -2941,6 +3442,71 @@
        container — a transformed ancestor would become the containing
        block for the `position: fixed` plugin panel and flyout inside it,
        which is why it centres with `justify-content` instead. -->
+  <!-- Handheld controls. In handheld mode nothing but the screen is
+       on the glass, so its controls hang off one floating button — the
+       AssistiveTouch idiom an iPhone user already knows. It rests
+       faded against a side edge; drag it anywhere and it settles on the
+       nearer side (HandheldButton, handheld/handheld-button.js). A tap
+       opens the menu over a scrim, so a tap aimed at the menu never
+       lands on the simulator. Shown only while `[data-handheld]` is on
+       the root; sim-native.js places it and wires the drag. -->
+  <div class="handheld-ui" id="nativeHandheldUI" data-open="false">
+    <div class="hh-scrim"
+         onclick="window.__nativeHandheldMenu && window.__nativeHandheldMenu(false)"></div>
+    <button class="hh-fab" id="nativeHandheldFab" type="button"
+            aria-label="Handheld controls" aria-haspopup="menu" aria-expanded="false"><span></span></button>
+    <div class="hh-menu" role="menu" aria-label="Handheld controls">
+      <button class="hh-item" type="button" role="menuitem"
+              onclick="window.__nativeHandheldAction && window.__nativeHandheldAction('home')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" width="26" height="26">
+          <path d="M3 11.2 12 4l9 7.2"/>
+          <path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/>
+        </svg>
+        <span>Home</span>
+      </button>
+      <button class="hh-item" type="button" role="menuitem"
+              onclick="window.__nativeHandheldAction && window.__nativeHandheldAction('app-switcher')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" width="26" height="26">
+          <rect x="3" y="6" width="8" height="12" rx="1.6"/>
+          <rect x="13" y="6" width="8" height="12" rx="1.6"/>
+        </svg>
+        <span>App Switcher</span>
+      </button>
+      <button class="hh-item" type="button" role="menuitem"
+              onclick="window.__nativeHandheldAction && window.__nativeHandheldAction('rotate')">
+        <!-- A plain clockwise arrow: at this size the toolbar's
+             phone-over-arc glyph reads as a microphone. -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" width="26" height="26">
+          <path d="M20 12a8 8 0 1 1-2.34-5.66"/>
+          <polyline points="20 4 20 9 15 9"/>
+        </svg>
+        <span>Rotate</span>
+      </button>
+      <button class="hh-item" type="button" role="menuitem"
+              onclick="window.__nativeHandheldAction && window.__nativeHandheldAction('exit')">
+        <!-- four corners pulled inward: "back to the window" -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" width="26" height="26">
+          <path d="M9 4v4a1 1 0 0 1-1 1H4"/>
+          <path d="M20 9h-4a1 1 0 0 1-1-1V4"/>
+          <path d="M15 20v-4a1 1 0 0 1 1-1h4"/>
+          <path d="M4 15h4a1 1 0 0 1 1 1v4"/>
+        </svg>
+        <span>Exit Handheld</span>
+      </button>
+    </div>
+  </div>
+  <!-- Said once, on an iPhone in a browser tab: the bars around the
+       screen can only go by launching from a Home Screen icon. -->
+  <div class="handheld-hint" id="nativeHandheldHint" role="status" hidden>
+    <span>For full screen, tap <b>Share</b> → <b>Add to Home Screen</b>.</span>
+    <button type="button" aria-label="Dismiss"
+            onclick="window.__nativeHandheldHintClose && window.__nativeHandheldHintClose()">✕</button>
+  </div>
+
   <div class="right-rails" id="nativeRightRails"></div>
 
   <!-- Accessibility-inspector host. sim-native.js mounts an
@@ -3094,6 +3660,55 @@
       </button>
     </header>
     <div id="nativeNetworkHost"></div>
+  </aside>
+
+  <!-- Defaults card. DefaultsPanel (sim-defaults.js) is lazy-mounted into
+       #nativeDefaultsHost on first open; `[data-defaults="open"]` on the root
+       fades it in. -->
+  <aside id="nativeDefaultsSheet" class="defaults-host" aria-hidden="true" inert>
+    <header class="defaults-host-head">
+      <span class="defaults-host-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             width="14" height="14" aria-hidden="true">
+          <rect x="2.5" y="7" width="19" height="10" rx="5"/>
+          <circle cx="16.5" cy="12" r="2.6" fill="currentColor"/>
+        </svg>
+        Defaults
+      </span>
+      <button class="ico-btn defaults-host-close" title="Close app defaults"
+              aria-label="Close app defaults"
+              onclick="window.__nativeToggleDefaults && window.__nativeToggleDefaults()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
+          <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
+        </svg>
+      </button>
+    </header>
+    <div id="nativeDefaultsHost"></div>
+  </aside>
+
+  <!-- Notify card. NotifyPanel (sim-notify.js) is lazy-mounted into
+       #nativeNotifyHost on first open; `[data-notify="open"]` on the root
+       fades it in. -->
+  <aside id="nativeNotifySheet" class="notify-host" aria-hidden="true" inert>
+    <header class="notify-host-head">
+      <span class="notify-host-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+          <path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/>
+        </svg>
+        Notification
+      </span>
+      <button class="ico-btn notify-host-close" title="Close remote notification"
+              aria-label="Close remote notification"
+              onclick="window.__nativeToggleNotify && window.__nativeToggleNotify()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="12" height="12">
+          <path d="M6 6 18 18"/><path d="M18 6 6 18"/>
+        </svg>
+      </button>
+    </header>
+    <div id="nativeNotifyHost"></div>
   </aside>
 
   <!-- Simulated-location card — floating glass panel with a Leaflet map.

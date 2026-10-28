@@ -1,55 +1,61 @@
 {
-  "name": "Baguette 시뮬레이터",
-  "description": "Baguette 독립 iOS 기기를 조작하고 사이드바에서 화면 복구와 키 해제를 수행합니다. Apple Silicon, Xcode 및 설치된 iOS 런타임이 필요합니다. macOS 15.0 이상이 필요합니다.",
-  "whenToUse": "사용자가 Baguette를 명시적으로 선택한 경우에만 사용하세요. 먼저 environment와 devices를 호출하고 로그인된 기기를 재사용하세요. Cindy 내장 기기를 인계받거나 자동 대체하지 마세요. 키 고착은 press(release-input)을 사용하세요. heal은 앱을 종료하므로 사용자 수락이 필요합니다.",
+  "name": "기기 시뮬레이터",
+  "description": "Private iPhone, iPad, Apple TV, Vision Pro and Android devices with shared task views and tools. Idle shutdown preserves data. Apple: macOS 15+, Apple Silicon, Xcode and matching runtimes. Android: Mac, Windows/Linux x64; SDK setup requires consent. Apple backend uses Baguette (Apache-2.0).",
+  "whenToUse": "iPhone/iPad, Apple TV, Vision Pro and Android emulators; App installation and launch, real input, TV remote, Vision spatial gestures, screenshots, UI inspection, state and logs. Use devices first and verify outcomes.",
   "tools": {
     "environment": {
-      "description": "먼저 macOS 15.0 이상인지 확인합니다. 동봉 Baguette, Xcode, 사용 가능한 iOS 런타임과 기종을 읽습니다. 먼저 호출하세요. 의존성을 다운로드하지 않습니다."
+      "description": "iOS / Android 환경, 런타임과 모델을 읽기 전용으로 확인합니다. platforms에 준비 상태와 오류 반환. 기존 기기는 devices부터. Android 부족 구성 요소는 설정에서 용량과 라이선스 확인 후 설치; 이 도구는 다운로드하지 않습니다. iOS, tvOS, visionOS(xrOS 식별자) 런타임과 기종을 포함합니다."
     },
     "devices": {
-      "description": "이 플러그인의 독립 기기와 상태만 나열합니다. 먼저 호출하세요. Cindy 내장 기기는 제어하지 않습니다."
+      "description": "먼저 전용 기기 목록을 확인. tasks/thisTask는 선택만, activeTasks/thisTaskActive는 최근 15분 작업 활동을 표시. usage는 active/idle/unknown, operation은 실행 중 작업. 현재 작업이 최근 사용한 기기를 우선. tasks=0이 비어 있음을 보장하지 않으므로 실행 중이며 활동 불명인 기기는 확인. 조회는 활동을 갱신하지 않음."
     },
-    "create_device": {
-      "description": "적합한 기존 기기가 없거나 병렬 격리가 필요할 때만 독립 기기를 만듭니다. 디스크를 사용합니다. environment의 정확한 식별자를 선택하고 로그인된 기기를 재사용하세요."
+    "device": {
+      "description": "Private devices. create: environment runtime/deviceType, ~7–12GB; reuse first. boot waits; on timeout check state; screenshot=true adds an image. iOS memoryMode: saving (cold-boot default) disables search/health and some game/diagnostic services; standard restores managed services for full acceptance/controllers/saves/DeviceCheck; minimal also affects login/payment/photos/push, only for scoped gameplay/UI. Running mode stays; shutdown before switching. Check memoryMode.mode/verified/limitations (service switches only). shutdown keeps data; rename changes name; erase/delete remove data/device only at user request. activity/release record/end task use for 15min without stopping, require task context, nonexclusive, lost on worker restart. Run switch/idle policy apply. Android import_media: absolute path, image/video ≤128MiB to Downloads; inspect copied/scanRequested/path. screenshot.error, taskBindingError/appContextError and Android completedSteps/failedStep/deviceError retain results; inspect before repeating."
     },
-    "boot": {
-      "description": "독립 기기를 부팅하고 초기화를 최대 약105초 기다립니다. 시간 초과 후 상태를 확인하세요. heal이나 SpringBoard 재시작을 자동 실행하지 않습니다."
-    },
-    "shutdown": {
-      "description": "독립 기기를 종료합니다. 실행 중인 앱은 종료되지만 기기 데이터는 유지됩니다."
-    },
-    "describe_ui": {
-      "description": "레이블과 논리 포인트 좌표가 포함된 접근성 트리를 읽습니다. 입력 전에 관찰하고 빈 트리를 성공으로 판단하지 마세요."
+    "app": {
+      "description": "install: absolute simulator .app/single APK (no AAB/splits). Identical skips; Apple may sync small changes; signing changes fully install. Apple info: metadata only; appPath enables verify=auto (recheck both file trees then reuse full verification), full (checksums), none (metadata). Pending returns job; install_status waits on either job, default85s, ends on completion; devices may wait concurrently. phase is real progress. Only matchesLocal=true confirms; null/unconfirmed never warrants reinstall. launch relaunches by default; arguments/env Apple-only. Check appLaunched/viewer.previewOpened; failed viewing attempts capture, never relaunch. Android failure: inspect launchError/appTerminated/execution. screenshot/record errors preserve success. terminate stops; uninstall deletes app/data; open_url opens links: observe prompts. Container errors do not mean absent. BUSY names device/job. Apple platforms must match; compatible iPad on Vision fully installs. Viewer effects: see viewer."
     },
     "screenshot": {
-      "description": "스크린샷을 저장하고 절대 경로를 반환합니다. 이미지 도구로 확인하세요. 분석 시 이미지가 모델로 전송될 수 있습니다."
+      "description": "Capture the upright screen; supported Cindy hosts attach an image, otherwise open path with an image tool. Default: 1 pixel=1 view point; grid=true adds labelled coordinates, region crops, scale 2–3 adds detail (divide coordinates by scale and add region origin). iOS adds corner/Dynamic Island masks by default. Android returns a rectangular framebuffer without added physical corner/cutout masks; it does not verify physical occlusion or safe areas. corners is iOS-only; Android accepts omitted/false and rejects explicit true before reading the screen. capturedAt dates the frame; screenshotAttached=false means open path. Reuse adequate returned evidence to check the goal."
     },
-    "heal": {
-      "description": "iOS 27 Device Hub 입력 장애를 명시적으로 복구합니다. SpringBoard가 재시작되고 앱이 종료되므로 사용자가 영향을 수락한 경우에만 호출하세요. 키 고착은 먼저 press(release-input)을 사용하세요."
+    "describe_ui": {
+      "description": "화면의 요소(접근성 트리)를 읽습니다. 기본은 읽는 순서의 간단한 목록으로 역할, 텍스트, id, 뷰 포인트 frame과 center(center를 바로 탭 가능). query/role로 거르고, x,y는 그 지점의 요소, mode=full은 전체 트리. 접근성이 없는 게임이나 직접 그린 UI는 화면의 글자를 읽어 위치와 함께 반환합니다(source=ocr). 글자 없는 아이콘은 screenshot으로 보세요. OCR 실패는 오류로 반환하며, 글자가 없다는 뜻이 아닙니다. tvOS/visionOS는 모든 모드(full 및 x,y 지점 조회 포함)에서 OCR 텍스트 목록을 반환하며 접근성 트리나 요소 ID는 제공하지 않습니다. Apple TV는 리모컨으로 조작하세요."
     },
     "tap": {
-      "description": "관찰한 위치를 탭하거나 길게 누릅니다. 좌표와 화면 크기는 논리 포인트입니다. 이후 결과를 관찰하세요."
+      "description": "시뮬레이터의 시스템 터치 경로로 하는 실제 터치. 창이 필요 없고 Mac이 잠겨 있어도 되며 App은 손가락 터치로 받습니다. text나 id(role, nth 가능)로 요소를 지정(게임에서는 화면에서 읽은 글자와 일치), 또는 x,y 뷰 포인트(본 뒤 화면이 회전했으면 잘못 누르지 않고 다시 보라고 알림). count=2는 두 번 탭, duration≥0.5는 길게 누르기. 기본적으로 약 0.6초 뒤 새 요소를 반환(observe=ui), observe=screenshot이면 스크린샷 첨부. App 프로세스에 이벤트를 주입하지 마세요. until=텍스트는 그 글자가 나타날 때까지 기다린 뒤 반환합니다(다음 페이지, 대화상자). settle을 추측하는 것보다 정확합니다. settle은 0–5초, 기본 0.6. 긴 전환은 until 또는 wait_for 사용. Vision Pro는 화면 좌표를 한 손 핀치 선택·길게 누르기로 변환합니다. Apple TV는 press를 사용하세요. Post-input observation has a 12s budget (until adds up to 15s); execution/timing survive failure. Retry observation only. Games may use screenshots without an accessibility tree. Reuse the returned frame."
     },
-    "swipe": {
-      "description": "관찰한 좌표 사이를 스와이프합니다. 논리 포인트를 사용하고 이후 결과를 관찰하세요."
+    "gesture": {
+      "description": "스크린샷 좌표로 조작합니다. swipe: from→to 또는 direction, drag: hold초 후 이동, pinch: center/from_spread→to_spread, pan: from/by. iOS는 edge와 scroll_to도 지원합니다. Vision은 swipe/drag/pinch/pan, 깊이 이동·회전·카메라는 kind=spatial을 사용합니다. TV는 press. observe/until은 tap과 같습니다. Vision Pro: gaze 시선, drag 집어서 이동(depth는 미터), pinch 양손 확대/축소(scale), rotate 양손 회전(angle은 도). tilt/pan/orbit/dolly/move/reset은 카메라 조작. from/to/center는 화면 좌표. by는 tilt/orbit에서 도, pan에서 [오른쪽,위] 미터(2축만), move에서 [오른쪽,위,뒤] 미터. 앞뒤 이동은 move 또는 dolly를 사용합니다. dolly distance 음수는 앞으로 이동. 카메라 이동 후 다시 촬영하세요. observe/until은 tap과 같습니다. settle is 0–5 seconds, default 0.6; use until or wait_for for longer transitions. Post-input observation uses tap budgets; retry observation only."
     },
     "type_text": {
-      "description": "초점이 있는 입력란에 Unicode 최대8000자를 붙여넣고 시뮬레이터 클립보드를 바꿉니다. 키 전달과 해제를 기다리지만 앱 처리 완료는 보장하지 않습니다. 반복 시 press(release-input)을 사용하고 무작정 재시도하거나 heal하지 마세요."
+      "description": "포커스된 입력란에 입력. text: method=auto(기본)는 일반 App에서는 붙여 넣기(정확, 모든 언어), 접근성이 없는 게임에서는 영문·숫자·기호를 한 키씩 입력(병음 등 입력 소스는 영어로 전환). paste나 type을 지정할 수도 있음. keys는 Enter, Escape, Backspace, Tab, up, a, cmd+A, shift+Tab 같은 키. clear=true는 먼저 비웁니다. 먼저 포커스를 확인하고 결과를 확인하세요. 한 키씩 입력할 때는 화면 키보드가 나타나지 않습니다. 게임에서는 Enter가 바로 제출될 수 있으니 편집만 끝내려면 빈 곳을 탭하세요. observe와 until은 tap과 같습니다. iOS에서는 키 입력 중에 화면 키보드가 숨겨집니다. 마지막 입력 약 3초 후 하드웨어 키보드 기록을 지우려고 시도하므로 입력란을 다시 눌러 복구를 확인하세요. 자동 표시는 보장하지 않습니다. 가림 확인에는 재시작 없이 method=touch(터치로 붙여 넣기)를 쓰세요. method=touch는 clear=true 또는 keys와 함께 사용할 수 없습니다. Vision Pro auto pastes; tvOS auto/type sends up to 300 US-keyboard characters (select English first), without Unicode or clipboard paste. Both support keys. touch: iOS/Android focused fields with a visible paste menu; not TV/Vision. Keyboard recovery: iOS only. Post-input observation uses tap budgets; never resend input because observation failed."
     },
     "press": {
-      "description": "홈, 잠금, 앱 전환, 알림 센터를 조작합니다. release-input은 고착된 키만 해제하며 기기나 앱을 재시작하지 않습니다. 이후 결과를 관찰하세요."
+      "description": "iOS and Android: home, lock, power, volume-up, volume-down, app-switcher, swipe-to-app-switcher, swipe-to-home, pull-down-to-notification-center, release-input. iOS only: action, pull-down-to-lock-screen. Android only: back, shake; the notification-center button expands notifications, not the lock screen. Unsupported buttons fail before input. duration (0–10 seconds) holds hardware keys only. release-input releases stuck keys and stops repeats without restarting or closing Apps. Apple TV: up/down/left/right/select/back/menu/home/play-pause/volume-up/volume-down. Vision Pro: digital-crown (home alias). Both support release-input."
     },
-    "install_app": {
-      "description": "이미 빌드된 로컬 iOS Simulator .app을 독립 기기에 설치합니다. 동일 bundle ID 앱을 업데이트할 수 있습니다. 프로젝트 빌드나 의존성 다운로드는 하지 않습니다."
+    "wait_for": {
+      "description": "조건이 충족되면 반환합니다(최대 90초). 고정 sleep과 반복 스크린샷 대신 쓰세요. text나 id가 나타남(gone=true면 사라짐, 게임에서는 화면에서 읽은 글자), stable=초: 화면 변화가 tolerance(픽셀 비율 %, 기본 0.5) 미만인 상태가 그동안 지속(region으로 일부만 볼 수 있음), log=정규식: App 로그에 일치하는 줄(bundleId와 함께). screenshot=true면 화면 첨부. 충족되지 않으면 met=false, 이유와 현재 화면, 게임 애니메이션에는 권장 tolerance를 줍니다. 이미지는 호출의 남은 시간 내에 얻으며, 실패하거나 시간이 부족해도 대기 결과와 screenshot.error를 반환합니다. 필요하면 screenshot을 별도로 호출하세요. goalMet은 met과 동일. false는 조건 미충족이며 검증 통과가 아님."
     },
-    "launch_app": {
-      "description": "설치된 앱을 실행하고 기본적으로 루프백 화면 서비스와 Cindy 사이드바 미리보기를 엽니다. viewer.previewOpened를 확인하세요. showViewer=false이면 백그라운드로만 실행합니다. 이 페이지는 전용 기기의 입력, 회전, Shake, Home 및 앱 전환, 파일 업로드, .app 설치, 기기 시작과 종료를 제공합니다(종료 시 앱도 중단). 위치와 움직임 시뮬레이션, 상태 표시줄 변경 및 지속되는 네트워크 조건 변경도 가능하며 사용자가 패널에서 복원하거나 해제해야 합니다. 카메라 패널은 Mac 카메라 또는 업로드한 미디어를 입력으로 사용하고, 위치 찾기는 허가 후 Mac 위치를 읽을 수 있습니다. 접근성 트리와 로그 조회, 스크린샷, 녹화 및 내보내기에 앱의 개인정보가 포함될 수 있습니다. 검색어와 지도 타일 요청은 Node를 통해 OpenStreetMap으로 전송됩니다. Copy는 Mac 클립보드, 붙여넣기는 기기 클립보드를 덮어씁니다. 열기 전에 이러한 기능과 영향을 알리세요. 페이지를 여는 것만으로 모든 작업이 실행되지는 않으며 수집과 기기 변경은 사용자가 페이지에서 실행합니다. Duo는 Xcode 27.1 / iOS 27.1이 필요합니다. 뷰어 자세 조작은 접힘 각도, 활성 화면 및 전면 앱 레이아웃을 변경합니다."
+    "capture": {
+      "description": "변화를 포착: 프레임 기록을 시작하고 action(tool은 tap, gesture, press, type_text, open_url, app_launch, args는 그 인수)을 실행한 뒤 seconds초(15 이하) 동안 이어서, 중복 프레임을 뺀 시간순·밀리초 표기 목록 이미지 한 장과 각 프레임 파일을 반환합니다. 화면 전환, 애니메이션, 잠깐 뜨는 토스트, 로딩과 스켈레톤 화면에. action이 없으면 변화만 기록. 지원하는 Cindy는 목록 이미지를 첨부합니다. 이전 버전이거나 130 KB를 넘으면 sheet 경로만 반환하므로 이미지 도구로 여세요. execution은 동작 실행 상태를 유지하고 actionError는 code, message, execution을 포함합니다. 불확실한 동작을 무조건 반복하지 마세요. 기록 중 방향·크기·패널이 고정되어야 합니다. 동작 후와 종료 시 확인하며 변경되거나 확인할 수 없으면 execution을 유지하고 목록 이미지를 거부합니다. 프레임별 회전 추적은 지원하지 않습니다. 동작, 녹화, 확인, 렌더링은 호출 전체의 제한 시간을 공유합니다. 시간이 부족하거나 녹화가 실패하면 captureError(code, message)를 반환하며 action 또는 actionError와 execution을 유지합니다. 동작을 무조건 반복하지 마세요. 완전한 첫 프레임과 화면 확인 후에만 동작을 시작합니다. 그 전에 프레임이 없거나 스트림 오류·시간 초과가 발생하면 captureError와 execution=not_executed를 반환합니다."
     },
-    "open_viewer": {
-      "description": "부팅된 독립 기기의 제어 페이지와 실시간 화면을 사이드바에 엽니다. 앱은 재시작하지 않습니다. previewOpened를 확인하세요. 화면 복구와 키 해제 버튼을 제공합니다. Worker 종료, 비활성화 또는 도구1시간 미사용 시 서비스가 중단됩니다. 이 페이지는 전용 기기의 입력, 회전, Shake, Home 및 앱 전환, 파일 업로드, .app 설치, 기기 시작과 종료를 제공합니다(종료 시 앱도 중단). 위치와 움직임 시뮬레이션, 상태 표시줄 변경 및 지속되는 네트워크 조건 변경도 가능하며 사용자가 패널에서 복원하거나 해제해야 합니다. 카메라 패널은 Mac 카메라 또는 업로드한 미디어를 입력으로 사용하고, 위치 찾기는 허가 후 Mac 위치를 읽을 수 있습니다. 접근성 트리와 로그 조회, 스크린샷, 녹화 및 내보내기에 앱의 개인정보가 포함될 수 있습니다. 검색어와 지도 타일 요청은 Node를 통해 OpenStreetMap으로 전송됩니다. Copy는 Mac 클립보드, 붙여넣기는 기기 클립보드를 덮어씁니다. 열기 전에 이러한 기능과 영향을 알리세요. 페이지를 여는 것만으로 모든 작업이 실행되지는 않으며 수집과 기기 변경은 사용자가 페이지에서 실행합니다. Duo는 Xcode 27.1 / iOS 27.1이 필요합니다. 뷰어 자세 조작은 접힘 각도, 활성 화면 및 전면 앱 레이아웃을 변경합니다."
+    "set_state": {
+      "description": "Change orientation, posture, appearance, contrast, text_size, network profile/offline/clear or {latency,bandwidth,loss}, location, status_bar, privacy {action,service,bundleId}. iOS-only: hinge, location=clear, privacy reset; iOS permissions terminate Apps. Android: no hinge/arbitrary loss; {lat,lon} enables location; clear rejects before batch writes. offline/100-loss disables Wi-Fi/data; other profiles enable both; network=clear restores full bandwidth/no delay. Permissions: specific grant/revoke, API23+; photos/media-library use shared READ_EXTERNAL_STORAGE below33, READ_MEDIA_* from33; motion API29+. App declarations apply. API preflight failure means no batch writes. One deadline. Stop on failure: applied=complete fields; Android appliedSteps=successful field/step; stateError=field/step/code/message/execution. Partial progress is not not_executed; do not replay. Rotation screen only if confirmed; null current=unconfirmed. TV/Vision: no orientation/posture/status_bar; other states runtime-dependent."
     },
-    "close_viewer": {
-      "description": "화면 서비스를 중지합니다. 브라우저 연결은 끊기지만 시뮬레이터와 앱은 계속 실행됩니다."
+    "logs": {
+      "description": "Read recent logs: last_seconds defaults to 120, limit to 150, level to default; error/info/debug also supported, match is regex. iOS default includes ordinary Default messages, not a warning threshold; iOS includes device/process crash summaries; diagnostic failure retains logs with crashesError; crashes=false skips diagnostics. Android default means warning+; Android returns raw lines filtered from at most the latest 3000 logcat records: main+crash buffers, or main only with crashes=false; no iOS crash summaries. Android bundleId/process scopes only to the current exact PID, excluding logs/crashes from previous PIDs after exit/restart; absent processes return processRunning=false. Empty logs do not prove no crash. For historical evidence, explicitly omit process scope and inspect device logs."
+    },
+    "heal": {
+      "description": "플랫폼별 재시작 영향을 사용자가 동의한 뒤에만 실행: iOS는 전용 기기 세트의 SpringBoard를 재시작하고 App을 종료하며, Android는 에뮬레이터 전체를 재부팅하고 모든 App을 종료합니다. Android는 devices가 Booted를 반환할 때까지 기다리세요. 키 고착은 먼저 press(release-input)."
+    },
+    "viewer": {
+      "description": "Open/close the task live view; check previewOpened. Closing leaves devices/apps running. Switching only selects; stopped devices need Open. User controls: touch, keyboard, wheel/pinch, clipboard (replaces computer/device text), file/app install (may overwrite apps), rotate, shake, screenshot and start/stop. Android: APK/image/video import up to 128 MiB; silent WebM recording up to 5 min/128 MiB, letterboxed on rotation. iOS advanced tools: location/motion, status bar, persistent network, camera input, notifications (may trigger app behavior), accessibility, logs and video export (may contain private app data); map requests go via proxy to OpenStreetMap. Disclose these before opening; opening performs none of them. Loopback only. taskBindingError/appContextError preserve results; inspect records. outcome=partial: follow nextAction, retry viewer only. If viewing still fails, attempt independent capture, preserving the App; Host-page failure also retries observation only."
     }
+  },
+  "mainView": {
+    "title": "시뮬레이터"
+  },
+  "taskView": {
+    "title": "기기 시뮬레이터"
   }
 }

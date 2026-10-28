@@ -7,9 +7,43 @@ import { createContext, runInContext } from 'node:vm';
 import test from 'node:test';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
+import { spawn } from 'node:child_process';
+import { createInterface } from 'node:readline';
 
 const require = createRequire(import.meta.url);
 const source = fs.readFileSync(new URL('../google-gmail/node/gog.cjs', import.meta.url), 'utf8');
+
+test('incomplete packaged worker reports the missing executable before executing a command', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'gmail-incomplete-package-'));
+  let child;
+  try {
+    fs.mkdirSync(path.join(directory, 'node'));
+    fs.mkdirSync(path.join(directory, 'vendor/gog'), { recursive: true });
+    for (const file of ['node/gog.cjs', 'node/mailMime.cjs', 'vendor/gog/binaries.json']) {
+      fs.copyFileSync(new URL('../google-gmail/' + file, import.meta.url), path.join(directory, file));
+    }
+    child = spawn(process.execPath, [path.join(directory, 'node/gog.cjs')], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const lines = createInterface({ input: child.stdout });
+    const response = new Promise((resolve, reject) => {
+      child.once('error', reject);
+      lines.once('line', line => resolve(JSON.parse(line)));
+      child.once('exit', () => reject(new Error('Worker exited before responding')));
+    });
+    child.stdin.write(JSON.stringify({ id: 1, method: 'schema', params: { command: ['drafts', 'create'] } }) + '\n');
+    const { result } = await response;
+    assert.equal(result.ok, false);
+    assert.equal(result.execution, 'not_executed');
+    assert.match(result.message, /missing its bundled gog executable/);
+    assert.doesNotMatch(result.message, new RegExp(directory));
+  } finally {
+    if (child && child.exitCode === null) {
+      const exited = new Promise(resolve => child.once('exit', resolve));
+      child.kill();
+      await exited;
+    }
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
 
 test('child-home cleanup errors preserve every execution outcome and redact secrets', async () => {
   for (const mode of ['success', 'text', 'nonzero', 'spawn-error', 'spawn-throw']) {
@@ -17,7 +51,7 @@ test('child-home cleanup errors preserve every execution outcome and redact secr
     const child = new EventEmitter();
     child.stdout = new PassThrough(); child.stderr = new PassThrough();
     const ctx = createContext({ __dirname: '/fixture', Buffer, process: { env: {} }, setTimeout, clearTimeout,
-      require: name => name === '../vendor/gog/binaries.json' ? {} : name === 'node:fs' ? {
+      require: name => name === './mailMime.cjs' ? require('../google-gmail/node/mailMime.cjs') : name === '../vendor/gog/binaries.json' ? {} : name === 'node:fs' ? {
         ...fs, mkdtempSync: () => '/private/call-test', rmSync() { throw new Error('private path and secret'); },
       } : name === 'node:child_process' ? { spawn() {
         launches++;
@@ -51,7 +85,7 @@ function workerFixture() {
   const calls = [];
   const ctx = createContext({
     __dirname: '/fixture', process: { env: { PATH: '/bin', GOG_ACCESS_TOKEN: 'inherited', GOOGLE_APPLICATION_CREDENTIALS: '/private', NODE_OPTIONS: '--inspect', LD_PRELOAD: '/private' } },
-    require: name => name === '../vendor/gog/binaries.json' ? {} : require(name),
+    require: name => name === './mailMime.cjs' ? require('../google-gmail/node/mailMime.cjs') : name === '../vendor/gog/binaries.json' ? {} : require(name),
   });
   runInContext(source.split('const input = readline.createInterface')[0], ctx);
   const leaf = (name, flags = []) => ({ name, subcommands: [], flags: flags.map(([name, type = 'string']) => ({ name, type })) });
@@ -121,7 +155,7 @@ test('JSON @file 参数使用相同工作区边界，不能绕过路径或符号
   fs.writeFileSync(path.join(directory, 'outside.json'), '[["private"]]');
   const ctx = createContext({
     __dirname: workspace,
-    require: name => name === '../vendor/gog/binaries.json' ? {} : require(name),
+    require: name => name === './mailMime.cjs' ? require('../google-gmail/node/mailMime.cjs') : name === '../vendor/gog/binaries.json' ? {} : require(name),
   });
   // Load the production validation functions without starting its stdio loop.
   runInContext(source.split('const input = readline.createInterface')[0], ctx);

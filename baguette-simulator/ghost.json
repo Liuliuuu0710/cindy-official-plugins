@@ -1,18 +1,18 @@
 {
   "schemaVersion": 3,
-  "minCindyVersion": "0.1.83",
+  "minCindyVersion": "0.1.116",
   "id": "baguette-simulator",
-  "name": "Baguette 模拟器",
-  "description": "用 Baguette 操作本机 iOS 模拟器，并在 Cindy 侧边栏浏览器显示可交互的实时画面。需要 macOS 15.0 或更新版本、Apple Silicon、完整 Xcode 和已安装的 iOS runtime。",
-  "whenToUse": "仅在用户明确选择 Baguette 时使用独立 iOS 模拟器。先 environment 和 devices；复用已登录设备，跨 session 用 open_viewer 恢复预览。只控制本插件设备，不接管 Cindy 内置设备，也不自动替代内置方案。输入异常先 press(release-input)，heal 会终止 App，须用户接受影响。",
-  "version": "0.1.20",
+  "name": "设备模拟器",
+  "description": "独立的 iPhone、iPad、Apple TV、Vision Pro 与安卓模拟器，共用任务画面、设备管理和操作工具。默认闲置 15 分钟关机并保留数据。Apple 平台需要 macOS 15+、Apple Silicon、完整 Xcode 与对应运行时；安卓支持 Mac、Windows x64、Linux x64，确认下载大小和许可后安装环境。Apple 后端基于 Baguette（Apache-2.0）。",
+  "whenToUse": "iPhone、iPad、Apple TV、Vision Pro 与安卓模拟器；App 安装启动、真实输入、TV 遥控、Vision 空间手势、截图、界面检查、状态和日志排查。先 devices 选择设备，按手册验证结果。",
+  "version": "0.2.60",
   "kind": "chip",
   "entry": "main.js",
   "icon": "assets/icon.png",
   "tools": [
     {
       "name": "environment",
-      "description": "先检查 macOS 15.0+ 和 Apple Silicon，再只读检查随包 Baguette、Xcode、可用 iOS runtimes 与设备型号。不下载依赖。首次使用先调用。",
+      "description": "只读检查 iOS 与安卓的环境、运行时和机型。返回 platforms 的就绪状态及错误；已有设备先 devices。安卓缺环境时通过插件设置查看下载大小与许可并确认安装，此工具不下载。 包括 iOS、tvOS 和 visionOS（xrOS 标识）的运行时与机型。",
       "parameters": {
         "type": "object",
         "properties": {},
@@ -22,7 +22,7 @@
     },
     {
       "name": "devices",
-      "description": "列出 Baguette 插件独立设备集合中的设备和状态，不列出或控制 Cindy 默认设备。首次使用先调用。",
+      "description": "先调用它：列出本插件独立设备。tasks/thisTask 仅表示当前选择；activeTasks/thisTaskActive 表示最近 15 分钟内的任务活动，usage 为 active/idle/unknown，operation 为正在执行的操作。优先本任务近期使用的设备；tasks=0 不代表空闲，运行中且活动不明的设备先确认。状态查询不续期。",
       "parameters": {
         "type": "object",
         "properties": {},
@@ -31,58 +31,216 @@
       }
     },
     {
-      "name": "create_device",
-      "description": "仅在没有合适已有设备或确需并行隔离时创建独立 iOS 模拟器。先 devices，优先复用已登录设备；不要因为切换 session 自动新建。通过本机 simctl 创建，会占用磁盘。",
+      "name": "device",
+      "description": "管理独立设备。create 用 environment 的 runtime/deviceType（每台约7–12GB），优先复用；boot 等初始化，超时先查状态，screenshot=true 可附图。仅 iOS boot 支持 memoryMode：saving（关机时默认）关闭搜索、健康、部分游戏服务及诊断/DeviceCheck；standard 恢复受管理服务，完整验收或手柄/存档测试用此档；minimal 还影响登录、支付、照片、推送等，仅限明确范围的核心玩法/UI测试。运行中保持模式，切换先 shutdown 再 boot；检查 memoryMode.mode/verified/limitations，verified 只证明服务开关。shutdown 保留数据；rename 改名；erase 清空App/数据；delete 删除设备，后两项仅用户要求时用。activity 登记本任务使用15分钟，release 结束登记但不停止设备；需任务上下文，不是独占，worker重启后失效。受运行开关及默认15分钟闲置关机限制，画面/工具使用中不关。安卓 import_media 从本机绝对path复制图片/视频到Downloads（≤128MiB）；检查 copied/scanRequested/path。screenshot.error、taskBindingError/appContextError 保留操作结果；安卓部分失败含 completedSteps/failedStep/deviceError，检查实际状态，不重复已完成操作。",
       "parameters": {
         "type": "object",
         "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "create",
+              "boot",
+              "shutdown",
+              "rename",
+              "erase",
+              "delete",
+              "activity",
+              "release",
+              "import_media"
+            ]
+          },
+          "udid": {
+            "type": "string",
+            "description": "本插件 devices 返回的精确设备 UDID，不能使用 booted 或设备名称"
+          },
           "name": {
             "type": "string",
-            "description": "易辨认的设备名称"
+            "description": "create/rename 用的设备名"
           },
           "runtime": {
             "type": "string",
-            "description": "精确 iOS runtime identifier"
+            "description": "create：environment 返回的 runtime identifier"
           },
           "deviceType": {
             "type": "string",
-            "description": "精确 deviceType identifier"
+            "description": "create：environment 返回的 deviceType identifier"
+          },
+          "screenshot": {
+            "type": "boolean",
+            "description": "boot：启动后等画面稳定，在同一次调用里附上截图"
+          },
+          "path": {
+            "type": "string",
+            "description": "import_media：本机图片或视频的绝对路径，仅安卓，最大 128 MiB"
+          },
+          "memoryMode": {
+            "type": "string",
+            "enum": [
+              "standard",
+              "saving",
+              "minimal"
+            ],
+            "description": "仅 iOS boot。关机设备默认 saving；standard 完整验收；minimal 限定范围测试。运行中切换须先 shutdown。"
           }
         },
         "required": [
-          "name",
-          "runtime",
-          "deviceType"
+          "action"
         ],
         "additionalProperties": false
       }
     },
     {
-      "name": "boot",
-      "description": "用随包 Baguette 启动指定模拟器，并等待此独立设备首次初始化完成，最多约 105 秒；超时后先检查状态。不会自动重启 SpringBoard 修复输入。",
+      "name": "app",
+      "description": "install：模拟器 .app/安卓单 APK 的绝对 appPath；相同内容跳过，Apple 少量修改可同步，登记/签名修改整包安装。安卓不支持 AAB/split APK。info：Apple 默认轻量元数据；带 appPath 时 verify=auto 复核全文件清单后复用整包验证，否则返回校验 job；verify=full 强制全包比较，none 只查信息。仅 matchesLocal=true 可确认构建；null/verification=unconfirmed 不得据此重装。install_status 等安装或校验 job，默认 wait=85，完成即返回；不同设备可并行等待，phase 是实际阶段，无百分比估算。launch 默认结束旧进程后启动，arguments/env 仅 Apple；screenshot=true 附图；检查 appLaunched 和 viewer.previewOpened。画面失败有限截图兜底，只恢复观察，不重启 App；安卓启动失败检查 launchError/appTerminated/execution。terminate 结束；uninstall 删除 App/数据；open_url 打开深链，观察系统确认。容器查询故障不等于未安装；screenshot.error、taskBindingError、appContextError 保留已完成结果，先检查再处理。BUSY 提示操作/设备/job；短暂冲突最多等1秒。Apple 包须匹配平台，Vision Pro兼容iPad包仍整包安装。切换不搬运或启动 App。画面能力与副作用见 viewer。",
       "parameters": {
         "type": "object",
         "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "install",
+              "install_status",
+              "info",
+              "launch",
+              "terminate",
+              "uninstall",
+              "open_url"
+            ]
+          },
           "udid": {
             "type": "string",
             "description": "本插件 devices 返回的精确设备 UDID，不能使用 booted 或设备名称"
+          },
+          "appPath": {
+            "type": "string",
+            "description": "install/info：本机已构建的 iOS 模拟器 .app 或单个 Android .apk 的绝对路径（不支持 AAB/split APK）"
+          },
+          "bundleId": {
+            "type": "string",
+            "description": "App bundle identifier"
+          },
+          "job": {
+            "type": "string",
+            "description": "install_status：安装或 Apple info 校验返回的 job"
+          },
+          "wait": {
+            "type": "number",
+            "description": "install/info/install_status 等待秒数（0–90）；默认分别 80/5/85，完成即返回。通常省略，不必每秒查询。",
+            "minimum": 0,
+            "maximum": 90
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "full"
+            ],
+            "description": "install：auto（默认，跳过或增量）或 full（整包重装）"
+          },
+          "arguments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "launch：启动参数"
+          },
+          "env": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "launch：环境变量"
+          },
+          "relaunch": {
+            "type": "boolean",
+            "description": "launch：默认 true，先结束正在运行的实例"
+          },
+          "showViewer": {
+            "type": "boolean",
+            "description": "launch：默认 true，在当前任务侧栏打开实时画面"
+          },
+          "url": {
+            "type": "string",
+            "description": "open_url：带 scheme 的链接"
+          },
+          "screenshot": {
+            "type": "boolean",
+            "description": "launch：启动后等画面稳定，在同一次调用里附上截图"
+          },
+          "verify": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "full",
+              "none"
+            ],
+            "description": "Apple info + appPath：auto 复用有效全包验证，否则返回 job；full 强制全包比较；none 只读轻量信息。安卓仍校验完整 APK。"
           }
         },
         "required": [
+          "action",
           "udid"
         ],
         "additionalProperties": false
       }
     },
     {
-      "name": "shutdown",
-      "description": "关闭指定 Baguette 设备，终止其中运行的 App，但保留设备和数据。",
+      "name": "screenshot",
+      "description": "截取当前画面：支持附图的 Cindy 返回图片；旧版或压缩后仍超过 130 KB 时仅返回 path，必须用读图工具打开。按用户看到的方向摆正，默认 1 像素=1 视图点；grid=true 叠加带刻度网格，region 截取局部，scale 2–3 放大细节（坐标除以 scale 并加 region 原点）。iOS 默认绘制屏幕圆角/灵动岛遮罩；安卓返回矩形 framebuffer，不添加物理圆角或挖孔遮罩，不能据此证明物理遮挡/安全区。corners 仅 iOS；安卓只接受省略或 false，显式 true 在读屏前拒绝。 capturedAt 标注画面时间；screenshotAttached=false 时打开 path；有足够画面就直接验证目标。",
       "parameters": {
         "type": "object",
         "properties": {
           "udid": {
             "type": "string",
             "description": "本插件 devices 返回的精确设备 UDID，不能使用 booted 或设备名称"
+          },
+          "grid": {
+            "type": [
+              "boolean",
+              "number"
+            ],
+            "description": "true 或网格间距（视图点）"
+          },
+          "region": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "width": {
+                "type": "number"
+              },
+              "height": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "x",
+              "y",
+              "width",
+              "height"
+            ],
+            "additionalProperties": false,
+            "description": "只截这个视图点矩形"
+          },
+          "scale": {
+            "type": "number",
+            "description": "每个视图点的像素数，1–3，默认 1"
+          },
+          "corners": {
+            "type": "boolean",
+            "description": "仅 iOS，默认 true 绘制圆角/灵动岛遮罩。安卓默认矩形 framebuffer，只接受省略或 false。"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "jpeg",
+              "png"
+            ]
           }
         },
         "required": [
@@ -93,47 +251,39 @@
     },
     {
       "name": "describe_ui",
-      "description": "读取当前无障碍树，返回元素标签和设备逻辑点坐标。点击前观察，不把空树视为成功。",
+      "description": "读取当前界面元素（无障碍树）。默认返回精简列表：角色、文字、id、frame 与 center（视图点，可直接点击），按阅读顺序排列。query/role 过滤；x、y 查询某一点下的元素；mode=full 返回完整树。游戏或自绘界面没有无障碍元素时，自动改为识别画面上的文字（source=ocr），同样带坐标；没有文字的图标用 screenshot 看。识别失败会报错，不表示画面没有文字。 tvOS/visionOS 的所有模式（含 full 和 x,y 点位查询）均返回 OCR 文本列表，不提供无障碍树或元素 ID。Apple TV 文字坐标仅用于观察，操作用遥控。",
       "parameters": {
         "type": "object",
         "properties": {
           "udid": {
             "type": "string",
             "description": "本插件 devices 返回的精确设备 UDID，不能使用 booted 或设备名称"
-          }
-        },
-        "required": [
-          "udid"
-        ],
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "screenshot",
-      "description": "用 Baguette 截取屏幕到插件本地 screenshots 目录，返回绝对文件路径。用图片查看工具打开后分析；图片可能随分析发送给模型。",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "udid": {
+          },
+          "query": {
             "type": "string",
-            "description": "本插件 devices 返回的精确设备 UDID，不能使用 booted 或设备名称"
-          }
-        },
-        "required": [
-          "udid"
-        ],
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "heal",
-      "description": "按 Baguette 修复流程显式修复 Device Hub 导致的 iOS 27 输入失效；使用 simctl 指定独立设备集合。会重启 SpringBoard、终止设备中运行的 App，仅用户接受影响后调用。",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "udid": {
+            "description": "只返回文字、id 或值包含它的元素"
+          },
+          "role": {
             "type": "string",
-            "description": "本插件 devices 返回的精确设备 UDID，不能使用 booted 或设备名称"
+            "description": "只返回该角色，如 button、field、cell、text"
+          },
+          "x": {
+            "type": "number",
+            "description": "查询该点下的元素（视图点）"
+          },
+          "y": {
+            "type": "number"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "compact",
+              "full"
+            ]
+          },
+          "limit": {
+            "type": "number",
+            "description": "最多返回多少个元素，默认 250"
           }
         },
         "required": [
@@ -144,99 +294,7 @@
     },
     {
       "name": "tap",
-      "description": "用 Baguette 点击/长按已观察到的位置。坐标和宽高均为设备逻辑点；操作后重新观察。",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "udid": {
-            "type": "string",
-            "description": "本插件 devices 返回的精确设备 UDID，不能使用 booted 或设备名称"
-          },
-          "x": {
-            "type": "number",
-            "description": "横坐标"
-          },
-          "y": {
-            "type": "number",
-            "description": "纵坐标"
-          },
-          "width": {
-            "type": "number",
-            "description": "屏幕逻辑宽度"
-          },
-          "height": {
-            "type": "number",
-            "description": "屏幕逻辑高度"
-          },
-          "duration": {
-            "type": "number",
-            "description": "可选按住秒数 0.02–5"
-          }
-        },
-        "required": [
-          "udid",
-          "x",
-          "y",
-          "width",
-          "height"
-        ],
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "swipe",
-      "description": "用 Baguette 滑动设备屏幕。坐标均为逻辑点；操作后重新观察。",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "udid": {
-            "type": "string",
-            "description": "本插件 devices 返回的精确设备 UDID，不能使用 booted 或设备名称"
-          },
-          "startX": {
-            "type": "number",
-            "description": "起点 x"
-          },
-          "startY": {
-            "type": "number",
-            "description": "起点 y"
-          },
-          "endX": {
-            "type": "number",
-            "description": "终点 x"
-          },
-          "endY": {
-            "type": "number",
-            "description": "终点 y"
-          },
-          "width": {
-            "type": "number",
-            "description": "屏幕逻辑宽度"
-          },
-          "height": {
-            "type": "number",
-            "description": "屏幕逻辑高度"
-          },
-          "duration": {
-            "type": "number",
-            "description": "可选滑动秒数 0.02–5"
-          }
-        },
-        "required": [
-          "udid",
-          "startX",
-          "startY",
-          "endX",
-          "endY",
-          "width",
-          "height"
-        ],
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "type_text",
-      "description": "在已聚焦输入框中粘贴 Unicode 文本，最多 8000 字符；会替换模拟器剪贴板。按键投递和释放完成后返回，仍须观察 App 结果。异常重复输入先用 press(button=release-input)，不要自动重试或 heal。",
+      "description": "真实触摸点击：走模拟器的系统触摸通道，不依赖窗口，Mac 锁屏也能用，App 收到的就是手指触摸。按 text 或 id（可加 role、nth）点元素，游戏里 text 按画面上识别出的文字点；或按 x、y 视图点点击（屏幕转向后会要求重新看图，不会点错位置）。count=2 双击；duration≥0.5 长按。默认点击后约 0.6 秒返回新的界面元素（observe=ui），observe=screenshot 直接附上截图。验证交互要用它，不要往 App 进程里注入事件。 until=文字：点完等这段文字出现再返回（翻页、弹窗），比猜 settle 准。 settle 为 0–5 秒，默认 0.6；较长转场用 until 或 wait_for。 Vision Pro：把画面坐标投射为单手捏合点击/长按；Apple TV 请用 press 遥控。 输入后观察最多12秒（until另等最多15秒），保留 execution 与 timing；截图失败只重试观察。游戏可按截图操作，无需强制读树。先复用已返回画面。",
       "parameters": {
         "type": "object",
         "properties": {
@@ -246,19 +304,307 @@
           },
           "text": {
             "type": "string",
-            "description": "输入文字，最多 8000 字符"
+            "description": "按文字找元素（完全匹配优先）"
+          },
+          "id": {
+            "type": "string",
+            "description": "按无障碍 identifier 找元素"
+          },
+          "role": {
+            "type": "string",
+            "description": "限定角色，如 button"
+          },
+          "nth": {
+            "type": "number",
+            "description": "同名元素取第几个（从 0 开始）"
+          },
+          "x": {
+            "type": "number",
+            "description": "视图点 x"
+          },
+          "y": {
+            "type": "number",
+            "description": "视图点 y"
+          },
+          "count": {
+            "type": "number",
+            "description": "点击次数，2 为双击"
+          },
+          "duration": {
+            "type": "number",
+            "description": "按住秒数，≥0.5 为长按"
+          },
+          "observe": {
+            "type": "string",
+            "enum": [
+              "ui",
+              "screenshot",
+              "both",
+              "none"
+            ],
+            "description": "操作后返回什么：ui（默认，新的界面元素）、screenshot（附截图）、both、none"
+          },
+          "settle": {
+            "type": "number",
+            "description": "settle 为 0–5 秒，默认 0.6；较长转场用 until 或 wait_for。",
+            "minimum": 0,
+            "maximum": 5
+          },
+          "until": {
+            "type": "string",
+            "description": "操作后要出现的文字（游戏里按识别出的文字），出现即返回，最长 15 秒；没出现时附当时截图。代替猜 settle"
+          }
+        },
+        "required": [
+          "udid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "gesture",
+      "description": "滑动与多指手势，坐标为截图视图点。swipe：from→to 或 direction；drag：按住 hold 秒后拖动；pinch：center、from_spread→to_spread；pan：从 from 平移 by。iOS 另支持 edge 系统边缘、scroll_to 查找元素。Vision 支持 swipe/drag/pinch/pan；前后拖动、旋转和相机控制用 kind=spatial。Apple TV 用 press。observe/until 同 tap。 Vision Pro 空间操作：gaze 注视；drag 捏合拖动（depth 前后移动）；pinch 双手缩放；rotate 双手旋转；tilt 转向、pan 平移、orbit 环绕、dolly 前后移动、move 三轴移动、reset 复位视角。from/to/center 使用截图视图点。spatial pan 的 by 为 [右,上] 米（仅二维），move 为 [右,上,后] 米；前后移动用 move 或 dolly。相机移动后重新截图再选坐标。observe/until 同 tap；操作通过模拟器系统输入，不注入 App。 settle 为 0–5 秒，默认 0.6；较长转场用 until 或 wait_for。 输入后观察预算同 tap，失败只重试观察。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "udid": {
+            "type": "string",
+            "description": "本插件 devices 返回的精确设备 UDID，不能使用 booted 或设备名称"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "swipe",
+              "drag",
+              "pinch",
+              "pan",
+              "edge",
+              "scroll_to",
+              "spatial"
+            ]
+          },
+          "from": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2,
+            "description": "起点 [x, y]"
+          },
+          "to": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2,
+            "description": "终点 [x, y]"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "up",
+              "down",
+              "left",
+              "right"
+            ]
+          },
+          "distance": {
+            "type": "number",
+            "description": "direction 滑动距离（视图点）；spatial dolly 前后距离（米），正数后退"
+          },
+          "duration": {
+            "type": "number",
+            "description": "手势时长（秒）"
+          },
+          "hold": {
+            "type": "number",
+            "description": "drag：拖动前按住的秒数，默认 0.6"
+          },
+          "center": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2,
+            "description": "pinch 中心 [x, y]"
+          },
+          "from_spread": {
+            "type": "number",
+            "description": "pinch 起始两指间距（视图点），默认 60"
+          },
+          "to_spread": {
+            "type": "number",
+            "description": "pinch 结束两指间距，大于起始为放大，默认 240"
+          },
+          "by": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 3,
+            "description": "普通 pan：[dx, dy] 视图点；spatial pan：[右, 上] 米（仅二维）；move：[右, 上, 后] 米；前后移动用 move 或 dolly；tilt/orbit：[水平角, 垂直角] 度"
+          },
+          "edge": {
+            "type": "string",
+            "enum": [
+              "bottom",
+              "top",
+              "left",
+              "right"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "description": "scroll_to 的目标文字"
+          },
+          "id": {
+            "type": "string",
+            "description": "scroll_to 的目标 identifier"
+          },
+          "role": {
+            "type": "string"
+          },
+          "within": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2,
+            "description": "scroll_to：在这个点所在的可滚动区域里滑"
+          },
+          "max_swipes": {
+            "type": "number",
+            "description": "scroll_to 最多滑几次，默认 10"
+          },
+          "observe": {
+            "type": "string",
+            "enum": [
+              "ui",
+              "screenshot",
+              "both",
+              "none"
+            ],
+            "description": "操作后返回什么：ui（默认，新的界面元素）、screenshot（附截图）、both、none"
+          },
+          "settle": {
+            "type": "number",
+            "description": "settle 为 0–5 秒，默认 0.6；较长转场用 until 或 wait_for。",
+            "minimum": 0,
+            "maximum": 5
+          },
+          "until": {
+            "type": "string",
+            "description": "操作后要出现的文字（游戏里按识别出的文字），出现即返回，最长 15 秒；没出现时附当时截图。代替猜 settle"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "gaze",
+              "drag",
+              "pinch",
+              "rotate",
+              "tilt",
+              "pan",
+              "orbit",
+              "dolly",
+              "move",
+              "reset"
+            ],
+            "description": "kind=spatial 时的空间动作，仅 Vision Pro"
+          },
+          "depth": {
+            "type": "number",
+            "minimum": -2,
+            "maximum": 2,
+            "description": "drag 深度变化（米），正数靠近自己"
+          },
+          "scale": {
+            "type": "number",
+            "minimum": 0.1,
+            "maximum": 10,
+            "description": "pinch 缩放倍数，默认 2"
+          },
+          "angle": {
+            "type": "number",
+            "minimum": -360,
+            "maximum": 360,
+            "description": "rotate 旋转角度，默认 45 度"
           }
         },
         "required": [
           "udid",
-          "text"
+          "kind"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "type_text",
+      "description": "向当前聚焦的输入框输入。text 任意文字：method=auto（默认）在普通 App 里粘贴（精确，支持中文），在没有无障碍元素的游戏里逐键输入英文、数字与符号（拼音等输入法会自动切到英文）；也可指定 paste 或 type。keys 发送按键，如 Enter、Escape、Backspace、Tab、up、a、cmd+A、shift+Tab；clear=true 先全选删除。输入前确认焦点，之后观察结果。 逐键输入时屏幕键盘不会出现；游戏里 Enter 可能直接提交，只想结束编辑就点空白处。observe、until 同 tap。 iOS 按键输入期间隐藏屏幕键盘；最后输入后约 3 秒尝试清除硬件键盘记录，重新聚焦后观察是否恢复，不保证自动弹出。检查键盘遮挡用 method=touch，无需重启。 method=touch 不可与 clear=true 或 keys 同用。 安卓 Unicode 使用剪贴板，type 限 ASCII；cmd 映射 Ctrl。 Vision Pro auto 使用粘贴；tvOS auto/type 使用 US 键盘事件，每次最多 300 字符，需英文输入法，不支持 Unicode 或剪贴板粘贴。两者支持 keys，不支持 touch。touch 支持 iOS/安卓，需已聚焦输入框及可用粘贴菜单；软键盘恢复仅 iOS。 输入后观察预算同 tap，失败只重试观察，不重发输入。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "udid": {
+            "type": "string",
+            "description": "本插件 devices 返回的精确设备 UDID，不能使用 booted 或设备名称"
+          },
+          "text": {
+            "type": "string",
+            "description": "要输入的文字，最多 8000 字符（逐键输入最多 300 个）"
+          },
+          "keys": {
+            "type": [
+              "string",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "按键或按键数组：Enter、Escape、up、a、A、7、cmd+A、shift+Tab"
+          },
+          "clear": {
+            "type": "boolean",
+            "description": "先清空输入框"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "paste",
+              "type",
+              "touch"
+            ],
+            "description": "auto（默认）：普通 App 粘贴，游戏逐键输入；paste 粘贴任意文字；type 逐键输入英文、数字与符号；touch 先点「粘贴」菜单，纯触摸、不收起屏幕键盘（查键盘遮挡时用，在已聚焦的空输入框上）"
+          },
+          "observe": {
+            "type": "string",
+            "enum": [
+              "ui",
+              "screenshot",
+              "both",
+              "none"
+            ],
+            "description": "输入后返回什么，默认 none；screenshot 附截图"
+          },
+          "until": {
+            "type": "string",
+            "description": "操作后要出现的文字（游戏里按识别出的文字），出现即返回，最长 15 秒；没出现时附当时截图。代替猜 settle"
+          }
+        },
+        "required": [
+          "udid"
         ],
         "additionalProperties": false
       }
     },
     {
       "name": "press",
-      "description": "通过 Baguette 操作模拟器 Home、锁屏、应用切换或通知中心按钮。 button=release-input：仅释放卡住的键盘按键，停止重复输入，不重启系统或关闭 App。",
+      "description": "iOS 与安卓共有：home、lock、power、volume-up、volume-down、app-switcher、swipe-to-app-switcher、swipe-to-home、pull-down-to-notification-center、release-input。iOS 专有：action、pull-down-to-lock-screen。安卓专有：back、shake；通知栏按钮展开通知，不是锁屏。未支持的按钮在投递前拒绝。duration（0–10 秒）仅用于按住硬件按键。release-input 只释放卡键并停止重复，不重启系统或关闭 App。 Apple TV：up/down/left/right/select/back/menu/home/play-pause/volume-up/volume-down；Vision Pro：digital-crown（home 同义）。两者支持 release-input。",
       "parameters": {
         "type": "object",
         "properties": {
@@ -271,11 +617,31 @@
             "enum": [
               "home",
               "lock",
+              "power",
+              "volume-up",
+              "volume-down",
+              "action",
               "app-switcher",
+              "swipe-to-app-switcher",
               "swipe-to-home",
               "pull-down-to-notification-center",
-              "release-input"
+              "pull-down-to-lock-screen",
+              "release-input",
+              "up",
+              "down",
+              "left",
+              "right",
+              "select",
+              "back",
+              "menu",
+              "play-pause",
+              "digital-crown",
+              "shake"
             ]
+          },
+          "duration": {
+            "type": "number",
+            "description": "按住秒数"
           }
         },
         "required": [
@@ -286,8 +652,8 @@
       }
     },
     {
-      "name": "install_app",
-      "description": "通过 simctl 把本机已构建的 iOS Simulator .app 安装到本插件设备，可能更新同 bundle ID 的 App。不会构建项目或下载依赖。",
+      "name": "wait_for",
+      "description": "等条件成立再返回（最长 90 秒），代替固定 sleep 加反复截图。text 或 id 出现（gone=true 时等它消失；游戏里按识别出的文字判断）；stable=秒数：画面变化低于 tolerance（像素百分比，默认 0.5）持续这么久，可用 region 只看局部；log=正则：App 日志出现匹配行（配合 bundleId）。screenshot=true 附上成立时的截图。没等到返回 met=false、原因与当时截图，游戏动画会给出建议的 tolerance。 附图受本次调用剩余预算限制；失败或预算不足时保留等待结果并返回 screenshot.error，需要画面时另调 screenshot。 goalMet 与 met 同义，false 表示目标条件未满足，不能作为验收通过。",
       "parameters": {
         "type": "object",
         "properties": {
@@ -295,53 +661,67 @@
             "type": "string",
             "description": "本插件 devices 返回的精确设备 UDID，不能使用 booted 或设备名称"
           },
-          "appPath": {
+          "text": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "gone": {
+            "type": "boolean",
+            "description": "等元素消失"
+          },
+          "stable": {
+            "type": "number",
+            "description": "画面保持稳定的秒数"
+          },
+          "log": {
             "type": "string",
-            "description": "已构建的模拟器 .app 绝对路径"
-          }
-        },
-        "required": [
-          "udid",
-          "appPath"
-        ],
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "launch_app",
-      "description": "通过 simctl 启动 App，默认同时启动仅监听 127.0.0.1 的 Baguette 实时服务，并请求Cindy 侧边栏浏览器打开可交互画面。返回 viewer.url；检查 viewer.previewOpened，不要把服务启动当成页面已显示。showViewer=false 可仅后台运行。 此交互页开放私有设备的输入、旋转、Shake、Home/应用切换、文件上传、.app 安装及设备启停（关闭会终止 App）；还可模拟位置/运动、修改状态栏和持续生效的网络条件，需用户在面板恢复或清除。摄像头面板可启用 Mac 摄像头或上传媒体作为模拟输入；定位功能可在获得权限后读取本机位置。可读取无障碍树和日志、截图、录屏并下载导出，内容可能含 App 隐私数据。位置搜索词和地图瓦片请求经 Node 代理发往 OpenStreetMap；Copy 覆盖 Mac 剪贴板，粘贴替换模拟器剪贴板。打开前告知这些能力与副作用；打开页面不等于自动执行全部操作，采集和设备变更由用户在页面触发。 Duo 需要 Xcode 27.1 / iOS 27.1；预览页可改变折叠角度和内外屏，影响前台 App 布局。",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "udid": {
-            "type": "string",
-            "description": "本插件 devices 返回的精确设备 UDID，不能使用 booted 或设备名称"
+            "description": "日志正则"
           },
           "bundleId": {
             "type": "string",
-            "description": "App bundle identifier"
+            "description": "log：只看这个 App 的日志"
           },
-          "showViewer": {
+          "timeout": {
+            "type": "number",
+            "description": "最长等待秒数，默认 15，最多 90"
+          },
+          "screenshot": {
             "type": "boolean",
-            "description": "默认 true：在 Cindy 侧边栏打开实时画面；false：仅后台启动"
-          }
-        },
-        "required": [
-          "udid",
-          "bundleId"
-        ],
-        "additionalProperties": false
-      }
-    },
-    {
-      "name": "open_viewer",
-      "description": "为已启动的插件设备打开侧边栏控制页和实时画面，无需重启 App。返回 URL 与 previewOpened；确认后才能说已显示。控制页提供恢复画面和解除卡键。仅监听 127.0.0.1，Worker 停用、退出或工具闲置一小时后停止。 此交互页开放私有设备的输入、旋转、Shake、Home/应用切换、文件上传、.app 安装及设备启停（关闭会终止 App）；还可模拟位置/运动、修改状态栏和持续生效的网络条件，需用户在面板恢复或清除。摄像头面板可启用 Mac 摄像头或上传媒体作为模拟输入；定位功能可在获得权限后读取本机位置。可读取无障碍树和日志、截图、录屏并下载导出，内容可能含 App 隐私数据。位置搜索词和地图瓦片请求经 Node 代理发往 OpenStreetMap；Copy 覆盖 Mac 剪贴板，粘贴替换模拟器剪贴板。打开前告知这些能力与副作用；打开页面不等于自动执行全部操作，采集和设备变更由用户在页面触发。 Duo 需要 Xcode 27.1 / iOS 27.1；预览页可改变折叠角度和内外屏，影响前台 App 布局。",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "udid": {
-            "type": "string",
-            "description": "devices 返回的精确 UDID"
+            "description": "满足时附截图"
+          },
+          "tolerance": {
+            "type": "number",
+            "description": "stable：每帧允许变化的像素百分比，默认 0.5；有背景动画的游戏用超时结果里建议的值"
+          },
+          "region": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "width": {
+                "type": "number"
+              },
+              "height": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "x",
+              "y",
+              "width",
+              "height"
+            ],
+            "additionalProperties": false,
+            "description": "stable：只看这个视图点矩形"
           }
         },
         "required": [
@@ -351,11 +731,265 @@
       }
     },
     {
-      "name": "close_viewer",
-      "description": "停止本插件实时画面服务，浏览器页面将断开；模拟器和 App 保持运行。",
+      "name": "capture",
+      "description": "抓取一段画面变化：先开始录帧，再执行 action（tool 为 tap、gesture、press、type_text、open_url 或 app_launch，args 为该工具的参数），持续 seconds 秒（≤15），去掉重复帧后拼成一张按时间排列、标注毫秒的联系表图片，并返回各帧文件。用于转场、动画、一闪而过的提示、加载与骨架屏。不带 action 时只录当前的画面变化。支持内联图片的 Cindy 会附上联系表；旧版 Cindy 或联系表超过 130 KB 时只返回 sheet 路径，须用读图工具打开。 execution 保留动作执行状态；动作失败时 actionError 含 code、message、execution，不据此盲目重试。 仅支持录制期间方向、尺寸与面板不变；在动作后和录制结束核验，变化或无法确认时不生成联系表并保留 execution。不提供逐帧转向证据。 动作、录制、核验与渲染共用本次调用截止时间；预算不足或录制失败返回 captureError（code、message），仍保留 action 或 actionError 与 execution，不盲重试动作。 等到完整首帧并确认画面后才执行动作；此前无帧、流故障或预算耗尽时返回 captureError、execution=not_executed。",
       "parameters": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "udid": {
+            "type": "string",
+            "description": "本插件 devices 返回的精确设备 UDID，不能使用 booted 或设备名称"
+          },
+          "action": {
+            "type": "object",
+            "properties": {
+              "tool": {
+                "type": "string",
+                "enum": [
+                  "tap",
+                  "gesture",
+                  "press",
+                  "type_text",
+                  "open_url",
+                  "app_launch"
+                ]
+              },
+              "args": {
+                "type": "object",
+                "description": "该工具的参数（不含 udid）"
+              }
+            },
+            "required": [
+              "tool"
+            ],
+            "additionalProperties": false
+          },
+          "seconds": {
+            "type": "number",
+            "description": "录多久，默认 3"
+          },
+          "fps": {
+            "type": "number",
+            "description": "每秒帧数，默认 10，最多 20"
+          },
+          "max_frames": {
+            "type": "number",
+            "description": "联系表最多几帧，默认 12"
+          }
+        },
+        "required": [
+          "udid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "set_state",
+      "description": "改变设备状态，可一次改多项：orientation 方向；posture 折叠姿态；appearance light/dark；contrast 增强对比度；text_size 字号；network 档位/offline/clear 或 {latency,bandwidth,loss}；location 坐标；status_bar clean/clear；privacy {action,service,bundleId}。iOS 专有：posture 铰链、location=clear 清除模拟位置、privacy reset；iOS 改权限会结束 App，启动前设置。安卓无铰链或任意丢包率；location 仅 {lat,lon} 且会启用定位服务，clear 在任何批量修改前拒绝；offline/100-loss 关闭 Wi-Fi/移动数据，其余档位开启两者，network=clear 恢复全带宽/无延迟。安卓权限仅具体 service 的 grant/revoke，要求 API23+ 与 App 声明；photos/media-library 在 API33 前为共享存储 READ_EXTERNAL_STORAGE，33+ 为 READ_MEDIA_*，motion 要求 API29+。权限 API 预检失败在所有批量写入前拒绝。全部步骤与读回共享截止时间；失败后停止，applied 列完整字段，安卓 appliedSteps 记录成功的 field/step，stateError 含 field/step/code/message/execution；部分执行不能当未执行，不整批重试。转向后屏幕仅确认成功才返回，current 的 null 表示未确认。 Apple TV/Vision Pro 不支持 orientation、posture、status_bar，其他设置依赖运行时。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "udid": {
+            "type": "string",
+            "description": "本插件 devices 返回的精确设备 UDID，不能使用 booted 或设备名称"
+          },
+          "orientation": {
+            "type": "string",
+            "enum": [
+              "portrait",
+              "landscape-left",
+              "landscape-right",
+              "portrait-upside-down"
+            ]
+          },
+          "posture": {
+            "type": [
+              "string",
+              "number"
+            ],
+            "description": "closed、open、flat 或 0–180 度"
+          },
+          "appearance": {
+            "type": "string",
+            "enum": [
+              "light",
+              "dark"
+            ]
+          },
+          "contrast": {
+            "type": "boolean"
+          },
+          "text_size": {
+            "type": "string",
+            "enum": [
+              "extra-small",
+              "small",
+              "medium",
+              "large",
+              "extra-large",
+              "extra-extra-large",
+              "extra-extra-extra-large",
+              "accessibility-medium",
+              "accessibility-large",
+              "accessibility-extra-large",
+              "accessibility-extra-extra-large",
+              "accessibility-extra-extra-extra-large"
+            ]
+          },
+          "network": {
+            "type": [
+              "string",
+              "object"
+            ],
+            "description": "wifi、dsl、lte、3g、edge、very-bad-network、100-loss、offline、clear，或 {latency 毫秒, bandwidth kbps, loss 百分比}"
+          },
+          "location": {
+            "type": [
+              "string",
+              "object"
+            ],
+            "description": "{lat, lon}；安卓会启用定位服务。clear 仅 iOS 清除模拟位置，安卓在任何修改前拒绝。"
+          },
+          "status_bar": {
+            "type": "string",
+            "enum": [
+              "clean",
+              "clear"
+            ]
+          },
+          "privacy": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "grant",
+                  "revoke",
+                  "reset"
+                ]
+              },
+              "service": {
+                "type": "string",
+                "enum": [
+                  "all",
+                  "calendar",
+                  "contacts-limited",
+                  "contacts",
+                  "location",
+                  "location-always",
+                  "photos-add",
+                  "photos",
+                  "media-library",
+                  "microphone",
+                  "motion",
+                  "reminders",
+                  "siri",
+                  "camera"
+                ]
+              },
+              "bundleId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "action",
+              "service"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "udid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "logs",
+      "description": "读取最近日志，last_seconds 默认 120 秒，limit 默认 150 行，level 默认 default，另支持 error/info/debug；match 为正则。iOS 的 default 包含普通 Default 消息，不是警告阈值；默认附带本设备该进程的崩溃摘要；诊断失败保留日志并返回 crashesError，crashes=false 跳过诊断。安卓的 default 才表示警告及以上；仅返回最多最新 3000 条 logcat 记录中过滤出的原始行，默认 main+crash buffer，crashes=false 只读 main；不生成 iOS 崩溃摘要。安卓 bundleId/process 只筛选当前精确 PID，退出/重启前的历史日志及崩溃不在检查范围；进程不存在时 processRunning=false。空日志不能证明没有崩溃；需历史证据时显式不指定进程读取设备日志再检查。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "udid": {
+            "type": "string",
+            "description": "本插件 devices 返回的精确设备 UDID，不能使用 booted 或设备名称"
+          },
+          "bundleId": {
+            "type": "string"
+          },
+          "process": {
+            "type": "string",
+            "description": "进程名（不知道 bundleId 时）"
+          },
+          "last_seconds": {
+            "type": "number"
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "error",
+              "default",
+              "info",
+              "debug"
+            ]
+          },
+          "match": {
+            "type": "string",
+            "description": "正则"
+          },
+          "limit": {
+            "type": "number",
+            "description": "最多返回多少行，默认 150"
+          },
+          "crashes": {
+            "type": "boolean",
+            "description": "默认 true"
+          }
+        },
+        "required": [
+          "udid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "heal",
+      "description": "修复前须让用户接受影响：iOS 按 Baguette 流程在独立设备集合重启 SpringBoard，终止运行中的 App；安卓会重启整个模拟器并结束所有 App，等待 devices 再次报告 Booted 后继续。仅用户接受相应平台的重启影响后调用。卡键先用 press(release-input)。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "udid": {
+            "type": "string",
+            "description": "本插件 devices 返回的精确设备 UDID，不能使用 booted 或设备名称"
+          }
+        },
+        "required": [
+          "udid"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "viewer",
+      "description": "在当前任务侧栏打开（open）或关闭（close）设备的实时画面。open 返回 previewOpened，确认后才能说已显示；close 只停止画面服务，设备与 App 继续运行。画面页由用户操作，开放输入、文件与 App 安装（可能覆盖已有 App）、复制粘贴（替换 Mac 或模拟器剪贴板）、旋转、摇一摇、截图（存桌面或剪贴板）、设备切换与启停（关机终止 App），以及 Baguette 高级工具：位置与运动模拟、状态栏与持续生效的网络条件、摄像头输入、远程通知注入（可能触发 App 行为）、无障碍树、日志、录屏导出（可能含 App 隐私数据）；地图搜索与瓦片经插件代理发往 OpenStreetMap。打开前告知这些能力；打开页面不会自动执行它们。仅监听 127.0.0.1。 任务绑定或近期 App 记录保存失败时返回 taskBindingError/appContextError，设备结果保留；先检查记录和存储，不要重复设备操作。 画面未打开时 outcome=partial，按 nextAction 重试画面，不重启已启动的 App。切换只选择设备，不关机、不自动启动或搬运 App；已关闭的设备需点击「打开」。 安卓：滚轮滚动、触控板捏合，双向文本剪贴板，拖入 APK/图片/视频（≤128 MiB）；录像为无音频 WebM（≤5 分钟或128 MiB），旋转保留完整画面并留边。高级工作台仅 iOS。 画面服务仍失败时尝试独立截图，保留 App；宿主页失败也仅观察，不重复启动。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "open",
+              "close"
+            ]
+          },
+          "udid": {
+            "type": "string",
+            "description": "本插件 devices 返回的精确设备 UDID，不能使用 booted 或设备名称"
+          }
+        },
+        "required": [
+          "action"
+        ],
         "additionalProperties": false
       }
     }
@@ -379,5 +1013,24 @@
     "zh-CN": "locales/zh-CN.json",
     "ja": "locales/ja.json",
     "ko": "locales/ko.json"
-  }
+  },
+  "settingsHtml": "settings.html",
+  "mainView": {
+    "title": "模拟器",
+    "html": "manage.html"
+  },
+  "taskView": {
+    "title": "设备模拟器",
+    "html": "task.html"
+  },
+  "manual": {
+    "items": [
+      {
+        "dir": "manual/workflow",
+        "name": "workflow",
+        "description": "完整工作流：选设备、构建与安装（确认装的是这次构建）、视图点坐标、观察与操作循环、等待与抓变化、设备状态、日志与崩溃、系统弹窗、验证原则与异常恢复。第一次在本任务里用模拟器前先读。"
+      }
+    ]
+  },
+  "releaseNotes": "运行中可直接选择内存模式，选择后提示重启生效，并区分当前与待生效模式；选择本身不中断 App。设备列表直接点选、⌘/Ctrl 多选、Shift 连选，取消专门的选择模式和批量操作栏；右键菜单与行内更多统一支持批量关闭、删除。操作前确认具体设备，未完成项保留选择，结果不确定时停止后续处理。模式说明使用 info 图标，用量并入设备信息行和列表并缓存自动更新，关闭设备不显示内存。设备列表左右、上下分栏均可拖动，分别记住宽度和高度，支持对应方向键调整和双击恢复默认，默认启动模式仍为节省内存。"
 }

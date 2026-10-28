@@ -1,6 +1,7 @@
 import './my-browser-dispatch.test.mjs';
 import './my-browser-network.test.mjs';
 import './my-browser-discovery.test.mjs';
+import './my-browser-badge.test.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
@@ -8,6 +9,9 @@ import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import readline from 'node:readline';
 import path from 'node:path';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import {webcrypto} from 'node:crypto';
 const require = createRequire(import.meta.url);
 const {createBridge,EXT_ID} = require('../my-browser/node/bridge.cjs');
 const P = require('../my-browser/extension/policy.js');
@@ -19,10 +23,21 @@ async function fixture(t,options = {}) {
   const s=await b.request('status'); const url='http://127.0.0.1:'+s.port;
   let session;
   const clientId=crypto.randomUUID();
-  const version=require('../my-browser/extension/manifest.json').version;
+  const version='0.4.13'; // Stable signed wire contract, independent of extension releases.
+  const pair=await webcrypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},false,['sign','verify']);
+  const jwk=await webcrypto.subtle.exportKey('jwk',pair.publicKey);
+  const publicJwk={kty:jwk.kty,crv:jwk.crv,x:jwk.x,y:jwk.y,ext:false};
+  const publicKey=Buffer.from(JSON.stringify(publicJwk)).toString('base64url');
+  await b.request('setTrustedClients',{clients:[{id:clientId,origin:'chrome-extension://'+EXT_ID,extensionId:EXT_ID,publicKey:JSON.stringify(publicJwk)}]});
   async function http(route,body,headers = {}) {
-    const r=await fetch(url+route,{method:body===undefined?'GET':'POST',headers:{'X-My-Browser-Extension':EXT_ID,'X-My-Browser-Client':clientId,'X-My-Browser-Version':version,'X-My-Browser-Family':'chrome',...(session?{'X-My-Browser-Session':session}:{}),...headers},...(body===undefined?{}:{body:JSON.stringify(body)})});
-    return {status:r.status,data:await r.json()};
+    const requestHeaders={'X-My-Browser-Extension':EXT_ID,'X-My-Browser-Origin':'chrome-extension://'+EXT_ID,'X-My-Browser-Client':clientId,'X-My-Browser-Version':version,'X-My-Browser-Family':'chrome','X-My-Browser-Key':publicKey,...(session?{'X-My-Browser-Session':session}:{}),...headers};
+    const init={method:body===undefined?'GET':'POST',headers:requestHeaders,...(body===undefined?{}:{body:JSON.stringify(body)})};
+    let r=await fetch(url+route,init),data=await r.json();
+    if(route==='/health'&&data.challenge){
+      const proof=Buffer.from(await webcrypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},pair.privateKey,new TextEncoder().encode(data.challenge))).toString('base64url');
+      r=await fetch(url+route,{...init,headers:{...requestHeaders,'X-My-Browser-Proof':proof}});data=await r.json();
+    }
+    return {status:r.status,data};
   }
   session=(await http('/health')).data.session;
   await http('/poll');
@@ -34,7 +49,9 @@ test('default policy and one normalization path protect both reads and interacti
   assert.equal(P.check(p,'click','https://example.test').ok,true);
   assert.deepEqual(P.normalizePolicy(p),p);
   p.read.block=['blocked.test'];
-  for(const url of ['https://blocked.test','https://child.blocked.test','http://127.0.0.2','http://2130706433','http://[::1]','http://[::ffff:127.0.0.1]','http://10.2.3.4','http://192.168.1.2','http://localhost.','file:///etc/passwd','https://a:b@example.test']) assert.equal(P.check(p,'text',url).ok,false,url);
+  for(const url of ['https://blocked.test','https://child.blocked.test','http://127.0.0.2','http://2130706433','http://[::1]','http://[::ffff:127.0.0.1]','http://[fc00::1]','http://[fe80::1]','http://10.2.3.4','http://192.168.1.2','http://localhost.','file:///etc/passwd','https://a:b@example.test']) assert.equal(P.check(p,'text',url).ok,false,url);
+  assert.equal(P.check(p,'text','https://[2606:4700:4700::1111]/').ok,true);
+  assert.equal(P.check(p,'text','https://[2001:4860:4860::8888]/').ok,true);
   p.interact.allow=['example.test','blocked.test'];
   assert.equal(P.check(p,'click','https://sub.example.test').ok,true);
   assert.equal(P.check(p,'click','https://example.test.evil.test').ok,false);
@@ -176,7 +193,8 @@ test('explicitly blocked tabs and redirected content are redacted by bridge even
   const redirected=await roundtrip('text',{ok:true,url:'https://blocked.test',text:'private'});assert.equal(redirected.error,'REDIRECT_BLOCKED');assert.equal(redirected.text,undefined);
 });
 test('production stdio worker returns JSON-RPC and exits when host closes stdin',async t=>{
-  const child=spawn(process.execPath,['-e','require(process.argv[1])',path.resolve(import.meta.dirname,'../my-browser/node/worker.cjs')],{stdio:['pipe','pipe','pipe']});
+  const home=await fs.mkdtemp(path.join(os.tmpdir(),'cindy-worker-test-'));t.after(()=>fs.rm(home,{recursive:true,force:true}));
+  const child=spawn(process.execPath,['-e','require(process.argv[1])',path.resolve(import.meta.dirname,'../my-browser/node/worker.cjs')],{stdio:['pipe','pipe','pipe'],env:{...process.env,HOME:home,USERPROFILE:home,LOCALAPPDATA:home,XDG_CONFIG_HOME:home}});
   t.after(()=>child.kill());
   const lines=readline.createInterface({input:child.stdout});
   const answer=once(lines,'line');child.stdin.write(JSON.stringify({jsonrpc:'2.0',id:'fixture-id',method:'status',params:{}})+'\n');

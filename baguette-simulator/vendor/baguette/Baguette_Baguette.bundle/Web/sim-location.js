@@ -13,7 +13,7 @@
 // owns all domain logic (`simctl location` argv, range validation, the
 // walk→route projection). Map tiles come from OpenStreetMap at runtime;
 // only the Leaflet library itself is vendored. See
-// `docs/features/location.md`.
+// `docs/features/location/README.md`.
 //
 // ## Why Walk mode sends a vector, not positions
 //

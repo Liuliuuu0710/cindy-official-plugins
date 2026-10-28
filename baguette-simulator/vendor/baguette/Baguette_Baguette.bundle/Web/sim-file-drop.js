@@ -9,7 +9,7 @@
 // All domain logic — which file is an app vs media, which simctl verb,
 // the "no home on a simulator" rejection — lives on the Swift side
 // (`Server.addFile`, `AppBundle`, `AppArchive`, `MediaItem`). See
-// docs/features/file-upload.md.
+// docs/features/file-upload/README.md.
 //
 // A folder-form `.app` bundle can't travel as one File, so it's walked
 // via webkitGetAsEntry and packed into a *stored* (uncompressed) zip

@@ -201,6 +201,31 @@ class PackagingTests(unittest.TestCase):
                     for platform in all_platforms:
                         self.assertEqual(bundle.read(f"vendor/example-cli/{platform}/tool"), platform.encode())
 
+    def test_directory_records_are_removed_before_counting_collected_files(self):
+        # The source still satisfies its existing 256-entry cap. Directory
+        # records must not consume final-file slots, and the final cap stays.
+        for source_files in (250, 251):
+            with self.subTest(source_files=source_files):
+                source = self.source(config())
+                with zipfile.ZipFile(source, "a") as bundle:
+                    for index in range(5):
+                        bundle.writestr(f"empty-{index}/", b"")
+                    for index in range(source_files - 4):
+                        bundle.writestr(f"file-{index}.txt", b"fixture")
+                output = self.directory / f"count-{source_files}.cindy"
+                with patch.object(packager, "download", side_effect=lambda asset, dest: dest.write_bytes(CONTENT)):
+                    if source_files == 251:
+                        with self.assertRaisesRegex(ValueError, "Collected files exceed plugin package limits"):
+                            packager.assemble(source, output)
+                    else:
+                        packager.assemble(source, output)
+                        with zipfile.ZipFile(output) as bundle:
+                            self.assertEqual(len(bundle.infolist()), 256)
+                            self.assertTrue(all(not info.is_dir() for info in bundle.infolist()))
+                            self.assertEqual(bundle.read("file-0.txt"), b"fixture")
+                            for platform in packager.PLATFORMS:
+                                self.assertEqual(bundle.read(f"vendor/example-cli/{platform}/tool"), CONTENT)
+
     def test_failure_preserves_existing_output(self):
         source = self.source(config())
         source_bytes = source.read_bytes()

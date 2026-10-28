@@ -1,0 +1,14 @@
+{
+  "name": "@cindy-plugin/outlook-mail",
+  "private": true,
+  "version": "2.1.7",
+  "type": "module",
+  "scripts": {"build": "node build.mjs"},
+  "dependencies": {
+    "@radix-ui/react-collapsible": "1.2.1",
+    "@radix-ui/react-dropdown-menu": "2.2.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {"esbuild": "0.28.2"}
+}

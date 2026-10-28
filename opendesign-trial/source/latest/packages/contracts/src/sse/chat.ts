@@ -1,5 +1,10 @@
 import type { LiveArtifactRefreshStatus } from '../api/live-artifacts.js';
-import type { RunFailureAction, RunFailureCategory, RunFailureDetail } from '../api/chat.js';
+import type {
+  AgentEventPayloadTruncation,
+  RunFailureAction,
+  RunFailureCategory,
+  RunFailureDetail,
+} from '../api/chat.js';
 import type { RunMediaTaskFailure } from '../api/media.js';
 import type {
   DeliverableSyntaxRepairState,
@@ -436,7 +441,9 @@ export type DaemonAgentPayload =
       signature: string;
       count: number;
     }
-  | { type: 'raw'; line: string };
+  // A stdout line the parser did not recognise. The daemon bounds it before it
+  // is streamed or stored; `truncated` is present when it was shortened.
+  | { type: 'raw'; line: string; truncated?: AgentEventPayloadTruncation };
 
 /**
  * The run-level automatic retry the daemon just started, as the browser sees it.
@@ -460,6 +467,13 @@ export interface ChatSseRunRetryAttemptedPayload {
   retry_attempt_index: number;
   /** How many automatic attempts this run is allowed. 1 today. */
   retry_max_attempts: number;
+  /**
+   * The failure category that triggered this retry (the daemon's run-failure
+   * classification). The chat reads exactly one value: `'rate_limit'`, to say
+   * "model service is busy" instead of the generic "retrying" (product copy
+   * S09a, OPEND-2849). Optional because older daemons may omit it.
+   */
+  failure_category?: string;
 }
 
 /**

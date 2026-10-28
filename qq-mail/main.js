@@ -58,16 +58,24 @@ async function requireConfiguredEmail() {
   return state.email;
 }
 
-async function nodeRequest(method, params, timeoutMs) {
+async function nodeRequest(method, params, timeoutMs, callId) {
+  if (!cindy.node || typeof cindy.node.request !== 'function') {
+    var unsupported = new Error('当前 Cindy 不支持此插件的 Node 接口，请升级 Cindy 后使用');
+    unsupported.executionState = 'not_executed';
+    throw unsupported;
+  }
   var response = await cindy.node.request({
     method: method,
+    ...(callId ? { callId: callId, cancelWithCall: true } : {}),
     params: params,
     timeoutMs: timeoutMs || 30000,
   });
   if (!response || response.ok !== true) {
-    throw new Error(response && response.message
+    var error = new Error(response && response.message
       ? response.message
-      : 'QQ 邮箱 Worker 调用失败，请稍后重试');
+      : 'QQ 邮箱 Worker 调用失败');
+    error.executionState = response && response.data && response.data.execution_state;
+    throw error;
   }
   return response.result;
 }
@@ -162,7 +170,10 @@ function sanitizeMailArgs(args) {
   }
 
   if (action === 'search') {
-    ['text', 'from', 'to', 'subject', 'since', 'before'].forEach(function copyString(key) {
+    if (args.page_token !== undefined && (typeof args.page_token !== 'string' || !args.page_token.trim())) {
+      throw new Error('page_token必须是上一页返回的非空翻页标记；查第一页时省略');
+    }
+    ['text', 'from', 'to', 'subject', 'since', 'before', 'page_token', 'text_scope'].forEach(function copyString(key) {
       if (typeof args[key] === 'string' && args[key].trim()) output[key] = args[key].trim();
     });
     if (typeof args.unread === 'boolean') output.unread = args.unread;
@@ -179,29 +190,59 @@ function sanitizeMailArgs(args) {
     if (args.bcc !== undefined) output.bcc = args.bcc;
     output.subject = args.subject;
     output.body_text = args.body_text;
+    if (args.attachments !== undefined || args.dir_deposit !== undefined) {
+      throw new Error('发送附件请使用 attachment_paths 本机文件绝对路径列表');
+    }
+    if (args.attachment_paths !== undefined) {
+      if (!Array.isArray(args.attachment_paths) || args.attachment_paths.length > 10 || args.attachment_paths.some(function (file) { return typeof file !== 'string' || !file; })) {
+        throw new Error('attachment_paths 必须是文件路径列表，每封最多 10 个文件');
+      }
+      output.attachment_paths = args.attachment_paths.slice();
+    }
   }
 
   return output;
 }
 
-async function runMail(args) {
+async function runMail(args, callId) {
   var action;
+  var dispatched = false;
   try {
     action = sanitizeMailArgs(args);
   } catch (error) {
-    return fail(error && error.message ? error.message : 'QQ 邮箱参数无效');
+    return fail('操作未执行：' + (error && error.message ? error.message : 'QQ 邮箱参数无效'));
   }
 
   try {
     var email = await requireConfiguredEmail();
+    dispatched = true;
     var result = await nodeRequest('mail/action', {
       email: email,
       action: action,
-    }, action.action === 'send' || action.action === 'draft' ? 60000 : 45000);
+    }, ['send', 'draft', 'read', 'search'].includes(action.action) ? 120000 : 45000, callId);
     return { ok: true, result: result };
   } catch (error) {
-    return fail(error && error.message ? error.message : 'QQ 邮箱操作失败，请稍后重试');
+    if (['send', 'draft', 'move', 'mark_read', 'mark_unread'].includes(action.action)) {
+      if (error.executionState === 'executed') return fail(error.message);
+      if (dispatched && error.executionState !== 'not_executed') {
+        return fail('操作结果不确定，请先核对邮箱实际状态，避免重复发送或重复修改');
+      }
+      return fail(error.executionState === 'not_executed' ? error.message
+        : '操作未执行：' + (error && error.message ? error.message : '请检查邮箱配置'));
+    }
+    return fail(error && error.message ? error.message : 'QQ 邮箱操作失败，请检查网络');
   }
+}
+
+async function connectAccount(args, callId) {
+  var email = normalizeEmail(args.email);
+  var result = await nodeRequest('account/connect', { email: email }, 45000, callId);
+  var current = await readJson('/kv');
+  var data = isObject(current) ? current : {};
+  data.email = email;
+  var response = await fetch('/kv', { method: 'PUT', body: JSON.stringify(data) });
+  if (!response.ok) throw new Error('连接已验证，但保存邮箱地址失败，请重试连接');
+  return { ok: true, result: result };
 }
 
 async function statusResult() {
@@ -215,33 +256,32 @@ async function statusResult() {
 cindy.onHostMessage(function onHostMessage(message) {
   if (!message || message.type !== 'tool-call') return;
   void (async function dispatch() {
+    var reply;
     try {
       var result = message.tool === 'qq_mail_status'
         ? await statusResult()
+        : message.tool === 'qq_mail_connect'
+          ? await connectAccount(isObject(message.args) ? message.args : {}, message.callId)
         : message.tool === 'qq_mail'
-          ? await runMail(isObject(message.args) ? message.args : {})
+          ? await runMail(isObject(message.args) ? message.args : {}, message.callId)
           : fail('未知工具：' + message.tool);
-      if (result.ok) {
-        await cindy.send({
-          type: 'tool-result',
-          callId: message.callId,
-          ok: true,
-          result: result.result,
-        });
-      } else {
-        await cindy.send({
-          type: 'tool-result',
-          callId: message.callId,
-          ok: false,
-          message: result.message,
-        });
-      }
+      reply = {
+        type: 'tool-result',
+        callId: message.callId,
+        ok: result.ok,
+        ...(result.ok ? { result: result.result } : { message: result.message }),
+      };
+      await cindy.send(reply);
     } catch (error) {
-      await cindy.send({
+      // A delivery failure does not change the mailbox outcome. Retry only the
+      // exact reply, never the operation; retain success data and known failures.
+      await cindy.send(reply || {
         type: 'tool-result',
         callId: message.callId,
         ok: false,
-        message: error && error.message ? error.message : 'QQ 邮箱工具执行失败',
+        message: message.tool === 'qq_mail' && message.args && ['send', 'draft', 'move', 'mark_read', 'mark_unread'].includes(message.args.action)
+          ? '操作结果不确定，请先核对邮箱实际状态，避免重复操作'
+          : (error && error.message ? error.message : 'QQ 邮箱工具执行失败'),
       });
     }
   })();

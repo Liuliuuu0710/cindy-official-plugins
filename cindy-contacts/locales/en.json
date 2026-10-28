@@ -1,0 +1,263 @@
+{
+  "name": "Contacts",
+  "description": "AI organizes people, exchanges and follow-ups from your mail, calendar and chats. Imports macOS and old Smart Contacts. Data is stored locally; on supported Cindy versions, enable encrypted sync between computers on the same account. Changes and deletions merge when both are online.",
+  "whenToUse": "An unknown email, phone or Feishu/Slack/GitHub account; contacting, emailing or @-mentioning someone; preparing a meeting or reply and needing background or where things were left; news about a colleague, friend or client; tidying up, backfilling, deduplicating or importing contacts.",
+  "tools": {
+    "find": {
+      "description": "Find people by any clue: name, alias, email, phone number, Feishu/Slack/GitHub id, or a keyword from their company, projects or events. Returns up to limit people with summary, identities, groups, notes for AI and recent events; matchType is identity (exact identity match, most reliable), name (exact name or alias), partial (a stored name is contained in the clue, e.g. a full name finding an entry saved with a given name only; confirm it) or text (contained in text).",
+      "parameters": {
+        "/properties/query": {
+          "description": "The clue as written, e.g. zhixia@example.com, 138 0000 0000, Connie, the person who works on payments"
+        },
+        "/properties/limit": {
+          "description": "Maximum people to return, default 10"
+        }
+      }
+    },
+    "get": {
+      "description": "Read one person’s full file by id: identities and contact details, intro (narrative), key facts, latest update, open loops, interactions (newest first, up to 200), events, groups, relationships and merge history. The id comes from find or list.",
+      "parameters": {
+        "/properties/id": {
+          "description": "Entry id"
+        }
+      }
+    },
+    "list": {
+      "description": "List entry summaries page by page (no story or full events), optionally filtered by group, status or type. Use it to browse or review the to-confirm queue; use find for a specific person.",
+      "parameters": {
+        "/properties/group": {
+          "description": "Group name"
+        },
+        "/properties/status": {
+          "description": "pending = waiting for the user to confirm"
+        },
+        "/properties/limit": {
+          "description": "Default 50"
+        }
+      }
+    },
+    "save": {
+      "description": "Create or update an entry. Without id it creates one: if a similar name exists you get DUPLICATE_SUSPECT with candidates; check them with get and update by id if it is the same person. With id it updates only the fields you pass; aliases, identities, groups and open_loops are added. IDENTITY_CONFLICT with conflictContactId means the identity belongs to someone else.",
+      "parameters": {
+        "/properties/id": {
+          "description": "Entry id to update; omit to create"
+        },
+        "/properties/name": {
+          "description": "Display name, required to create"
+        },
+        "/properties/kind": {
+          "description": "Default person"
+        },
+        "/properties/aliases": {
+          "description": "Aliases, English names or nicknames to add"
+        },
+        "/properties/remove_aliases": {
+          "description": "Aliases to remove"
+        },
+        "/properties/summary": {
+          "description": "One-line intro: who they are, where, what they do. Replaces the old value"
+        },
+        "/properties/narrative": {
+          "description": "Intro: who they are, what is going on between you, recent changes, in a few sentences. Replaces the old value; read it with get first and keep what still holds"
+        },
+        "/properties/agent_notes": {
+          "description": "Handling notes for AI, such as preferred channel or how to address them. Replaces the old value"
+        },
+        "/properties/status": {
+          "description": "Use pending for uncertain information so the user can confirm"
+        },
+        "/properties/identities": {
+          "description": "Identities and contact details to add"
+        },
+        "/properties/identities/items/properties/platform": {
+          "description": "email / phone / feishu / slack / github / wechat / telegram / x, lowercase"
+        },
+        "/properties/identities/items/properties/label": {
+          "description": "Optional, e.g. work, personal"
+        },
+        "/properties/remove_identity_ids": {
+          "description": "Identity ids to remove (from get)"
+        },
+        "/properties/groups": {
+          "description": "Group names to join; missing groups are created"
+        },
+        "/properties/allow_duplicate": {
+          "description": "Pass true only after confirming it is not the same person as the similar entry"
+        },
+        "/properties/facts": {
+          "description": "Key facts, replaced as a whole: e.g. company, works with, how to reach, remember; up to 12"
+        },
+        "/properties/latest": {
+          "description": "One-line latest update (short), shown under the name in the list"
+        },
+        "/properties/open_loops": {
+          "description": "Add open loops: who is waiting on whom, promises, pending replies; an identical open loop is not duplicated"
+        },
+        "/properties/close_loops": {
+          "description": "Finished loops: loop id (from get), optionally with a one-line outcome in detail"
+        }
+      }
+    },
+    "record": {
+      "description": "Record interactions read from mail, Feishu, calendar, Cindy conversations or GitHub into a person’s file, up to 200 per call. Use contact_id, or identity / email / name to let the plugin find the person; unmatched items return UNRESOLVED, so find or save the person first. The same ref (source id) is recorded once per person, so resubmitting is safe. Record only people the user really deals with; skip marketing, notifications and bots.",
+      "parameters": {
+        "/properties/items/items/properties/contact_id": {
+          "description": "Entry id; if unknown use identity, email or name"
+        },
+        "/properties/items/items/properties/email": {
+          "description": "Their email"
+        },
+        "/properties/items/items/properties/name": {
+          "description": "Their name (used only when exactly one entry matches)"
+        },
+        "/properties/items/items/properties/occurred_at": {
+          "description": "When it happened, ISO 8601"
+        },
+        "/properties/items/items/properties/title": {
+          "description": "Email subject, meeting name or a one-line title"
+        },
+        "/properties/items/items/properties/summary": {
+          "description": "One or two sentences on what happened, including who is waiting on whom"
+        },
+        "/properties/items/items/properties/quote": {
+          "description": "Optional: one line worth keeping verbatim"
+        },
+        "/properties/items/items/properties/link": {
+          "description": "Optional: https link to the original"
+        },
+        "/properties/items/items/properties/ref": {
+          "description": "Source id: email message id, Feishu message id, event id, PR URL, used for de-duplication"
+        }
+      }
+    },
+    "log_event": {
+      "description": "Add a dated event to someone: a notable interaction, agreement or change.",
+      "parameters": {
+        "/properties/text": {
+          "description": "One or two sentences on what happened, with needed context"
+        },
+        "/properties/date": {
+          "description": "Event date YYYY-MM-DD, default today"
+        }
+      }
+    },
+    "relate": {
+      "description": "Record or remove a relationship between two entries, such as same team, manager, or works at a company.",
+      "parameters": {
+        "/properties/relation": {
+          "description": "Relationship, e.g. same team, former manager, works at"
+        },
+        "/properties/remove": {
+          "description": "true = remove this relationship"
+        }
+      }
+    },
+    "organize": {
+      "description": "Organize in bulk: add to a group, remove from a group, move to a group (leaving other groups), confirm to-confirm entries, or mark as to confirm.",
+      "parameters": {
+        "/properties/group": {
+          "description": "Group name; required for group actions, created if missing"
+        }
+      }
+    },
+    "merge": {
+      "description": "Merge the source entry into target, then delete source: identities, events, interactions, open loops, groups and relationships move over. Merge directly when you are sure (same email, phone or platform account; or same name with matching company and context) and give a reason; the merge is recorded and the user can split it again. If unsure, do not merge.",
+      "parameters": {
+        "/properties/source_id": {
+          "description": "Entry merged in and deleted"
+        },
+        "/properties/target_id": {
+          "description": "Entry kept; pick the more complete one"
+        },
+        "/properties/reason": {
+          "description": "Why it is the same person, in one line, e.g. “same work email”"
+        }
+      }
+    },
+    "delete": {
+      "description": "Delete an entry with its identities, events, memberships, exchanges, open items, Q&A history and merge snapshots. This cannot be undone. Call with confirm:true only when the user explicitly asks to delete.",
+      "parameters": {
+        "/properties/confirm": {
+          "description": "Pass true when the user explicitly asked to delete"
+        }
+      }
+    },
+    "groups": {
+      "description": "Manage groups: list shows all groups with member counts, create, rename, or delete a group (people in it are kept).",
+      "parameters": {
+        "/properties/name": {
+          "description": "Group name; required except for list"
+        },
+        "/properties/new_name": {
+          "description": "New name for rename"
+        }
+      }
+    },
+    "find_duplicates": {
+      "description": "Scan for pairs of entries with similar names. Get both sides of each pair: if you are sure they are the same person (same email, phone or platform account, or same name with matching company and context), merge with a reason; leave uncertain pairs, and ask the user when they are present."
+    },
+    "import_macos": {
+      "description": "Import read-only from macOS Contacts; system contacts are never changed. By default dry_run only returns how many entries would be created, completed or skipped; pass dry_run:false after the user agrees. Cards with the same email, phone or system anchor join existing entries; new entries with similar names go to the to-confirm queue. The first run asks for macOS permission and returns PERMISSION_DENIED if refused. Mac only. After the first import, if daily reconciliation is on in settings, a read-only reconciliation runs at most once a day when a tidy-up starts (creates and fills in, never deletes).",
+      "parameters": {
+        "/properties/dry_run": {
+          "description": "Default true, preview only"
+        },
+        "/properties/group": {
+          "description": "Optional: put imported people in this group"
+        }
+      }
+    },
+    "stats": {
+      "description": "Contacts overview: people, organizations, to confirm, groups."
+    },
+    "save_many": {
+      "description": "Create or update up to 100 entries at once, with the same rules as save. Use it to import client lists, spreadsheets or business cards. Returns a result per item; a failed item (e.g. DUPLICATE_SUSPECT, IDENTITY_CONFLICT) does not affect the others, so resolve failures one by one as with save. Supports the create and add fields of save; to close open items or remove aliases or contact details, use save for each entry.",
+      "parameters": {
+        "/properties/items": {
+          "description": "Each item has the same fields as save"
+        },
+        "/properties/items/items/properties/id": {
+          "description": "Entry id to update; omit to create"
+        }
+      }
+    },
+    "maintenance": {
+      "description": "Start, check sources for and finish a time-window tidy-up. begin returns run_id, the window, each source’s own from/to and how to query it (for chats, find group chats and direct messages separately), the backlog left unread last time, first_step and coverage_rule; scope is recent, backfill or contact. Report which sources work with action \"sources\"; after reading and recording, call end with run_id and each source’s coverage (complete / partial / none, partial with gaps). Only sources read fully, or partly with gaps listed, move their checkpoint forward; gaps are read first next time.",
+      "parameters": {
+        "/properties/checkpoint": {
+          "description": "Legacy: without run_id, the time processed up to (ISO 8601)"
+        },
+        "/properties/scanned": {
+          "description": "For end: conversations or emails read in this run"
+        },
+        "/properties/pending": {
+          "description": "Entries written as to-confirm in this run"
+        },
+        "/properties/note": {
+          "description": "Optional one-line note, up to 300 characters"
+        },
+        "/properties/scope": {
+          "description": "For begin; defaults to recent"
+        },
+        "/properties/contact_id": {
+          "description": "When scope is contact"
+        },
+        "/properties/months": {
+          "description": "How many months further back for backfill / contact; default 3"
+        },
+        "/properties/run_id": {
+          "description": "For end: the run_id returned by begin"
+        },
+        "/properties/sources_status": {
+          "description": "For sources (also accepted by end): whether each source can be read"
+        },
+        "/properties/coverage": {
+          "description": "Required for end: whether each source was read completely this time"
+        },
+        "/properties/backlog_done": {
+          "description": "For end: backlog ids finished this time"
+        }
+      }
+    }
+  }
+}

@@ -3,6 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- Home Screen web app. "Add to Home Screen" (Safari, or Chrome via
+     Share) saves the page as it is — with `?handheld=1` when the stream
+     is held in the hand — and opens it with no browser bars. The status
+     bar turns translucent so the stream can sit under it; handheld mode
+     sets `viewport-fit=cover` itself. See docs/features/handheld/. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Simulators — ASC Pro</title>
 <!-- Vendored Leaflet stylesheet for the location map picker. The
      library + CSS are served locally; only OSM tiles are fetched at
@@ -73,6 +81,8 @@
      sim-native.js, which builds the clusters at init and needs
      `window.Baguette._ToolbarFold` to decide what folds. -->
 <script src="/toolbar/toolbar-fold.js"></script>
+<script src="/handheld/handheld-mode.js"></script>
+<script src="/handheld/handheld-button.js"></script>
 <script src="/capture-gallery.js"></script>
 <script src="/recorder.js"></script>
 <script src="/stream-session.js"></script>
@@ -85,6 +95,11 @@
      `sim-network.js` is the card that draws it, and must load after it. -->
 <script src="/network/network-condition-form.js"></script>
 <script src="/sim-network.js"></script>
+<!-- App defaults. `defaults/preference-rows.js` shapes rows and request
+     bodies; `sim-defaults.js` is the card that draws them, and loads after. -->
+<script src="/defaults/preference-rows.js"></script>
+<script src="/sim-defaults.js"></script>
+<script src="/sim-notify.js"></script>
 <script src="/sim-file-drop.js"></script>
 <script src="/sim-3d.js"></script>
 <!-- Plugin contributions. Renders manifest-declared toolbar buttons +

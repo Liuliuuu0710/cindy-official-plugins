@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import {createHash} from 'node:crypto';
 
 const root = path.resolve(import.meta.dirname, '..');
 const locales = ['zh-CN', 'en', 'ja', 'ko'];
@@ -137,9 +138,18 @@ test('plugins never infer language from the browser or operating system', () => 
     walk(path.join(root, pluginDir));
     for (const file of files) {
       const source = fs.readFileSync(file, 'utf8');
-      const codeOnly = file.endsWith('.html')
+      let codeOnly = file.endsWith('.html')
         ? stripHtmlComments(source)
         : stripJsComments(source);
+      // This pinned, unmodified OCR engine uses the browser locale only to build
+      // Emscripten's C-runtime LANG. It never selects the plugin's UI language or
+      // OCR language (which the user explicitly chooses). Keep all other reads checked.
+      if (path.relative(root, file) === 'my-browser/extension/vendor/tesseract/tesseract-core-lstm.wasm.js') {
+        assert.equal(createHash('sha256').update(source).digest('hex'), '775a35df6f2ae100e02609443e6bd5cafcd07983dd6175454ca4a432a7730687');
+        const runtimeLocale = '("object"==typeof navigator&&navigator.languages&&navigator.languages[0]||"C")';
+        assert.equal(codeOnly.split(runtimeLocale).length, 2);
+        codeOnly = codeOnly.replace(runtimeLocale, '"C"');
+      }
       assert.doesNotMatch(
         codeOnly,
         /\bnavigator\.(?:language|languages)\b/,

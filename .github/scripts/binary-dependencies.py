@@ -151,7 +151,8 @@ def validate_config(raw, package_paths):
                 exact_keys(item, ("target",) if asset["format"] == "file" else ("source", "target"), ("executable",))
                 require(type(item.get("executable", False)) is bool, "executable must be a boolean")
                 target = safe_path(item["target"])
-                require(target.startswith(f"vendor/{name}/"), f"Dependency output must stay under vendor/{name}/")
+                require(target.startswith((f"vendor/{name}/", f"extension/vendor/{name}/")),
+                        f"Dependency output must stay under vendor/{name}/ or extension/vendor/{name}/")
                 add_path(destinations, target)
                 if "source" in item:
                     source = safe_path(item["source"])
@@ -344,11 +345,16 @@ def assemble(source, destination):
         require(paths.get(folded("THIRD-PARTY-LICENSES.txt")) == "file", "Binary dependencies require THIRD-PARTY-LICENSES.txt")
         for dependency in dependencies:
             require(bundle.getinfo(dependency["license"]).file_size > 0, "Dependency license cannot be empty")
-        count = len(bundle.infolist())
+        # package-plugin.sh already removes directory records. Do it during
+        # the existing copy, before collected files are checked against the
+        # same 256-entry final-package limit.
+        count = sum(not info.is_dir() for info in bundle.infolist())
         timestamp = bundle.getinfo("ghost.json").date_time
         with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as output:
             with timed_stage("zip_source"):
                 for info in bundle.infolist():
+                    if info.is_dir():
+                        continue
                     output.writestr(info, bundle.read(info))
             for dependency in dependencies:
                 for index, asset in enumerate(dependency["assets"], start=1):

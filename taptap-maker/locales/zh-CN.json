@@ -41,7 +41,7 @@
       "description": "诊断当前会话工作目录的 TapTap Maker 本地开发环境与项目配置。"
     },
     "maker_build": {
-      "description": "通过插件随附的官方 Runtime 同步、提交并构建当前会话工作区。仅在用户明确要求构建、运行、预览、提交或推送时调用；成功后优先在当前会话右侧打开预览，并原样返回可点击的 user_facing_markdown。不调用系统浏览器，也不通过外部 CLI、直接 MCP 或内部构建工具绕行。 构建提交前，若本地 main 仅落后远端，Runtime 会自动 fast-forward；分叉或会覆盖本地修改时停止。",
+      "description": "通过插件随附的官方 Runtime 同步、提交并构建当前会话工作区。仅在用户明确要求构建、运行、预览、提交或推送时调用；成功后默认在当前会话右侧打开预览（用户在插件设置中关闭后只返回链接，不打开右侧预览），并原样返回可点击的 user_facing_markdown。不调用系统浏览器，也不通过外部 CLI、直接 MCP 或内部构建工具绕行。 main 落后时快进，分叉时自动合并；云端未提交改动阻塞推送时自动提交云端改动并合并后重推。冲突时取消合并；非 main、远端状态不明或快进会覆盖本地修改时停止。",
       "parameters": {
         "/properties/entry": {
           "description": "可选，单人游戏 Lua 入口文件，相对 scriptsPath。"
@@ -85,6 +85,38 @@
     },
     "maker_console": {
       "description": "打开 Maker 控制台. 启动本地服务，不自动构建或安装游戏运行环境。关闭页面不会停止服务，请在控制台停止。媒体开关只限制 Agent 工具，不限制控制台中的手动操作。"
+    },
+    "maker_validate": {
+      "description": "使用插件随包 Runtime 对当前工作区做本地 Lua 验证或截图；不依赖项目 Skill 安装，不提交或远端构建。仅单机，有活动预览或状态未确认时拒绝，不自动停止、安装 Runtime 或更新开发工具包。先读 taptap-maker/local-validation.md；COMPLETED 不等于 PASS，必须检查原报告并查看截图。 大报告返回摘要，完整内容通过证据路径读取。 验证前要求证据目录已被 Git 忽略且无已跟踪文件。 Runtime 可能修复 .installer/local-skill-filter.json，移除当前平台对 run-lua-validate 的旧排除项。",
+      "parameters": {
+        "/properties/mode": {
+          "description": "验证模式；默认 validate。截图模式必须选择 screenshot_frame。"
+        },
+        "/properties/entry": {
+          "description": "可选，项目脚本目录下已有的 Lua 入口相对路径。"
+        },
+        "/properties/test": {
+          "description": "可选，项目脚本目录下已有的 V 断言脚本相对路径。 仅 validate/both。"
+        },
+        "/properties/screenshot_frame": {
+          "description": "按本次加载状态选择截图帧；无固定帧数保证就绪。 仅 screenshot/both。"
+        },
+        "/properties/frames": {
+          "description": "可选验证帧数；截图后至少保留 3 帧回读。 仅 validate/both。"
+        },
+        "/properties/timeout_seconds": {
+          "description": "单轮验证超时秒数；显式预算不会自动增加，整次调用仍受插件 14 分钟总时限约束。"
+        },
+        "/properties/width": {
+          "description": "本轮窗口宽度，不保存到发布配置。"
+        },
+        "/properties/height": {
+          "description": "本轮窗口高度，不保存到发布配置。"
+        },
+        "/properties/nosound": {
+          "description": "本轮是否静音。"
+        }
+      }
     }
   }
 }

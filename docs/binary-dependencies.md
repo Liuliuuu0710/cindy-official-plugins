@@ -31,13 +31,13 @@ required for that path. Untouched legacy large files are not forcibly migrated.
 4. For local development, prepare the declared files and package with Cindy Forge
    or a reviewed explicit file list, as described below. This path needs no Python;
    Forge does not download dependencies for you.
-5. Bump the plugin version, commit source, declarations and licenses under the
-   contribution rules, and open a Ready PR. Leave device verification unchecked
-   until actually verified; that gate failing does not prevent obtaining test packages.
-6. Download the PR verification package and test it on a stable or Beta Cindy
-   build meeting its minimum version. Record the artifact, version, channel and
-   results before checking the attestation. URL/hash/file-selection updates also
-   change package content; ensure verification covers the latest contents.
+5. Bump the plugin version, commit source, declarations and licenses, and open a
+   Ready PR. Obtain packages and add runtime evidence during review; no fixed
+   device-verification checkbox is required.
+6. Test paths affected by dependency changes and record the actual artifact,
+   environment/version and results. Reuse unaffected evidence with a full diff
+   explanation. URL/hash/file-selection changes require checking actual content
+   impact; green CI alone does not prove runtime testing.
 
 No client installation or first-use download is added. Users download the final
 package through the existing OSS/CDN distribution path, not from upstream.
@@ -91,13 +91,12 @@ dependencies into the package. User devices never fill in missing dependencies.
 ## Download PR verification packages (no local Python)
 
 1. From a Ready PR's Checks, open the **Verify pull request** run using Details.
-   Fork workflows may first need maintainer approval; do not pre-check device
-   verification to trigger a build.
+   Fork workflows may first need maintainer approval; authors do not need to
+   complete a verification form to trigger a build.
 2. Wait for **Upload PR verification packages** in **Test and dry-run packaging for
    changed plugins**, then download `pr-plugins-<PR>-<head SHA>-<run id>-<attempt>`
    from the run's Artifacts. Sign in with repository read access. Earlier test or
-   packaging failures prevent upload; a failure of only the final attestation
-   gate leaves the already-uploaded artifact available.
+   packaging failures prevent upload; technical CI does not check device attestation.
 3. Extract GitHub's outer artifact ZIP. Each changed plugin directory contains
    `plugin.cindy`, `plugin.cindy.sha256` and `source.json`; install the inner `.cindy`,
    not the outer artifact. `source.json` records the plugin directory, PR head,
@@ -106,17 +105,17 @@ dependencies into the package. User devices never fill in missing dependencies.
    and integrity checks, **not signatures or security certification**. PR packages
    contain unreviewed code; install only with explicit acceptance of that risk,
    never automatically execute them.
-4. After device verification, record the artifact/run link, `buildCommit`, package
-   SHA-256, Cindy version/channel and exercised behavior in the PR, then check the
-   existing attestation. Editing the body reruns checks. A rerun with unchanged
-   source and dependency outputs can refer to prior evidence; ZIP timestamp-only
-   hash differences do not automatically require retesting. If head/base changes
-   affect packaged content, download and verify the new package. CI does not
-   automatically prove two packages equivalent.
+4. Record the artifact/run link, actual environment/version, exercised behavior
+   and results in the body or a linked comment. Reference CI's package identity
+   instead of copying it. Unchanged source and
+   dependency outputs can reuse prior evidence; ZIP timestamp-only differences
+   do not require retesting. Assess the full diff since the tested version and
+   verify affected paths. CI does not automatically prove package equivalence.
 5. Artifacts expire after 7 days; an authorized contributor can rerun the workflow.
    Documentation-only PRs produce no plugin artifact. Verification packages never
-   go to Platform/OSS; after merge, CN/Global independently rebuild and use the
-   existing release review flow.
+   go to Platform/OSS. CN publishing remains removed. After merge, Global rebuilds
+   changed packages independently of PR artifacts and uses the existing release
+   review flow.
 
 ## Optional: reproduce the repository build locally
 
@@ -134,8 +133,8 @@ unzip -l /tmp/my-plugin.cindy
 ```
 
 The local packager uses local HEAD, PR CI uses a temporary head/base merge, and
-publishing uses the merged main commit. Compare actual source, contents and modes,
-not merely filenames, when establishing equivalence.
+Global publishing uses the merged main commit. Compare actual
+source, contents and modes, not merely filenames, when establishing equivalence.
 
 ## Declaration
 
@@ -386,18 +385,24 @@ add runtime permission mechanisms nor prove binary behavior safe.
 ## CI and trust boundary
 
 PR CI runs offline collector regression cases and dry-runs changed plugins using
-the same packager. CN and Global retain independent publishing workflows. Each
-workflow packages in a job with read-only repository access, no persisted checkout
-credentials, no release secrets and no OIDC permission. Its immutable artifact
+the same packager. CN publishing remains removed. Global publishes changed
+plugins on main pushes and all current plugins on manual dispatch from main.
+PR verification and its test artifacts remain separate from production publishing.
+
+The Global workflow packages in a job with read-only
+repository access, no persisted checkout credentials, no release secrets and no
+OIDC permission. Its immutable artifact
 contains the complete package, SHA-256, source commit and plugin directory.
 
-A separate publishing job obtains that run's artifact, checks its identity and
-digest, and uploads it through the existing Platform/OIDC path. It does not check
+A separate Global publishing job then obtains that run's artifact, checks its
+identity and digest, and uploads it through the existing Platform/OIDC path. It does not check
 out the repository, fetch dependencies or run plugin/build code. A failed package
 has no artifact and cannot publish; other successful plugins can proceed.
 
 This reduces exposure of publishing credentials; it is **not a claim that
 downloaded binaries are safe**. SHA-256 verifies selected bytes, not their
-behavior. Dependency/URL/hash/license changes require maintainer review, and
-regional Platform approval remains in place. Existing PR plugin tests may still
-execute source code; this mechanism adds no author-controlled lifecycle hooks.
+behavior. Dependency/URL/hash/license changes require evidence-based review;
+routine maintenance can be approved automatically, while real permission/trust
+expansion or missing evidence requires maintainer attention, and
+Global Platform approval remains required. Existing PR
+plugin tests may still execute source code; this mechanism adds no author-controlled lifecycle hooks.

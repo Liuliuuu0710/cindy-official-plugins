@@ -192,8 +192,9 @@ for (const [plugin, prefix] of Object.entries(plugins)) {
     assert.equal((await call(prefix + '_run', { account: 'acc-personal', command: ['list'] })).ok, false);
     assert.equal(requests.length, 0);
     f.accounts[0].scopeStale = true;
-    assert.equal((await call(prefix + '_run', { account: 'acc-work', command: ['list'] })).ok, false);
-    assert.equal(requests.length, 0);
+    // An added mark-read scope must not disable existing read/compose grants.
+    assert.equal((await call(prefix + '_run', { account: 'acc-work', command: ['list'], session_context: { workdir_is_local: true, workdir_is_read_only: false, workdir: '/test-workdir' } })).ok, true);
+    assert.equal(requests.length, 1);
     f.accounts[0].scopeStale = false;
     assert.equal((await call(prefix + '_run', { account: 'acc-work', command: ['list'], session_context: { workdir_is_local: true, workdir_is_read_only: false, workdir: '/test-workdir' } })).ok, true);
     assert.equal(requests[0].authAccount, 'acc-work');

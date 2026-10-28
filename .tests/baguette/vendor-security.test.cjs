@@ -37,3 +37,9 @@ test('CSS selector fallback escapes quotes, backslashes, newlines and Unicode', 
   context.window.CSS = context.CSS = { escape: () => 'native-result' };
   assert.equal(context.cssEscape(input), 'native-result');
 });
+
+test('every packaged upstream file matches vendor-inventory.json',async()=>{
+ // The record went stale once (sim-native.js after the patch-port fix) with nothing to notice.
+ const {inventoryProblems}=await import('../../baguette-simulator/native/inventory.mjs');
+ assert.deepEqual(inventoryProblems(),[]);
+});

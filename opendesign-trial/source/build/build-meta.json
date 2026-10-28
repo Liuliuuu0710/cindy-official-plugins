@@ -171,23 +171,13 @@
       ],
       "format": "esm"
     },
-    "../latest/apps/web/src/hooks/useAnchoredPopover.ts": {
-      "bytes": 18005,
-      "imports": [
-        {
-          "path": "node_modules/react/index.js",
-          "kind": "import-statement",
-          "original": "react"
-        }
-      ],
+    "../latest/apps/web/src/observability/experience-diagnostics.ts": {
+      "bytes": 425,
+      "imports": [],
       "format": "esm"
     },
-    "../latest/apps/web/src/components/chat/AnchoredMenuShell.module.css": {
-      "bytes": 1025,
-      "imports": []
-    },
-    "../latest/apps/web/src/components/chat/AnchoredMenuShell.tsx": {
-      "bytes": 15605,
+    "../latest/apps/web/src/observability/use-experience-error.ts": {
+      "bytes": 496,
       "imports": [
         {
           "path": "node_modules/react/index.js",
@@ -195,547 +185,11 @@
           "original": "react"
         },
         {
-          "path": "node_modules/react-dom/index.js",
+          "path": "../latest/apps/web/src/observability/experience-diagnostics.ts",
           "kind": "import-statement",
-          "original": "react-dom"
-        },
-        {
-          "path": "../latest/apps/web/src/hooks/useAnchoredPopover.ts",
-          "kind": "import-statement",
-          "original": "../../hooks/useAnchoredPopover"
-        },
-        {
-          "path": "../latest/apps/web/src/components/chat/AnchoredMenuShell.module.css",
-          "kind": "import-statement",
-          "original": "./AnchoredMenuShell.module.css"
-        },
-        {
-          "path": "node_modules/react/jsx-runtime.js",
-          "kind": "import-statement",
-          "original": "react/jsx-runtime"
+          "original": "./experience-diagnostics"
         }
       ],
-      "format": "esm"
-    },
-    "../latest/packages/components/src/class-names.ts": {
-      "bytes": 152,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/packages/components/src/button.module.css": {
-      "bytes": 4752,
-      "imports": []
-    },
-    "../latest/packages/components/src/button.tsx": {
-      "bytes": 1735,
-      "imports": [
-        {
-          "path": "node_modules/react/index.js",
-          "kind": "import-statement",
-          "original": "react"
-        },
-        {
-          "path": "../latest/packages/components/src/class-names.ts",
-          "kind": "import-statement",
-          "original": "./class-names"
-        },
-        {
-          "path": "../latest/packages/components/src/button.module.css",
-          "kind": "import-statement",
-          "original": "./button.module.css"
-        },
-        {
-          "path": "node_modules/react/jsx-runtime.js",
-          "kind": "import-statement",
-          "original": "react/jsx-runtime"
-        }
-      ],
-      "format": "esm"
-    },
-    "../latest/packages/components/src/dialog.module.css": {
-      "bytes": 3672,
-      "imports": []
-    },
-    "../latest/packages/components/src/dialog.tsx": {
-      "bytes": 3546,
-      "imports": [
-        {
-          "path": "node_modules/react/index.js",
-          "kind": "import-statement",
-          "original": "react"
-        },
-        {
-          "path": "../latest/packages/components/src/class-names.ts",
-          "kind": "import-statement",
-          "original": "./class-names"
-        },
-        {
-          "path": "../latest/packages/components/src/dialog.module.css",
-          "kind": "import-statement",
-          "original": "./dialog.module.css"
-        },
-        {
-          "path": "node_modules/react/jsx-runtime.js",
-          "kind": "import-statement",
-          "original": "react/jsx-runtime"
-        }
-      ],
-      "format": "esm"
-    },
-    "../latest/packages/components/src/form-controls.module.css": {
-      "bytes": 1768,
-      "imports": [
-        {
-          "path": "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2374716b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E",
-          "kind": "url-token",
-          "external": true
-        },
-        {
-          "path": "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E",
-          "kind": "url-token",
-          "external": true
-        },
-        {
-          "path": "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E",
-          "kind": "url-token",
-          "external": true
-        }
-      ]
-    },
-    "../latest/packages/components/src/form-controls.tsx": {
-      "bytes": 1137,
-      "imports": [
-        {
-          "path": "node_modules/react/index.js",
-          "kind": "import-statement",
-          "original": "react"
-        },
-        {
-          "path": "../latest/packages/components/src/class-names.ts",
-          "kind": "import-statement",
-          "original": "./class-names"
-        },
-        {
-          "path": "../latest/packages/components/src/form-controls.module.css",
-          "kind": "import-statement",
-          "original": "./form-controls.module.css"
-        },
-        {
-          "path": "node_modules/react/jsx-runtime.js",
-          "kind": "import-statement",
-          "original": "react/jsx-runtime"
-        }
-      ],
-      "format": "esm"
-    },
-    "../latest/packages/components/src/visually-hidden.tsx": {
-      "bytes": 396,
-      "imports": [
-        {
-          "path": "../latest/packages/components/src/class-names.ts",
-          "kind": "import-statement",
-          "original": "./class-names"
-        },
-        {
-          "path": "node_modules/react/jsx-runtime.js",
-          "kind": "import-statement",
-          "original": "react/jsx-runtime"
-        }
-      ],
-      "format": "esm"
-    },
-    "../latest/packages/components/src/index.ts": {
-      "bytes": 524,
-      "imports": [
-        {
-          "path": "../latest/packages/components/src/button.tsx",
-          "kind": "import-statement",
-          "original": "./button"
-        },
-        {
-          "path": "../latest/packages/components/src/dialog.tsx",
-          "kind": "import-statement",
-          "original": "./dialog"
-        },
-        {
-          "path": "../latest/packages/components/src/form-controls.tsx",
-          "kind": "import-statement",
-          "original": "./form-controls"
-        },
-        {
-          "path": "../latest/packages/components/src/visually-hidden.tsx",
-          "kind": "import-statement",
-          "original": "./visually-hidden"
-        }
-      ],
-      "format": "esm"
-    },
-    "../latest/packages/host/src/protocol.ts": {
-      "bytes": 13939,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/packages/host/src/detection.ts": {
-      "bytes": 3948,
-      "imports": [
-        {
-          "path": "../latest/packages/host/src/protocol.ts",
-          "kind": "import-statement",
-          "original": "./protocol.js"
-        }
-      ],
-      "format": "esm"
-    },
-    "../latest/packages/host/src/normalize.ts": {
-      "bytes": 4505,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/packages/host/src/actions.ts": {
-      "bytes": 11620,
-      "imports": [
-        {
-          "path": "../latest/packages/host/src/protocol.ts",
-          "kind": "import-statement",
-          "original": "./protocol.js"
-        },
-        {
-          "path": "../latest/packages/host/src/detection.ts",
-          "kind": "import-statement",
-          "original": "./detection.js"
-        }
-      ],
-      "format": "esm"
-    },
-    "../latest/packages/host/src/index.ts": {
-      "bytes": 3569,
-      "imports": [
-        {
-          "path": "../latest/packages/host/src/protocol.ts",
-          "kind": "import-statement",
-          "original": "./protocol.js"
-        },
-        {
-          "path": "../latest/packages/host/src/detection.ts",
-          "kind": "import-statement",
-          "original": "./detection.js"
-        },
-        {
-          "path": "../latest/packages/host/src/normalize.ts",
-          "kind": "import-statement",
-          "original": "./normalize.js"
-        },
-        {
-          "path": "../latest/packages/host/src/actions.ts",
-          "kind": "import-statement",
-          "original": "./actions.js"
-        }
-      ],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/components/remix-icon-paths.ts": {
-      "bytes": 83139,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/components/Icon.tsx": {
-      "bytes": 50162,
-      "imports": [
-        {
-          "path": "../latest/apps/web/src/components/remix-icon-paths.ts",
-          "kind": "import-statement",
-          "original": "./remix-icon-paths"
-        },
-        {
-          "path": "node_modules/react/jsx-runtime.js",
-          "kind": "import-statement",
-          "original": "react/jsx-runtime"
-        }
-      ],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/components/Loading.tsx": {
-      "bytes": 1179,
-      "imports": [
-        {
-          "path": "../latest/apps/web/src/components/Icon.tsx",
-          "kind": "import-statement",
-          "original": "./Icon"
-        },
-        {
-          "path": "node_modules/react/jsx-runtime.js",
-          "kind": "import-statement",
-          "original": "react/jsx-runtime"
-        }
-      ],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/i18n/locales/de.ts": {
-      "bytes": 376945,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/i18n/locales/en.ts": {
-      "bytes": 352541,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/i18n/locales/id.ts": {
-      "bytes": 359211,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/i18n/locales/es-ES.ts": {
-      "bytes": 376951,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/i18n/locales/fa.ts": {
-      "bytes": 442715,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/i18n/locales/ar.ts": {
-      "bytes": 420327,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/i18n/locales/ja.ts": {
-      "bytes": 416511,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/i18n/locales/ko.ts": {
-      "bytes": 388503,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/i18n/locales/pt-BR.ts": {
-      "bytes": 372655,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/i18n/locales/ru.ts": {
-      "bytes": 493426,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/i18n/locales/zh-CN.ts": {
-      "bytes": 351947,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/i18n/locales/zh-TW.ts": {
-      "bytes": 353479,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/i18n/locales/pl.ts": {
-      "bytes": 375687,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/i18n/locales/hu.ts": {
-      "bytes": 383924,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/i18n/locales/fr.ts": {
-      "bytes": 399900,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/i18n/locales/uk.ts": {
-      "bytes": 464931,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/i18n/locales/tr.ts": {
-      "bytes": 375700,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/i18n/locales/th.ts": {
-      "bytes": 531042,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/i18n/locales/it.ts": {
-      "bytes": 374193,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/i18n/types.ts": {
-      "bytes": 230186,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/i18n/index.tsx": {
-      "bytes": 8133,
-      "imports": [
-        {
-          "path": "node_modules/react/index.js",
-          "kind": "import-statement",
-          "original": "react"
-        },
-        {
-          "path": "../latest/apps/web/src/i18n/locales/de.ts",
-          "kind": "import-statement",
-          "original": "./locales/de"
-        },
-        {
-          "path": "../latest/apps/web/src/i18n/locales/en.ts",
-          "kind": "import-statement",
-          "original": "./locales/en"
-        },
-        {
-          "path": "../latest/apps/web/src/i18n/locales/id.ts",
-          "kind": "import-statement",
-          "original": "./locales/id"
-        },
-        {
-          "path": "../latest/apps/web/src/i18n/locales/es-ES.ts",
-          "kind": "import-statement",
-          "original": "./locales/es-ES"
-        },
-        {
-          "path": "../latest/apps/web/src/i18n/locales/fa.ts",
-          "kind": "import-statement",
-          "original": "./locales/fa"
-        },
-        {
-          "path": "../latest/apps/web/src/i18n/locales/ar.ts",
-          "kind": "import-statement",
-          "original": "./locales/ar"
-        },
-        {
-          "path": "../latest/apps/web/src/i18n/locales/ja.ts",
-          "kind": "import-statement",
-          "original": "./locales/ja"
-        },
-        {
-          "path": "../latest/apps/web/src/i18n/locales/ko.ts",
-          "kind": "import-statement",
-          "original": "./locales/ko"
-        },
-        {
-          "path": "../latest/apps/web/src/i18n/locales/pt-BR.ts",
-          "kind": "import-statement",
-          "original": "./locales/pt-BR"
-        },
-        {
-          "path": "../latest/apps/web/src/i18n/locales/ru.ts",
-          "kind": "import-statement",
-          "original": "./locales/ru"
-        },
-        {
-          "path": "../latest/apps/web/src/i18n/locales/zh-CN.ts",
-          "kind": "import-statement",
-          "original": "./locales/zh-CN"
-        },
-        {
-          "path": "../latest/apps/web/src/i18n/locales/zh-TW.ts",
-          "kind": "import-statement",
-          "original": "./locales/zh-TW"
-        },
-        {
-          "path": "../latest/apps/web/src/i18n/locales/pl.ts",
-          "kind": "import-statement",
-          "original": "./locales/pl"
-        },
-        {
-          "path": "../latest/apps/web/src/i18n/locales/hu.ts",
-          "kind": "import-statement",
-          "original": "./locales/hu"
-        },
-        {
-          "path": "../latest/apps/web/src/i18n/locales/fr.ts",
-          "kind": "import-statement",
-          "original": "./locales/fr"
-        },
-        {
-          "path": "../latest/apps/web/src/i18n/locales/uk.ts",
-          "kind": "import-statement",
-          "original": "./locales/uk"
-        },
-        {
-          "path": "../latest/apps/web/src/i18n/locales/tr.ts",
-          "kind": "import-statement",
-          "original": "./locales/tr"
-        },
-        {
-          "path": "../latest/apps/web/src/i18n/locales/th.ts",
-          "kind": "import-statement",
-          "original": "./locales/th"
-        },
-        {
-          "path": "../latest/apps/web/src/i18n/locales/it.ts",
-          "kind": "import-statement",
-          "original": "./locales/it"
-        },
-        {
-          "path": "../latest/packages/host/src/index.ts",
-          "kind": "import-statement",
-          "original": "@open-design/host"
-        },
-        {
-          "path": "../latest/apps/web/src/i18n/types.ts",
-          "kind": "import-statement",
-          "original": "./types"
-        },
-        {
-          "path": "../latest/apps/web/src/i18n/types.ts",
-          "kind": "import-statement",
-          "original": "./types"
-        },
-        {
-          "path": "node_modules/react/jsx-runtime.js",
-          "kind": "import-statement",
-          "original": "react/jsx-runtime"
-        }
-      ],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/components/RemixIcon.tsx": {
-      "bytes": 1177,
-      "imports": [
-        {
-          "path": "../latest/apps/web/src/components/remix-icon-paths.ts",
-          "kind": "import-statement",
-          "original": "./remix-icon-paths"
-        },
-        {
-          "path": "node_modules/react/jsx-runtime.js",
-          "kind": "import-statement",
-          "original": "react/jsx-runtime"
-        }
-      ],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/components/AppChromeHeader.tsx": {
-      "bytes": 2158,
-      "imports": [
-        {
-          "path": "../latest/apps/web/src/i18n/index.tsx",
-          "kind": "import-statement",
-          "original": "../i18n"
-        },
-        {
-          "path": "../latest/apps/web/src/components/RemixIcon.tsx",
-          "kind": "import-statement",
-          "original": "./RemixIcon"
-        },
-        {
-          "path": "node_modules/react/jsx-runtime.js",
-          "kind": "import-statement",
-          "original": "react/jsx-runtime"
-        }
-      ],
-      "format": "esm"
-    },
-    "../latest/apps/web/src/components/comment-send-result.ts": {
-      "bytes": 453,
-      "imports": [],
       "format": "esm"
     },
     "../latest/packages/contracts/src/common.ts": {
@@ -744,7 +198,12 @@
       "format": "esm"
     },
     "../latest/packages/contracts/src/errors.ts": {
-      "bytes": 11528,
+      "bytes": 12318,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/packages/contracts/src/api/failure-detail.ts": {
+      "bytes": 4259,
       "imports": [],
       "format": "esm"
     },
@@ -764,7 +223,7 @@
       "format": "esm"
     },
     "../latest/packages/contracts/src/api/strategy-rollout.ts": {
-      "bytes": 2362,
+      "bytes": 2380,
       "imports": [],
       "format": "esm"
     },
@@ -824,7 +283,7 @@
       "format": "esm"
     },
     "../latest/packages/contracts/src/api/chat.ts": {
-      "bytes": 59356,
+      "bytes": 61885,
       "imports": [],
       "format": "esm"
     },
@@ -849,7 +308,7 @@
       "format": "esm"
     },
     "../latest/packages/contracts/src/api/collab.ts": {
-      "bytes": 45593,
+      "bytes": 50366,
       "imports": [],
       "format": "esm"
     },
@@ -860,6 +319,16 @@
     },
     "../latest/packages/contracts/src/api/team-resources.ts": {
       "bytes": 3505,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/packages/contracts/src/api/touchpointOffline.ts": {
+      "bytes": 13101,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/packages/contracts/src/api/touchpointTestRuntime.ts": {
+      "bytes": 3579,
       "imports": [],
       "format": "esm"
     },
@@ -884,7 +353,7 @@
       "format": "esm"
     },
     "../latest/packages/contracts/src/api/files.ts": {
-      "bytes": 8186,
+      "bytes": 8195,
       "imports": [],
       "format": "esm"
     },
@@ -924,7 +393,7 @@
       "format": "esm"
     },
     "../latest/packages/contracts/src/api/media.ts": {
-      "bytes": 13960,
+      "bytes": 14005,
       "imports": [],
       "format": "esm"
     },
@@ -934,7 +403,7 @@
       "format": "esm"
     },
     "../latest/packages/contracts/src/api/memory.ts": {
-      "bytes": 26408,
+      "bytes": 26927,
       "imports": [],
       "format": "esm"
     },
@@ -959,7 +428,7 @@
       "format": "esm"
     },
     "../latest/packages/contracts/src/api/projects.ts": {
-      "bytes": 33414,
+      "bytes": 33456,
       "imports": [],
       "format": "esm"
     },
@@ -1001,7 +470,7 @@
       "format": "esm"
     },
     "../latest/packages/contracts/src/api/registry.ts": {
-      "bytes": 25416,
+      "bytes": 25432,
       "imports": [],
       "format": "esm"
     },
@@ -1011,7 +480,7 @@
       "format": "esm"
     },
     "../latest/packages/contracts/src/api/run-completeness.ts": {
-      "bytes": 16905,
+      "bytes": 15867,
       "imports": [
         {
           "path": "../latest/packages/contracts/src/api/done-marker.ts",
@@ -1080,6 +549,44 @@
     "../latest/packages/contracts/src/execution-profile.ts": {
       "bytes": 249,
       "imports": [],
+      "format": "esm"
+    },
+    "../latest/packages/contracts/src/artifacts/artifact-markdown-context.ts": {
+      "bytes": 4876,
+      "imports": [
+        {
+          "path": "../latest/packages/contracts/src/artifacts/chat-protocol-context.ts",
+          "kind": "import-statement",
+          "original": "./chat-protocol-context.js"
+        }
+      ],
+      "format": "esm"
+    },
+    "../latest/packages/contracts/src/artifacts/artifact-transcript.ts": {
+      "bytes": 9131,
+      "imports": [
+        {
+          "path": "../latest/packages/contracts/src/artifacts/artifact-markdown-context.ts",
+          "kind": "import-statement",
+          "original": "./artifact-markdown-context.js"
+        }
+      ],
+      "format": "esm"
+    },
+    "../latest/packages/contracts/src/artifacts/history-question-form.ts": {
+      "bytes": 5617,
+      "imports": [
+        {
+          "path": "../latest/packages/contracts/src/api/question-form-markup.ts",
+          "kind": "import-statement",
+          "original": "../api/question-form-markup.js"
+        },
+        {
+          "path": "../latest/packages/contracts/src/artifacts/chat-protocol-context.ts",
+          "kind": "import-statement",
+          "original": "./chat-protocol-context.js"
+        }
+      ],
       "format": "esm"
     },
     "../latest/packages/contracts/src/runtime/html-injection-points.ts": {
@@ -1281,7 +788,7 @@
       "format": "esm"
     },
     "../latest/packages/contracts/src/plugins/strategy-v2.ts": {
-      "bytes": 28857,
+      "bytes": 16332,
       "imports": [
         {
           "path": "node_modules/zod/index.js",
@@ -1333,6 +840,17 @@
       ],
       "format": "esm"
     },
+    "../latest/packages/contracts/src/touchpoint-component-v2.ts": {
+      "bytes": 21003,
+      "imports": [
+        {
+          "path": "node_modules/zod/index.js",
+          "kind": "import-statement",
+          "original": "zod"
+        }
+      ],
+      "format": "esm"
+    },
     "../latest/packages/contracts/src/design-systems/components-manifest.ts": {
       "bytes": 15201,
       "imports": [],
@@ -1354,12 +872,12 @@
       "format": "esm"
     },
     "../latest/packages/contracts/src/sse/chat.ts": {
-      "bytes": 25079,
+      "bytes": 25655,
       "imports": [],
       "format": "esm"
     },
     "../latest/packages/contracts/src/sse/collab.ts": {
-      "bytes": 7470,
+      "bytes": 7900,
       "imports": [],
       "format": "esm"
     },
@@ -1405,66 +923,46 @@
       "imports": [],
       "format": "esm"
     },
-    "../latest/packages/contracts/src/prompts/ui-locale.ts": {
-      "bytes": 2328,
-      "imports": [],
-      "format": "esm"
-    },
-    "../latest/packages/contracts/src/prompts/chat-turn-host-protocol.ts": {
-      "bytes": 6412,
-      "imports": [
-        {
-          "path": "../latest/packages/contracts/src/api/artifact-focus-marker.ts",
-          "kind": "import-statement",
-          "original": "../api/artifact-focus-marker.js"
-        },
-        {
-          "path": "../latest/packages/contracts/src/api/done-marker.ts",
-          "kind": "import-statement",
-          "original": "../api/done-marker.js"
-        },
-        {
-          "path": "../latest/packages/contracts/src/api/next-step-marker.ts",
-          "kind": "import-statement",
-          "original": "../api/next-step-marker.js"
-        },
-        {
-          "path": "../latest/packages/contracts/src/prompts/ui-locale.ts",
-          "kind": "import-statement",
-          "original": "./ui-locale.js"
-        }
-      ],
-      "format": "esm"
-    },
     "../latest/packages/contracts/src/prompts/od-next-prompt-bundle.ts": {
       "bytes": 7709,
       "imports": [],
       "format": "esm"
     },
-    "../latest/packages/contracts/src/prompts/od-next-strategy.ts": {
-      "bytes": 50832,
+    "../latest/packages/contracts/src/prompts/od-next-production-marker.ts": {
+      "bytes": 5025,
       "imports": [
-        {
-          "path": "../latest/packages/contracts/src/plugins/strategy-v2.ts",
-          "kind": "import-statement",
-          "original": "../plugins/strategy-v2.js"
-        },
-        {
-          "path": "../latest/packages/contracts/src/prompts/chat-turn-host-protocol.ts",
-          "kind": "import-statement",
-          "original": "./chat-turn-host-protocol.js"
-        },
-        {
-          "path": "../latest/packages/contracts/src/prompts/deck-framework.ts",
-          "kind": "import-statement",
-          "original": "./deck-framework.js"
-        },
         {
           "path": "../latest/packages/contracts/src/prompts/od-next-prompt-bundle.ts",
           "kind": "import-statement",
           "original": "./od-next-prompt-bundle.js"
         }
       ],
+      "format": "esm"
+    },
+    "../latest/packages/contracts/src/prompts/od-next-strategy.ts": {
+      "bytes": 35562,
+      "imports": [
+        {
+          "path": "../latest/packages/contracts/src/prompts/od-next-production-marker.ts",
+          "kind": "import-statement",
+          "original": "./od-next-production-marker.js"
+        },
+        {
+          "path": "../latest/packages/contracts/src/plugins/strategy-v2.ts",
+          "kind": "import-statement",
+          "original": "../plugins/strategy-v2.js"
+        },
+        {
+          "path": "../latest/packages/contracts/src/prompts/deck-framework.ts",
+          "kind": "import-statement",
+          "original": "./deck-framework.js"
+        }
+      ],
+      "format": "esm"
+    },
+    "../latest/packages/contracts/src/prompts/ui-locale.ts": {
+      "bytes": 2328,
+      "imports": [],
       "format": "esm"
     },
     "../latest/packages/contracts/src/prompts/system.ts": {
@@ -1508,6 +1006,37 @@
       ],
       "format": "esm"
     },
+    "../latest/packages/contracts/src/prompts/chat-turn-host-protocol.ts": {
+      "bytes": 6762,
+      "imports": [
+        {
+          "path": "../latest/packages/contracts/src/api/artifact-focus-marker.ts",
+          "kind": "import-statement",
+          "original": "../api/artifact-focus-marker.js"
+        },
+        {
+          "path": "../latest/packages/contracts/src/api/done-marker.ts",
+          "kind": "import-statement",
+          "original": "../api/done-marker.js"
+        },
+        {
+          "path": "../latest/packages/contracts/src/prompts/od-next-production-marker.ts",
+          "kind": "import-statement",
+          "original": "./od-next-production-marker.js"
+        },
+        {
+          "path": "../latest/packages/contracts/src/api/next-step-marker.ts",
+          "kind": "import-statement",
+          "original": "../api/next-step-marker.js"
+        },
+        {
+          "path": "../latest/packages/contracts/src/prompts/ui-locale.ts",
+          "kind": "import-statement",
+          "original": "./ui-locale.js"
+        }
+      ],
+      "format": "esm"
+    },
     "../latest/packages/contracts/src/prompts/od-next-device-frame.ts": {
       "bytes": 11382,
       "imports": [],
@@ -1521,6 +1050,22 @@
     "../latest/packages/contracts/src/prompts/od-next-prompt-bundle-v2.ts": {
       "bytes": 20899,
       "imports": [
+        {
+          "path": "../latest/packages/contracts/src/prompts/canonical-xml.ts",
+          "kind": "import-statement",
+          "original": "./canonical-xml.js"
+        }
+      ],
+      "format": "esm"
+    },
+    "../latest/packages/contracts/src/prompts/od-next-intent-resolution.ts": {
+      "bytes": 2701,
+      "imports": [
+        {
+          "path": "node_modules/zod/index.js",
+          "kind": "import-statement",
+          "original": "zod"
+        },
         {
           "path": "../latest/packages/contracts/src/prompts/canonical-xml.ts",
           "kind": "import-statement",
@@ -1663,7 +1208,7 @@
       "format": "esm"
     },
     "../latest/packages/contracts/src/plugins/scenario-defaults.ts": {
-      "bytes": 8777,
+      "bytes": 9109,
       "imports": [],
       "format": "esm"
     },
@@ -1801,7 +1346,7 @@
       "format": "esm"
     },
     "../latest/packages/contracts/src/analytics/events/shared-enums.ts": {
-      "bytes": 22391,
+      "bytes": 23272,
       "imports": [],
       "format": "esm"
     },
@@ -1821,7 +1366,7 @@
       "format": "esm"
     },
     "../latest/packages/contracts/src/analytics/events/workspace.ts": {
-      "bytes": 7015,
+      "bytes": 7550,
       "imports": [],
       "format": "esm"
     },
@@ -1836,7 +1381,7 @@
       "format": "esm"
     },
     "../latest/packages/contracts/src/analytics/events/ui-click.ts": {
-      "bytes": 61396,
+      "bytes": 61787,
       "imports": [],
       "format": "esm"
     },
@@ -1846,7 +1391,7 @@
       "format": "esm"
     },
     "../latest/packages/contracts/src/analytics/events/result-events.ts": {
-      "bytes": 61867,
+      "bytes": 64174,
       "imports": [],
       "format": "esm"
     },
@@ -1953,7 +1498,7 @@
       "format": "esm"
     },
     "../latest/packages/contracts/src/analytics/observability.ts": {
-      "bytes": 1097,
+      "bytes": 3097,
       "imports": [],
       "format": "esm"
     },
@@ -1968,8 +1513,13 @@
       ],
       "format": "esm"
     },
+    "../latest/packages/contracts/src/api/amr-continuation.ts": {
+      "bytes": 2304,
+      "imports": [],
+      "format": "esm"
+    },
     "../latest/packages/contracts/src/index.ts": {
-      "bytes": 3821,
+      "bytes": 4454,
       "imports": [
         {
           "path": "../latest/packages/contracts/src/common.ts",
@@ -1980,6 +1530,11 @@
           "path": "../latest/packages/contracts/src/errors.ts",
           "kind": "import-statement",
           "original": "./errors.js"
+        },
+        {
+          "path": "../latest/packages/contracts/src/api/failure-detail.ts",
+          "kind": "import-statement",
+          "original": "./api/failure-detail.js"
         },
         {
           "path": "../latest/packages/contracts/src/settings-nav.ts",
@@ -2095,6 +1650,16 @@
           "path": "../latest/packages/contracts/src/api/team-resources.ts",
           "kind": "import-statement",
           "original": "./api/team-resources.js"
+        },
+        {
+          "path": "../latest/packages/contracts/src/api/touchpointOffline.ts",
+          "kind": "import-statement",
+          "original": "./api/touchpointOffline.js"
+        },
+        {
+          "path": "../latest/packages/contracts/src/api/touchpointTestRuntime.ts",
+          "kind": "import-statement",
+          "original": "./api/touchpointTestRuntime.js"
         },
         {
           "path": "../latest/packages/contracts/src/api/connectionTest.ts",
@@ -2282,9 +1847,29 @@
           "original": "./artifacts/chat-protocol-context.js"
         },
         {
+          "path": "../latest/packages/contracts/src/artifacts/artifact-transcript.ts",
+          "kind": "import-statement",
+          "original": "./artifacts/artifact-transcript.js"
+        },
+        {
+          "path": "../latest/packages/contracts/src/artifacts/history-question-form.ts",
+          "kind": "import-statement",
+          "original": "./artifacts/history-question-form.js"
+        },
+        {
+          "path": "../latest/packages/contracts/src/artifacts/artifact-markdown-context.ts",
+          "kind": "import-statement",
+          "original": "./artifacts/artifact-markdown-context.js"
+        },
+        {
           "path": "../latest/packages/contracts/src/runtime/deck-stage-fallback.ts",
           "kind": "import-statement",
           "original": "./runtime/deck-stage-fallback.js"
+        },
+        {
+          "path": "../latest/packages/contracts/src/runtime/html-injection-points.ts",
+          "kind": "import-statement",
+          "original": "./runtime/html-injection-points.js"
         },
         {
           "path": "../latest/packages/contracts/src/runtime/deck-protocol.ts",
@@ -2315,6 +1900,11 @@
           "path": "../latest/packages/contracts/src/runtime/od-next-capability.ts",
           "kind": "import-statement",
           "original": "./runtime/od-next-capability.js"
+        },
+        {
+          "path": "../latest/packages/contracts/src/touchpoint-component-v2.ts",
+          "kind": "import-statement",
+          "original": "./touchpoint-component-v2.js"
         },
         {
           "path": "../latest/packages/contracts/src/design-systems/components-manifest.ts",
@@ -2382,6 +1972,11 @@
           "original": "./prompts/od-next-strategy.js"
         },
         {
+          "path": "../latest/packages/contracts/src/prompts/od-next-production-marker.ts",
+          "kind": "import-statement",
+          "original": "./prompts/od-next-production-marker.js"
+        },
+        {
           "path": "../latest/packages/contracts/src/prompts/canonical-xml.ts",
           "kind": "import-statement",
           "original": "./prompts/canonical-xml.js"
@@ -2395,6 +1990,11 @@
           "path": "../latest/packages/contracts/src/prompts/od-next-prompt-bundle-v2.ts",
           "kind": "import-statement",
           "original": "./prompts/od-next-prompt-bundle-v2.js"
+        },
+        {
+          "path": "../latest/packages/contracts/src/prompts/od-next-intent-resolution.ts",
+          "kind": "import-statement",
+          "original": "./prompts/od-next-intent-resolution.js"
         },
         {
           "path": "../latest/packages/contracts/src/prompts/od-next-task-inputs.ts",
@@ -2450,8 +2050,596 @@
           "path": "../latest/packages/contracts/src/observability/index.ts",
           "kind": "import-statement",
           "original": "./observability/index.js"
+        },
+        {
+          "path": "../latest/packages/contracts/src/api/amr-continuation.ts",
+          "kind": "import-statement",
+          "original": "./api/amr-continuation.js"
         }
       ],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/analytics/failure-detail.ts": {
+      "bytes": 2361,
+      "imports": [
+        {
+          "path": "../latest/packages/contracts/src/index.ts",
+          "kind": "import-statement",
+          "original": "@open-design/contracts"
+        }
+      ],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/hooks/useAnchoredPopover.ts": {
+      "bytes": 18005,
+      "imports": [
+        {
+          "path": "node_modules/react/index.js",
+          "kind": "import-statement",
+          "original": "react"
+        }
+      ],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/components/chat/AnchoredMenuShell.module.css": {
+      "bytes": 1025,
+      "imports": []
+    },
+    "../latest/apps/web/src/components/chat/AnchoredMenuShell.tsx": {
+      "bytes": 15605,
+      "imports": [
+        {
+          "path": "node_modules/react/index.js",
+          "kind": "import-statement",
+          "original": "react"
+        },
+        {
+          "path": "node_modules/react-dom/index.js",
+          "kind": "import-statement",
+          "original": "react-dom"
+        },
+        {
+          "path": "../latest/apps/web/src/hooks/useAnchoredPopover.ts",
+          "kind": "import-statement",
+          "original": "../../hooks/useAnchoredPopover"
+        },
+        {
+          "path": "../latest/apps/web/src/components/chat/AnchoredMenuShell.module.css",
+          "kind": "import-statement",
+          "original": "./AnchoredMenuShell.module.css"
+        },
+        {
+          "path": "node_modules/react/jsx-runtime.js",
+          "kind": "import-statement",
+          "original": "react/jsx-runtime"
+        }
+      ],
+      "format": "esm"
+    },
+    "../latest/packages/components/src/class-names.ts": {
+      "bytes": 152,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/packages/components/src/button.module.css": {
+      "bytes": 4752,
+      "imports": []
+    },
+    "../latest/packages/components/src/button.tsx": {
+      "bytes": 1735,
+      "imports": [
+        {
+          "path": "node_modules/react/index.js",
+          "kind": "import-statement",
+          "original": "react"
+        },
+        {
+          "path": "../latest/packages/components/src/class-names.ts",
+          "kind": "import-statement",
+          "original": "./class-names"
+        },
+        {
+          "path": "../latest/packages/components/src/button.module.css",
+          "kind": "import-statement",
+          "original": "./button.module.css"
+        },
+        {
+          "path": "node_modules/react/jsx-runtime.js",
+          "kind": "import-statement",
+          "original": "react/jsx-runtime"
+        }
+      ],
+      "format": "esm"
+    },
+    "../latest/packages/components/src/dialog.module.css": {
+      "bytes": 3895,
+      "imports": []
+    },
+    "../latest/packages/components/src/dialog.tsx": {
+      "bytes": 4157,
+      "imports": [
+        {
+          "path": "node_modules/react/index.js",
+          "kind": "import-statement",
+          "original": "react"
+        },
+        {
+          "path": "node_modules/react-dom/index.js",
+          "kind": "import-statement",
+          "original": "react-dom"
+        },
+        {
+          "path": "../latest/packages/components/src/class-names.ts",
+          "kind": "import-statement",
+          "original": "./class-names"
+        },
+        {
+          "path": "../latest/packages/components/src/dialog.module.css",
+          "kind": "import-statement",
+          "original": "./dialog.module.css"
+        },
+        {
+          "path": "node_modules/react/jsx-runtime.js",
+          "kind": "import-statement",
+          "original": "react/jsx-runtime"
+        }
+      ],
+      "format": "esm"
+    },
+    "../latest/packages/components/src/form-controls.module.css": {
+      "bytes": 1768,
+      "imports": [
+        {
+          "path": "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2374716b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E",
+          "kind": "url-token",
+          "external": true
+        },
+        {
+          "path": "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E",
+          "kind": "url-token",
+          "external": true
+        },
+        {
+          "path": "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E",
+          "kind": "url-token",
+          "external": true
+        }
+      ]
+    },
+    "../latest/packages/components/src/form-controls.tsx": {
+      "bytes": 1137,
+      "imports": [
+        {
+          "path": "node_modules/react/index.js",
+          "kind": "import-statement",
+          "original": "react"
+        },
+        {
+          "path": "../latest/packages/components/src/class-names.ts",
+          "kind": "import-statement",
+          "original": "./class-names"
+        },
+        {
+          "path": "../latest/packages/components/src/form-controls.module.css",
+          "kind": "import-statement",
+          "original": "./form-controls.module.css"
+        },
+        {
+          "path": "node_modules/react/jsx-runtime.js",
+          "kind": "import-statement",
+          "original": "react/jsx-runtime"
+        }
+      ],
+      "format": "esm"
+    },
+    "../latest/packages/components/src/visually-hidden.tsx": {
+      "bytes": 396,
+      "imports": [
+        {
+          "path": "../latest/packages/components/src/class-names.ts",
+          "kind": "import-statement",
+          "original": "./class-names"
+        },
+        {
+          "path": "node_modules/react/jsx-runtime.js",
+          "kind": "import-statement",
+          "original": "react/jsx-runtime"
+        }
+      ],
+      "format": "esm"
+    },
+    "../latest/packages/components/src/index.ts": {
+      "bytes": 524,
+      "imports": [
+        {
+          "path": "../latest/packages/components/src/button.tsx",
+          "kind": "import-statement",
+          "original": "./button"
+        },
+        {
+          "path": "../latest/packages/components/src/dialog.tsx",
+          "kind": "import-statement",
+          "original": "./dialog"
+        },
+        {
+          "path": "../latest/packages/components/src/form-controls.tsx",
+          "kind": "import-statement",
+          "original": "./form-controls"
+        },
+        {
+          "path": "../latest/packages/components/src/visually-hidden.tsx",
+          "kind": "import-statement",
+          "original": "./visually-hidden"
+        }
+      ],
+      "format": "esm"
+    },
+    "../latest/packages/host/src/protocol.ts": {
+      "bytes": 14015,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/packages/host/src/detection.ts": {
+      "bytes": 3948,
+      "imports": [
+        {
+          "path": "../latest/packages/host/src/protocol.ts",
+          "kind": "import-statement",
+          "original": "./protocol.js"
+        }
+      ],
+      "format": "esm"
+    },
+    "../latest/packages/host/src/normalize.ts": {
+      "bytes": 4505,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/packages/host/src/actions.ts": {
+      "bytes": 11620,
+      "imports": [
+        {
+          "path": "../latest/packages/host/src/protocol.ts",
+          "kind": "import-statement",
+          "original": "./protocol.js"
+        },
+        {
+          "path": "../latest/packages/host/src/detection.ts",
+          "kind": "import-statement",
+          "original": "./detection.js"
+        }
+      ],
+      "format": "esm"
+    },
+    "../latest/packages/host/src/index.ts": {
+      "bytes": 3569,
+      "imports": [
+        {
+          "path": "../latest/packages/host/src/protocol.ts",
+          "kind": "import-statement",
+          "original": "./protocol.js"
+        },
+        {
+          "path": "../latest/packages/host/src/detection.ts",
+          "kind": "import-statement",
+          "original": "./detection.js"
+        },
+        {
+          "path": "../latest/packages/host/src/normalize.ts",
+          "kind": "import-statement",
+          "original": "./normalize.js"
+        },
+        {
+          "path": "../latest/packages/host/src/actions.ts",
+          "kind": "import-statement",
+          "original": "./actions.js"
+        }
+      ],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/components/remix-icon-paths.ts": {
+      "bytes": 88021,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/components/Icon.tsx": {
+      "bytes": 54725,
+      "imports": [
+        {
+          "path": "../latest/apps/web/src/components/remix-icon-paths.ts",
+          "kind": "import-statement",
+          "original": "./remix-icon-paths"
+        },
+        {
+          "path": "node_modules/react/jsx-runtime.js",
+          "kind": "import-statement",
+          "original": "react/jsx-runtime"
+        }
+      ],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/components/Loading.tsx": {
+      "bytes": 1179,
+      "imports": [
+        {
+          "path": "../latest/apps/web/src/components/Icon.tsx",
+          "kind": "import-statement",
+          "original": "./Icon"
+        },
+        {
+          "path": "node_modules/react/jsx-runtime.js",
+          "kind": "import-statement",
+          "original": "react/jsx-runtime"
+        }
+      ],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/i18n/locales/de.ts": {
+      "bytes": 382815,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/i18n/locales/en.ts": {
+      "bytes": 357495,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/i18n/locales/id.ts": {
+      "bytes": 364449,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/i18n/locales/es-ES.ts": {
+      "bytes": 382692,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/i18n/locales/fa.ts": {
+      "bytes": 451144,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/i18n/locales/ar.ts": {
+      "bytes": 427935,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/i18n/locales/ja.ts": {
+      "bytes": 424023,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/i18n/locales/ko.ts": {
+      "bytes": 394857,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/i18n/locales/pt-BR.ts": {
+      "bytes": 378303,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/i18n/locales/ru.ts": {
+      "bytes": 501172,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/i18n/locales/zh-CN.ts": {
+      "bytes": 356713,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/i18n/locales/zh-TW.ts": {
+      "bytes": 358254,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/i18n/locales/pl.ts": {
+      "bytes": 381599,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/i18n/locales/hu.ts": {
+      "bytes": 390139,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/i18n/locales/fr.ts": {
+      "bytes": 405504,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/i18n/locales/uk.ts": {
+      "bytes": 473572,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/i18n/locales/tr.ts": {
+      "bytes": 381432,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/i18n/locales/th.ts": {
+      "bytes": 542265,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/i18n/locales/it.ts": {
+      "bytes": 379834,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/i18n/types.ts": {
+      "bytes": 234050,
+      "imports": [],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/i18n/index.tsx": {
+      "bytes": 8133,
+      "imports": [
+        {
+          "path": "node_modules/react/index.js",
+          "kind": "import-statement",
+          "original": "react"
+        },
+        {
+          "path": "../latest/apps/web/src/i18n/locales/de.ts",
+          "kind": "import-statement",
+          "original": "./locales/de"
+        },
+        {
+          "path": "../latest/apps/web/src/i18n/locales/en.ts",
+          "kind": "import-statement",
+          "original": "./locales/en"
+        },
+        {
+          "path": "../latest/apps/web/src/i18n/locales/id.ts",
+          "kind": "import-statement",
+          "original": "./locales/id"
+        },
+        {
+          "path": "../latest/apps/web/src/i18n/locales/es-ES.ts",
+          "kind": "import-statement",
+          "original": "./locales/es-ES"
+        },
+        {
+          "path": "../latest/apps/web/src/i18n/locales/fa.ts",
+          "kind": "import-statement",
+          "original": "./locales/fa"
+        },
+        {
+          "path": "../latest/apps/web/src/i18n/locales/ar.ts",
+          "kind": "import-statement",
+          "original": "./locales/ar"
+        },
+        {
+          "path": "../latest/apps/web/src/i18n/locales/ja.ts",
+          "kind": "import-statement",
+          "original": "./locales/ja"
+        },
+        {
+          "path": "../latest/apps/web/src/i18n/locales/ko.ts",
+          "kind": "import-statement",
+          "original": "./locales/ko"
+        },
+        {
+          "path": "../latest/apps/web/src/i18n/locales/pt-BR.ts",
+          "kind": "import-statement",
+          "original": "./locales/pt-BR"
+        },
+        {
+          "path": "../latest/apps/web/src/i18n/locales/ru.ts",
+          "kind": "import-statement",
+          "original": "./locales/ru"
+        },
+        {
+          "path": "../latest/apps/web/src/i18n/locales/zh-CN.ts",
+          "kind": "import-statement",
+          "original": "./locales/zh-CN"
+        },
+        {
+          "path": "../latest/apps/web/src/i18n/locales/zh-TW.ts",
+          "kind": "import-statement",
+          "original": "./locales/zh-TW"
+        },
+        {
+          "path": "../latest/apps/web/src/i18n/locales/pl.ts",
+          "kind": "import-statement",
+          "original": "./locales/pl"
+        },
+        {
+          "path": "../latest/apps/web/src/i18n/locales/hu.ts",
+          "kind": "import-statement",
+          "original": "./locales/hu"
+        },
+        {
+          "path": "../latest/apps/web/src/i18n/locales/fr.ts",
+          "kind": "import-statement",
+          "original": "./locales/fr"
+        },
+        {
+          "path": "../latest/apps/web/src/i18n/locales/uk.ts",
+          "kind": "import-statement",
+          "original": "./locales/uk"
+        },
+        {
+          "path": "../latest/apps/web/src/i18n/locales/tr.ts",
+          "kind": "import-statement",
+          "original": "./locales/tr"
+        },
+        {
+          "path": "../latest/apps/web/src/i18n/locales/th.ts",
+          "kind": "import-statement",
+          "original": "./locales/th"
+        },
+        {
+          "path": "../latest/apps/web/src/i18n/locales/it.ts",
+          "kind": "import-statement",
+          "original": "./locales/it"
+        },
+        {
+          "path": "../latest/packages/host/src/index.ts",
+          "kind": "import-statement",
+          "original": "@open-design/host"
+        },
+        {
+          "path": "../latest/apps/web/src/i18n/types.ts",
+          "kind": "import-statement",
+          "original": "./types"
+        },
+        {
+          "path": "../latest/apps/web/src/i18n/types.ts",
+          "kind": "import-statement",
+          "original": "./types"
+        },
+        {
+          "path": "node_modules/react/jsx-runtime.js",
+          "kind": "import-statement",
+          "original": "react/jsx-runtime"
+        }
+      ],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/components/RemixIcon.tsx": {
+      "bytes": 1177,
+      "imports": [
+        {
+          "path": "../latest/apps/web/src/components/remix-icon-paths.ts",
+          "kind": "import-statement",
+          "original": "./remix-icon-paths"
+        },
+        {
+          "path": "node_modules/react/jsx-runtime.js",
+          "kind": "import-statement",
+          "original": "react/jsx-runtime"
+        }
+      ],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/components/AppChromeHeader.tsx": {
+      "bytes": 2158,
+      "imports": [
+        {
+          "path": "../latest/apps/web/src/i18n/index.tsx",
+          "kind": "import-statement",
+          "original": "../i18n"
+        },
+        {
+          "path": "../latest/apps/web/src/components/RemixIcon.tsx",
+          "kind": "import-statement",
+          "original": "./RemixIcon"
+        },
+        {
+          "path": "node_modules/react/jsx-runtime.js",
+          "kind": "import-statement",
+          "original": "react/jsx-runtime"
+        }
+      ],
+      "format": "esm"
+    },
+    "../latest/apps/web/src/components/comment-send-result.ts": {
+      "bytes": 453,
+      "imports": [],
       "format": "esm"
     },
     "../latest/packages/contracts/src/runtime/preview-guards.ts": {
@@ -2491,7 +2679,7 @@
       "format": "esm"
     },
     "../latest/packages/contracts/src/analytics/update-lifecycle.ts": {
-      "bytes": 1914,
+      "bytes": 1935,
       "imports": [],
       "format": "esm"
     },
@@ -2547,12 +2735,17 @@
       "format": "esm"
     },
     "../latest/apps/web/src/analytics/error-tracking.ts": {
-      "bytes": 22767,
+      "bytes": 22945,
       "imports": [
         {
           "path": "../latest/apps/web/src/utils/uuid.ts",
           "kind": "import-statement",
           "original": "../utils/uuid"
+        },
+        {
+          "path": "../latest/apps/web/src/observability/experience-diagnostics.ts",
+          "kind": "import-statement",
+          "original": "../observability/experience-diagnostics"
         },
         {
           "path": "../latest/packages/contracts/src/analytics/index.ts",
@@ -2754,8 +2947,13 @@
       "format": "esm"
     },
     "../latest/apps/web/src/analytics/events.ts": {
-      "bytes": 40674,
+      "bytes": 40877,
       "imports": [
+        {
+          "path": "../latest/apps/web/src/observability/experience-diagnostics.ts",
+          "kind": "import-statement",
+          "original": "../observability/experience-diagnostics"
+        },
         {
           "path": "../latest/apps/web/src/analytics/experience-survey-contract.ts",
           "kind": "import-statement",
@@ -4148,7 +4346,7 @@
       "format": "esm"
     },
     "../latest/apps/web/src/collab/useWorkspaceContext.ts": {
-      "bytes": 96603,
+      "bytes": 99723,
       "imports": [
         {
           "path": "node_modules/react/index.js",
@@ -4224,7 +4422,7 @@
       "format": "esm"
     },
     "../latest/apps/web/src/collab/collab-client.ts": {
-      "bytes": 36590,
+      "bytes": 38226,
       "imports": [
         {
           "path": "../latest/apps/web/src/lib/coalesced-get.ts",
@@ -4237,6 +4435,11 @@
           "original": "../utils/uuid"
         },
         {
+          "path": "../latest/packages/contracts/src/index.ts",
+          "kind": "import-statement",
+          "original": "@open-design/contracts"
+        },
+        {
           "path": "../latest/apps/web/src/collab/workspace-identity.ts",
           "kind": "import-statement",
           "original": "./workspace-identity"
@@ -4245,7 +4448,7 @@
       "format": "esm"
     },
     "../latest/apps/web/src/collab/useCollab.ts": {
-      "bytes": 10667,
+      "bytes": 11160,
       "imports": [
         {
           "path": "node_modules/react/index.js",
@@ -4266,7 +4469,7 @@
       "format": "esm"
     },
     "../latest/apps/web/src/collab/useProjectCollab.ts": {
-      "bytes": 29969,
+      "bytes": 31008,
       "imports": [
         {
           "path": "node_modules/react/index.js",
@@ -4313,7 +4516,7 @@
       "format": "esm"
     },
     "../latest/apps/web/src/state/projects.ts": {
-      "bytes": 100451,
+      "bytes": 100762,
       "imports": [
         {
           "path": "../latest/apps/web/src/lib/coalesced-get.ts",
@@ -4415,7 +4618,7 @@
       "format": "esm"
     },
     "../latest/apps/web/src/providers/registry.ts": {
-      "bytes": 143779,
+      "bytes": 145172,
       "imports": [
         {
           "path": "../latest/packages/contracts/src/index.ts",
@@ -4463,6 +4666,11 @@
           "original": "../collab/public-file-publish"
         },
         {
+          "path": "../latest/apps/web/src/analytics/failure-detail.ts",
+          "kind": "import-statement",
+          "original": "../analytics/failure-detail"
+        },
+        {
           "path": "../latest/packages/contracts/src/index.ts",
           "kind": "import-statement",
           "original": "@open-design/contracts"
@@ -4473,6 +4681,17 @@
     "DownloadBridge.ts": {
       "bytes": 1466,
       "imports": [],
+      "format": "esm"
+    },
+    "../latest/packages/contracts/src/runtime/motion-source-player.ts": {
+      "bytes": 11350,
+      "imports": [
+        {
+          "path": "../latest/packages/contracts/src/runtime/html-injection-points.ts",
+          "kind": "import-statement",
+          "original": "./html-injection-points"
+        }
+      ],
       "format": "esm"
     },
     "../latest/apps/web/src/edit-mode/bridge.ts": {
@@ -4518,7 +4737,7 @@
       "format": "esm"
     },
     "../latest/apps/web/src/runtime/srcdoc.ts": {
-      "bytes": 192324,
+      "bytes": 194337,
       "imports": [
         {
           "path": "DownloadBridge.ts",
@@ -4529,6 +4748,11 @@
           "path": "../latest/apps/web/src/utils/uuid.ts",
           "kind": "import-statement",
           "original": "../utils/uuid"
+        },
+        {
+          "path": "../latest/packages/contracts/src/runtime/motion-source-player.ts",
+          "kind": "import-statement",
+          "original": "@open-design/contracts/runtime/motion-source-player"
         },
         {
           "path": "../latest/packages/contracts/src/runtime/deck-stage-fallback.ts",
@@ -9001,6 +9225,11 @@
       ],
       "format": "esm"
     },
+    "../latest/apps/web/src/components/export-failure-toast.ts": {
+      "bytes": 1602,
+      "imports": [],
+      "format": "esm"
+    },
     "../latest/apps/web/src/utils/imeComposing.ts": {
       "bytes": 730,
       "imports": [],
@@ -9146,13 +9375,29 @@
       ],
       "format": "esm"
     },
+    "../latest/apps/web/src/runtime/motion-preview-activity.ts": {
+      "bytes": 2474,
+      "imports": [
+        {
+          "path": "../latest/packages/contracts/src/runtime/motion-source-player.ts",
+          "kind": "import-statement",
+          "original": "@open-design/contracts/runtime/motion-source-player"
+        }
+      ],
+      "format": "esm"
+    },
     "../latest/apps/web/src/components/IframeKeepAlivePool.tsx": {
-      "bytes": 14098,
+      "bytes": 14508,
       "imports": [
         {
           "path": "node_modules/react/index.js",
           "kind": "import-statement",
           "original": "react"
+        },
+        {
+          "path": "../latest/apps/web/src/runtime/motion-preview-activity.ts",
+          "kind": "import-statement",
+          "original": "../runtime/motion-preview-activity"
         },
         {
           "path": "node_modules/react/jsx-runtime.js",
@@ -12021,7 +12266,7 @@
       "format": "esm"
     },
     "../latest/apps/web/src/components/FileViewer.tsx": {
-      "bytes": 847423,
+      "bytes": 851009,
       "imports": [
         {
           "path": "../latest/apps/web/src/utils/uuid.ts",
@@ -12042,6 +12287,16 @@
           "path": "ManualInlineTextEditor.tsx",
           "kind": "import-statement",
           "original": "../../../../../build/ManualInlineTextEditor"
+        },
+        {
+          "path": "../latest/apps/web/src/observability/use-experience-error.ts",
+          "kind": "import-statement",
+          "original": "../observability/use-experience-error"
+        },
+        {
+          "path": "../latest/apps/web/src/analytics/failure-detail.ts",
+          "kind": "import-statement",
+          "original": "../analytics/failure-detail"
         },
         {
           "path": "node_modules/react/index.js",
@@ -12309,6 +12564,11 @@
           "original": "./Toast"
         },
         {
+          "path": "../latest/apps/web/src/components/export-failure-toast.ts",
+          "kind": "import-statement",
+          "original": "./export-failure-toast"
+        },
+        {
           "path": "../latest/apps/web/src/components/PreviewDrawOverlay.tsx",
           "kind": "import-statement",
           "original": "./PreviewDrawOverlay"
@@ -12342,6 +12602,11 @@
           "path": "../latest/apps/web/src/components/IframeKeepAlivePool.tsx",
           "kind": "import-statement",
           "original": "./IframeKeepAlivePool"
+        },
+        {
+          "path": "../latest/apps/web/src/runtime/motion-preview-activity.ts",
+          "kind": "import-statement",
+          "original": "../runtime/motion-preview-activity"
         },
         {
           "path": "../latest/apps/web/src/components/ManualEditPanel.tsx",
@@ -12534,11 +12799,11 @@
       ]
     },
     "../latest/apps/web/src/styles/design-system-flow.css": {
-      "bytes": 88690,
+      "bytes": 88685,
       "imports": []
     },
     "../latest/apps/web/src/styles/tokens.css": {
-      "bytes": 12584,
+      "bytes": 14747,
       "imports": [
         {
           "path": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI5IiBmaWxsPSIjMjAyMDIwIi8+PHBhdGggZD0iTTEyIDIyQzE3LjUyMjggMjIgMjIgMTcuNTIyOCAyMiAxMkMyMiA2LjQ3NzE1IDE3LjUyMjggMiAxMiAyQzYuNDc3MTUgMiAyIDYuNDc3MTUgMiAxMkMyIDE3LjUyMjggNi40NzcxNSAyMiAxMiAyMlpNMTcuNDU3MSA5LjQ1NzExTDExIDE1LjkxNDJMNi43OTI4OSAxMS43MDcxTDguMjA3MTEgMTAuMjkyOUwxMSAxMy4wODU4TDE2LjA0MjkgOC4wNDI4OUwxNy40NTcxIDkuNDU3MTFaIiBmaWxsPSIjMDBGRjA4Ii8+PC9zdmc+",
@@ -12548,15 +12813,15 @@
       ]
     },
     "../latest/apps/web/src/styles/material.css": {
-      "bytes": 9867,
+      "bytes": 11699,
       "imports": []
     },
     "../latest/apps/web/src/styles/app-wash.css": {
-      "bytes": 7523,
+      "bytes": 7619,
       "imports": []
     },
     "../latest/apps/web/src/styles/base.css": {
-      "bytes": 3470,
+      "bytes": 3631,
       "imports": [
         {
           "path": "/fonts/AlbertSans-VariableFont_wght.ttf",
@@ -12596,7 +12861,7 @@
       ]
     },
     "../latest/apps/web/src/styles/primitives.css": {
-      "bytes": 15307,
+      "bytes": 17533,
       "imports": [
         {
           "path": "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2374716b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E",
@@ -12634,11 +12899,11 @@
       "imports": []
     },
     "../latest/apps/web/src/styles/shell.css": {
-      "bytes": 75909,
+      "bytes": 77557,
       "imports": []
     },
     "../latest/apps/web/src/styles/chat.css": {
-      "bytes": 154762,
+      "bytes": 144825,
       "imports": [
         {
           "path": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'><filter id='od-orb-green' color-interpolation-filters='sRGB'><feColorMatrix type='matrix' values='0 0 0 0 0  0 1 0 0 0  0 0.0314 0 0 0  0 0 0 1 0'/></filter></svg>#od-orb-green",
@@ -12653,11 +12918,11 @@
       ]
     },
     "../latest/apps/web/src/styles/workspace/mention-home.css": {
-      "bytes": 86126,
+      "bytes": 86121,
       "imports": []
     },
     "../latest/apps/web/src/styles/workspace/artifacts.css": {
-      "bytes": 120179,
+      "bytes": 124000,
       "imports": [
         {
           "path": "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2374716b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E",
@@ -12676,11 +12941,11 @@
       "imports": []
     },
     "../latest/apps/web/src/styles/workspace/drawer.css": {
-      "bytes": 73158,
+      "bytes": 73261,
       "imports": []
     },
     "../latest/apps/web/src/styles/workspace/design-files.css": {
-      "bytes": 38793,
+      "bytes": 39289,
       "imports": []
     },
     "../latest/apps/web/src/styles/workspace/design-browser.css": {
@@ -12692,15 +12957,15 @@
       "imports": []
     },
     "../latest/apps/web/src/styles/viewer/code.css": {
-      "bytes": 45055,
+      "bytes": 45059,
       "imports": []
     },
     "../latest/apps/web/src/styles/viewer/tools.css": {
-      "bytes": 39801,
+      "bytes": 39977,
       "imports": []
     },
     "../latest/apps/web/src/styles/viewer/composio.css": {
-      "bytes": 167625,
+      "bytes": 168349,
       "imports": []
     },
     "../latest/apps/web/src/styles/viewer/theater.css": {
@@ -12712,7 +12977,7 @@
       "imports": []
     },
     "../latest/apps/web/src/styles/viewer/library.css": {
-      "bytes": 66302,
+      "bytes": 66420,
       "imports": []
     },
     "../latest/apps/web/src/styles/viewer/memory.css": {
@@ -12720,11 +12985,11 @@
       "imports": []
     },
     "../latest/apps/web/src/styles/viewer/templates-plugins.css": {
-      "bytes": 60430,
+      "bytes": 60425,
       "imports": []
     },
     "../latest/apps/web/src/styles/viewer/plugin-rail.css": {
-      "bytes": 17088,
+      "bytes": 17133,
       "imports": [
         {
           "path": "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2374716b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E",
@@ -12738,7 +13003,7 @@
       "imports": []
     },
     "../latest/apps/web/src/styles/viewer/routines.css": {
-      "bytes": 134063,
+      "bytes": 139491,
       "imports": [
         {
           "path": "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2374716b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E",
@@ -12758,7 +13023,7 @@
       ]
     },
     "../latest/apps/web/src/styles/modal-window-drag.css": {
-      "bytes": 1073,
+      "bytes": 1135,
       "imports": []
     },
     "../latest/apps/web/src/styles/entrance.css": {
@@ -12766,7 +13031,7 @@
       "imports": []
     },
     "../latest/apps/web/src/styles/home/plugin-marketplace-demo.css": {
-      "bytes": 44074,
+      "bytes": 63149,
       "imports": []
     },
     "../latest/apps/web/src/index.css": {
@@ -14380,7 +14645,7 @@
           "bytesInOutput": 52
         },
         "node_modules/react-dom/cjs/react-dom.production.min.js": {
-          "bytesInOutput": 130754
+          "bytesInOutput": 130701
         },
         "node_modules/react-dom/index.js": {
           "bytesInOutput": 254
@@ -14395,13 +14660,13 @@
           "bytesInOutput": 108
         },
         "node_modules/dompurify/dist/purify.es.mjs": {
-          "bytesInOutput": 30018
+          "bytesInOutput": 30038
         },
         "node_modules/@babel/runtime/helpers/esm/typeof.js": {
           "bytesInOutput": 277
         },
         "node_modules/fflate/esm/browser.js": {
-          "bytesInOutput": 6775
+          "bytesInOutput": 6760
         },
         "node_modules/@babel/runtime/helpers/esm/arrayWithHoles.js": {
           "bytesInOutput": 62
@@ -14428,7 +14693,7 @@
           "bytesInOutput": 5538
         },
         "node_modules/pako/dist/pako.esm.mjs": {
-          "bytesInOutput": 48876
+          "bytesInOutput": 48825
         },
         "node_modules/fast-png/lib-esm/helpers/crc.js": {
           "bytesInOutput": 445
@@ -14440,7 +14705,7 @@
           "bytesInOutput": 237
         },
         "node_modules/fast-png/lib-esm/helpers/decodeInterlaceAdam7.js": {
-          "bytesInOutput": 940
+          "bytesInOutput": 935
         },
         "node_modules/fast-png/lib-esm/helpers/decodeInterlaceNull.js": {
           "bytesInOutput": 710
@@ -14470,7 +14735,7 @@
           "bytesInOutput": 87
         },
         "node_modules/html2canvas/dist/html2canvas.js": {
-          "bytesInOutput": 205587
+          "bytesInOutput": 205588
         },
         "node_modules/core-js/internals/global-this.js": {
           "bytesInOutput": 329
@@ -14875,7 +15140,7 @@
           "bytesInOutput": 599
         },
         "node_modules/core-js/modules/es.string.replace.js": {
-          "bytesInOutput": 1425
+          "bytesInOutput": 1421
         },
         "node_modules/core-js/internals/is-regexp.js": {
           "bytesInOutput": 173
@@ -14908,31 +15173,31 @@
           "bytesInOutput": 1195
         },
         "node_modules/core-js/internals/create-iter-result-object.js": {
-          "bytesInOutput": 85
+          "bytesInOutput": 86
         },
         "node_modules/core-js/modules/es.array.iterator.js": {
-          "bytesInOutput": 620
+          "bytesInOutput": 635
         },
         "node_modules/core-js/internals/dom-iterables.js": {
-          "bytesInOutput": 549
+          "bytesInOutput": 552
         },
         "node_modules/core-js/internals/dom-token-list-prototype.js": {
-          "bytesInOutput": 165
+          "bytesInOutput": 171
         },
         "node_modules/core-js/modules/web.dom-collections.iterator.js": {
-          "bytesInOutput": 361
+          "bytesInOutput": 376
         },
         "node_modules/@babel/runtime/helpers/esm/toPrimitive.js": {
-          "bytesInOutput": 277
+          "bytesInOutput": 279
         },
         "node_modules/@babel/runtime/helpers/esm/toPropertyKey.js": {
-          "bytesInOutput": 93
+          "bytesInOutput": 97
         },
         "node_modules/@babel/runtime/helpers/esm/defineProperty.js": {
-          "bytesInOutput": 149
+          "bytesInOutput": 152
         },
         "node_modules/core-js/internals/array-reduce.js": {
-          "bytesInOutput": 455
+          "bytesInOutput": 458
         },
         "node_modules/core-js/internals/array-method-is-strict.js": {
           "bytesInOutput": 156
@@ -14980,19 +15245,19 @@
           "bytesInOutput": 243
         },
         "node_modules/svg-pathdata/lib/SVGPathData.module.js": {
-          "bytesInOutput": 18468
+          "bytesInOutput": 18438
         },
         "node_modules/core-js/modules/es.regexp.to-string.js": {
           "bytesInOutput": 348
         },
         "node_modules/stackblur-canvas/dist/stackblur-es.js": {
-          "bytesInOutput": 4622
+          "bytesInOutput": 4623
         },
         "node_modules/canvg/lib/index.es.js": {
-          "bytesInOutput": 82997
+          "bytesInOutput": 82977
         },
         "node_modules/jspdf/dist/jspdf.es.min.js": {
-          "bytesInOutput": 341743
+          "bytesInOutput": 341977
         },
         "node_modules/shiki/dist/chunk-D1SwGrFN.mjs": {
           "bytesInOutput": 574
@@ -15205,10 +15470,10 @@
           "bytesInOutput": 92
         },
         "node_modules/@shikijs/vscode-textmate/dist/index.js": {
-          "bytesInOutput": 42912
+          "bytesInOutput": 42908
         },
         "node_modules/@shikijs/primitive/dist/index.mjs": {
-          "bytesInOutput": 13483
+          "bytesInOutput": 13479
         },
         "node_modules/html-void-elements/index.js": {
           "bytesInOutput": 181
@@ -15589,7 +15854,7 @@
           "bytesInOutput": 2083
         },
         "FullStudio.tsx": {
-          "bytesInOutput": 6039
+          "bytesInOutput": 6032
         },
         "../latest/apps/web/src/utils/uuid.ts": {
           "bytesInOutput": 470
@@ -15603,143 +15868,20 @@
         "ManualInlineTextEditor.tsx": {
           "bytesInOutput": 1577
         },
-        "../latest/apps/web/src/components/FileViewer.tsx": {
-          "bytesInOutput": 265008
+        "../latest/apps/web/src/observability/use-experience-error.ts": {
+          "bytesInOutput": 149
         },
-        "../latest/apps/web/src/components/chat/AnchoredMenuShell.tsx": {
-          "bytesInOutput": 2044
-        },
-        "../latest/apps/web/src/hooks/useAnchoredPopover.ts": {
-          "bytesInOutput": 2559
-        },
-        "../latest/apps/web/src/components/chat/AnchoredMenuShell.module.css": {
-          "bytesInOutput": 22
-        },
-        "../latest/packages/components/src/button.tsx": {
-          "bytesInOutput": 470
-        },
-        "../latest/packages/components/src/class-names.ts": {
-          "bytesInOutput": 61
-        },
-        "../latest/packages/components/src/button.module.css": {
-          "bytesInOutput": 100
-        },
-        "../latest/packages/components/src/index.ts": {
-          "bytesInOutput": 0
-        },
-        "../latest/packages/components/src/dialog.tsx": {
-          "bytesInOutput": 1209
-        },
-        "../latest/packages/components/src/dialog.module.css": {
-          "bytesInOutput": 166
-        },
-        "../latest/packages/components/src/form-controls.tsx": {
-          "bytesInOutput": 418
-        },
-        "../latest/packages/components/src/form-controls.module.css": {
-          "bytesInOutput": 45
-        },
-        "../latest/packages/components/src/visually-hidden.tsx": {
-          "bytesInOutput": 17
-        },
-        "../latest/packages/host/src/protocol.ts": {
-          "bytesInOutput": 466
-        },
-        "../latest/packages/host/src/index.ts": {
-          "bytesInOutput": 0
-        },
-        "../latest/packages/host/src/detection.ts": {
-          "bytesInOutput": 1091
-        },
-        "../latest/packages/host/src/actions.ts": {
-          "bytesInOutput": 865
-        },
-        "../latest/apps/web/src/components/remix-icon-paths.ts": {
-          "bytesInOutput": 80240
-        },
-        "../latest/apps/web/src/components/Icon.tsx": {
-          "bytesInOutput": 38638
-        },
-        "../latest/apps/web/src/components/Loading.tsx": {
-          "bytesInOutput": 452
-        },
-        "../latest/apps/web/src/i18n/index.tsx": {
-          "bytesInOutput": 1107
-        },
-        "../latest/apps/web/src/i18n/locales/de.ts": {
-          "bytesInOutput": 359826
-        },
-        "../latest/apps/web/src/i18n/locales/en.ts": {
-          "bytesInOutput": 332068
-        },
-        "../latest/apps/web/src/i18n/locales/id.ts": {
-          "bytesInOutput": 338633
-        },
-        "../latest/apps/web/src/i18n/locales/es-ES.ts": {
-          "bytesInOutput": 360560
-        },
-        "../latest/apps/web/src/i18n/locales/fa.ts": {
-          "bytesInOutput": 748429
-        },
-        "../latest/apps/web/src/i18n/locales/ar.ts": {
-          "bytesInOutput": 694201
-        },
-        "../latest/apps/web/src/i18n/locales/ja.ts": {
-          "bytesInOutput": 552354
-        },
-        "../latest/apps/web/src/i18n/locales/ko.ts": {
-          "bytesInOutput": 484936
-        },
-        "../latest/apps/web/src/i18n/locales/pt-BR.ts": {
-          "bytesInOutput": 358874
-        },
-        "../latest/apps/web/src/i18n/locales/ru.ts": {
-          "bytesInOutput": 953360
-        },
-        "../latest/apps/web/src/i18n/locales/zh-CN.ts": {
-          "bytesInOutput": 463817
-        },
-        "../latest/apps/web/src/i18n/locales/zh-TW.ts": {
-          "bytesInOutput": 463771
-        },
-        "../latest/apps/web/src/i18n/locales/pl.ts": {
-          "bytesInOutput": 377226
-        },
-        "../latest/apps/web/src/i18n/locales/hu.ts": {
-          "bytesInOutput": 389803
-        },
-        "../latest/apps/web/src/i18n/locales/fr.ts": {
-          "bytesInOutput": 393758
-        },
-        "../latest/apps/web/src/i18n/locales/uk.ts": {
-          "bytesInOutput": 825915
-        },
-        "../latest/apps/web/src/i18n/locales/tr.ts": {
-          "bytesInOutput": 390908
-        },
-        "../latest/apps/web/src/i18n/locales/th.ts": {
-          "bytesInOutput": 775236
-        },
-        "../latest/apps/web/src/i18n/locales/it.ts": {
-          "bytesInOutput": 354853
-        },
-        "../latest/apps/web/src/i18n/types.ts": {
-          "bytesInOutput": 116
-        },
-        "../latest/apps/web/src/components/RemixIcon.tsx": {
-          "bytesInOutput": 327
-        },
-        "../latest/apps/web/src/components/AppChromeHeader.tsx": {
-          "bytesInOutput": 88
-        },
-        "../latest/apps/web/src/components/comment-send-result.ts": {
-          "bytesInOutput": 114
+        "../latest/apps/web/src/observability/experience-diagnostics.ts": {
+          "bytesInOutput": 38
         },
         "../latest/packages/contracts/src/index.ts": {
           "bytesInOutput": 0
         },
         "../latest/packages/contracts/src/errors.ts": {
-          "bytesInOutput": 1729
+          "bytesInOutput": 1766
+        },
+        "../latest/packages/contracts/src/api/failure-detail.ts": {
+          "bytesInOutput": 848
         },
         "../latest/packages/contracts/src/settings-nav.ts": {
           "bytesInOutput": 138
@@ -15763,7 +15905,7 @@
           "bytesInOutput": 405
         },
         "../latest/packages/contracts/src/runtime/html-injection-points.ts": {
-          "bytesInOutput": 7533
+          "bytesInOutput": 8119
         },
         "../latest/packages/contracts/src/runtime/deck-protocol.ts": {
           "bytesInOutput": 1426
@@ -15805,13 +15947,16 @@
           "bytesInOutput": 0
         },
         "../latest/packages/contracts/src/plugins/strategy-v2.ts": {
-          "bytesInOutput": 15992
+          "bytesInOutput": 5854
         },
         "../latest/packages/contracts/src/observability/normalized-agent-observation-v1.ts": {
           "bytesInOutput": 15250
         },
         "../latest/packages/contracts/src/runtime/od-next-capability.ts": {
           "bytesInOutput": 7429
+        },
+        "../latest/packages/contracts/src/touchpoint-component-v2.ts": {
+          "bytesInOutput": 5508
         },
         "../latest/packages/contracts/src/prompts/directions.ts": {
           "bytesInOutput": 7555
@@ -15825,11 +15970,14 @@
         "../latest/packages/contracts/src/prompts/media-contract.ts": {
           "bytesInOutput": 10625
         },
-        "../latest/packages/contracts/src/prompts/od-next-strategy.ts": {
-          "bytesInOutput": 274
+        "../latest/packages/contracts/src/prompts/od-next-production-marker.ts": {
+          "bytesInOutput": 2250
         },
         "../latest/packages/contracts/src/prompts/od-next-device-frame.ts": {
           "bytesInOutput": 140
+        },
+        "../latest/packages/contracts/src/prompts/od-next-intent-resolution.ts": {
+          "bytesInOutput": 317
         },
         "../latest/packages/contracts/src/critique.ts": {
           "bytesInOutput": 1635
@@ -15867,6 +16015,141 @@
         "../latest/packages/contracts/src/observability/index.ts": {
           "bytesInOutput": 0
         },
+        "../latest/apps/web/src/analytics/failure-detail.ts": {
+          "bytesInOutput": 478
+        },
+        "../latest/apps/web/src/components/FileViewer.tsx": {
+          "bytesInOutput": 265676
+        },
+        "../latest/apps/web/src/components/chat/AnchoredMenuShell.tsx": {
+          "bytesInOutput": 2041
+        },
+        "../latest/apps/web/src/hooks/useAnchoredPopover.ts": {
+          "bytesInOutput": 2557
+        },
+        "../latest/apps/web/src/components/chat/AnchoredMenuShell.module.css": {
+          "bytesInOutput": 22
+        },
+        "../latest/packages/components/src/button.tsx": {
+          "bytesInOutput": 470
+        },
+        "../latest/packages/components/src/class-names.ts": {
+          "bytesInOutput": 61
+        },
+        "../latest/packages/components/src/button.module.css": {
+          "bytesInOutput": 100
+        },
+        "../latest/packages/components/src/index.ts": {
+          "bytesInOutput": 0
+        },
+        "../latest/packages/components/src/dialog.tsx": {
+          "bytesInOutput": 1283
+        },
+        "../latest/packages/components/src/dialog.module.css": {
+          "bytesInOutput": 166
+        },
+        "../latest/packages/components/src/form-controls.tsx": {
+          "bytesInOutput": 418
+        },
+        "../latest/packages/components/src/form-controls.module.css": {
+          "bytesInOutput": 45
+        },
+        "../latest/packages/components/src/visually-hidden.tsx": {
+          "bytesInOutput": 17
+        },
+        "../latest/packages/host/src/protocol.ts": {
+          "bytesInOutput": 466
+        },
+        "../latest/packages/host/src/index.ts": {
+          "bytesInOutput": 0
+        },
+        "../latest/packages/host/src/detection.ts": {
+          "bytesInOutput": 1091
+        },
+        "../latest/packages/host/src/actions.ts": {
+          "bytesInOutput": 865
+        },
+        "../latest/apps/web/src/components/remix-icon-paths.ts": {
+          "bytesInOutput": 84628
+        },
+        "../latest/apps/web/src/components/Icon.tsx": {
+          "bytesInOutput": 41876
+        },
+        "../latest/apps/web/src/components/Loading.tsx": {
+          "bytesInOutput": 452
+        },
+        "../latest/apps/web/src/i18n/index.tsx": {
+          "bytesInOutput": 1107
+        },
+        "../latest/apps/web/src/i18n/locales/de.ts": {
+          "bytesInOutput": 365481
+        },
+        "../latest/apps/web/src/i18n/locales/en.ts": {
+          "bytesInOutput": 336732
+        },
+        "../latest/apps/web/src/i18n/locales/id.ts": {
+          "bytesInOutput": 343563
+        },
+        "../latest/apps/web/src/i18n/locales/es-ES.ts": {
+          "bytesInOutput": 366133
+        },
+        "../latest/apps/web/src/i18n/locales/fa.ts": {
+          "bytesInOutput": 768817
+        },
+        "../latest/apps/web/src/i18n/locales/ar.ts": {
+          "bytesInOutput": 712591
+        },
+        "../latest/apps/web/src/i18n/locales/ja.ts": {
+          "bytesInOutput": 565486
+        },
+        "../latest/apps/web/src/i18n/locales/ko.ts": {
+          "bytesInOutput": 495329
+        },
+        "../latest/apps/web/src/i18n/locales/pt-BR.ts": {
+          "bytesInOutput": 364484
+        },
+        "../latest/apps/web/src/i18n/locales/ru.ts": {
+          "bytesInOutput": 970333
+        },
+        "../latest/apps/web/src/i18n/locales/zh-CN.ts": {
+          "bytesInOutput": 470142
+        },
+        "../latest/apps/web/src/i18n/locales/zh-TW.ts": {
+          "bytesInOutput": 470162
+        },
+        "../latest/apps/web/src/i18n/locales/pl.ts": {
+          "bytesInOutput": 383579
+        },
+        "../latest/apps/web/src/i18n/locales/hu.ts": {
+          "bytesInOutput": 396697
+        },
+        "../latest/apps/web/src/i18n/locales/fr.ts": {
+          "bytesInOutput": 399258
+        },
+        "../latest/apps/web/src/i18n/locales/uk.ts": {
+          "bytesInOutput": 847356
+        },
+        "../latest/apps/web/src/i18n/locales/tr.ts": {
+          "bytesInOutput": 397521
+        },
+        "../latest/apps/web/src/i18n/locales/th.ts": {
+          "bytesInOutput": 795736
+        },
+        "../latest/apps/web/src/i18n/locales/it.ts": {
+          "bytesInOutput": 360254
+        },
+        "../latest/apps/web/src/i18n/types.ts": {
+          "bytesInOutput": 116
+        },
+        "../latest/apps/web/src/components/RemixIcon.tsx": {
+          "bytesInOutput": 327
+        },
+        "../latest/apps/web/src/components/AppChromeHeader.tsx": {
+          "bytesInOutput": 88
+        },
+        "../latest/apps/web/src/components/comment-send-result.ts": {
+          "bytesInOutput": 114
+        },
         "../latest/packages/contracts/src/runtime/preview-guards.ts": {
           "bytesInOutput": 34
         },
@@ -15886,7 +16169,7 @@
           "bytesInOutput": 128
         },
         "../latest/apps/web/src/analytics/error-tracking.ts": {
-          "bytesInOutput": 1060
+          "bytesInOutput": 1068
         },
         "../latest/apps/web/src/lib/coalesced-get.ts": {
           "bytesInOutput": 552
@@ -15907,7 +16190,7 @@
           "bytesInOutput": 4886
         },
         "../latest/apps/web/src/analytics/events.ts": {
-          "bytesInOutput": 754
+          "bytesInOutput": 766
         },
         "../latest/apps/web/src/onboarding/first-loop.ts": {
           "bytesInOutput": 1033
@@ -15940,7 +16223,7 @@
           "bytesInOutput": 686
         },
         "node_modules/micromark/lib/compile.js": {
-          "bytesInOutput": 7264
+          "bytesInOutput": 7262
         },
         "node_modules/micromark-factory-space/index.js": {
           "bytesInOutput": 190
@@ -15949,7 +16232,7 @@
           "bytesInOutput": 544
         },
         "node_modules/micromark/lib/initialize/document.js": {
-          "bytesInOutput": 2293
+          "bytesInOutput": 2284
         },
         "node_modules/micromark-util-classify-character/index.js": {
           "bytesInOutput": 68
@@ -15979,7 +16262,7 @@
           "bytesInOutput": 929
         },
         "node_modules/micromark-core-commonmark/lib/code-fenced.js": {
-          "bytesInOutput": 2359
+          "bytesInOutput": 2352
         },
         "node_modules/micromark-core-commonmark/lib/code-indented.js": {
           "bytesInOutput": 877
@@ -16021,10 +16304,10 @@
           "bytesInOutput": 528
         },
         "node_modules/micromark-core-commonmark/lib/html-flow.js": {
-          "bytesInOutput": 3655
+          "bytesInOutput": 3652
         },
         "node_modules/micromark-core-commonmark/lib/html-text.js": {
-          "bytesInOutput": 2713
+          "bytesInOutput": 2709
         },
         "node_modules/micromark-core-commonmark/lib/label-end.js": {
           "bytesInOutput": 3140
@@ -16057,7 +16340,7 @@
           "bytesInOutput": 538
         },
         "node_modules/micromark/lib/create-tokenizer.js": {
-          "bytesInOutput": 3190
+          "bytesInOutput": 3188
         },
         "node_modules/micromark/lib/parse.js": {
           "bytesInOutput": 217
@@ -16111,7 +16394,7 @@
           "bytesInOutput": 429
         },
         "node_modules/micromark-extension-gfm-table/lib/syntax.js": {
-          "bytesInOutput": 4654
+          "bytesInOutput": 4649
         },
         "node_modules/micromark-extension-gfm-tagfilter/lib/index.js": {
           "bytesInOutput": 370
@@ -16147,7 +16430,7 @@
           "bytesInOutput": 399
         },
         "../latest/apps/web/src/collab/useWorkspaceContext.ts": {
-          "bytesInOutput": 7141
+          "bytesInOutput": 7237
         },
         "../latest/apps/web/src/lib/backoff.ts": {
           "bytesInOutput": 506
@@ -16192,13 +16475,16 @@
           "bytesInOutput": 1273
         },
         "../latest/apps/web/src/providers/registry.ts": {
-          "bytesInOutput": 11074
+          "bytesInOutput": 11354
         },
         "DownloadBridge.ts": {
           "bytesInOutput": 789
         },
+        "../latest/packages/contracts/src/runtime/motion-source-player.ts": {
+          "bytesInOutput": 9521
+        },
         "../latest/apps/web/src/runtime/srcdoc.ts": {
-          "bytesInOutput": 150655
+          "bytesInOutput": 152323
         },
         "../latest/apps/web/src/edit-mode/bridge.ts": {
           "bytesInOutput": 50862
@@ -16237,7 +16523,7 @@
           "bytesInOutput": 466
         },
         "../latest/apps/web/src/components/DeckSlideThumbnail.tsx": {
-          "bytesInOutput": 3365
+          "bytesInOutput": 3356
         },
         "../latest/apps/web/src/runtime/speaker-notes.ts": {
           "bytesInOutput": 22682
@@ -16258,10 +16544,13 @@
           "bytesInOutput": 2092
         },
         "../latest/apps/web/src/components/Toast.tsx": {
-          "bytesInOutput": 1778
+          "bytesInOutput": 1776
+        },
+        "../latest/apps/web/src/components/export-failure-toast.ts": {
+          "bytesInOutput": 302
         },
         "../latest/apps/web/src/components/PreviewDrawOverlay.tsx": {
-          "bytesInOutput": 30749
+          "bytesInOutput": 30737
         },
         "../latest/apps/web/src/utils/imeComposing.ts": {
           "bytesInOutput": 26
@@ -16282,13 +16571,16 @@
           "bytesInOutput": 1205
         },
         "../latest/apps/web/src/components/BoardComposerPopover.tsx": {
-          "bytesInOutput": 14060
+          "bytesInOutput": 14051
         },
         "../latest/apps/web/src/components/IframeKeepAlivePool.tsx": {
-          "bytesInOutput": 3294
+          "bytesInOutput": 3362
+        },
+        "../latest/apps/web/src/runtime/motion-preview-activity.ts": {
+          "bytesInOutput": 1006
         },
         "../latest/apps/web/src/components/ManualEditPanel.tsx": {
-          "bytesInOutput": 28932
+          "bytesInOutput": 28935
         },
         "../latest/apps/web/src/edit-mode/types.ts": {
           "bytesInOutput": 537
@@ -16306,7 +16598,7 @@
           "bytesInOutput": 1129
         },
         "upstream/components/SketchEditor.tsx": {
-          "bytesInOutput": 4772
+          "bytesInOutput": 4770
         },
         "upstream/i18n/index.tsx": {
           "bytesInOutput": 938
@@ -16348,7 +16640,7 @@
           "bytesInOutput": 0
         }
       },
-      "bytes": 17315480
+      "bytes": 17527781
     },
     "../../assets/studio.css": {
       "imports": [
@@ -16466,7 +16758,7 @@
           "bytesInOutput": 2454
         },
         "../latest/packages/components/src/dialog.module.css": {
-          "bytesInOutput": 1477
+          "bytesInOutput": 1476
         },
         "../latest/packages/components/src/form-controls.module.css": {
           "bytesInOutput": 1562
@@ -16475,25 +16767,25 @@
           "bytesInOutput": 137431
         },
         "../latest/apps/web/src/styles/design-system-flow.css": {
-          "bytesInOutput": 71602
+          "bytesInOutput": 71599
         },
         "../latest/apps/web/src/styles/tokens.css": {
-          "bytesInOutput": 6763
+          "bytesInOutput": 7221
         },
         "../latest/apps/web/src/styles/material.css": {
-          "bytesInOutput": 6185
+          "bytesInOutput": 6413
         },
         "../latest/apps/web/src/styles/app-wash.css": {
-          "bytesInOutput": 2722
+          "bytesInOutput": 2144
         },
         "../latest/apps/web/src/styles/base.css": {
-          "bytesInOutput": 1843
+          "bytesInOutput": 1859
         },
         "../latest/packages/components/src/styles.css": {
           "bytesInOutput": 1783
         },
         "../latest/apps/web/src/styles/primitives.css": {
-          "bytesInOutput": 8376
+          "bytesInOutput": 9150
         },
         "../latest/apps/web/src/styles/plan-badge.css": {
           "bytesInOutput": 429
@@ -16502,25 +16794,25 @@
           "bytesInOutput": 3084
         },
         "../latest/apps/web/src/styles/shell.css": {
-          "bytesInOutput": 45460
+          "bytesInOutput": 45704
         },
         "../latest/apps/web/src/styles/chat.css": {
-          "bytesInOutput": 67358
+          "bytesInOutput": 63713
         },
         "../latest/apps/web/src/styles/workspace/mention-home.css": {
-          "bytesInOutput": 56131
+          "bytesInOutput": 56139
         },
         "../latest/apps/web/src/styles/workspace/artifacts.css": {
-          "bytesInOutput": 84365
+          "bytesInOutput": 86450
         },
         "../latest/apps/web/src/styles/workspace/connectors.css": {
           "bytesInOutput": 34959
         },
         "../latest/apps/web/src/styles/workspace/drawer.css": {
-          "bytesInOutput": 51867
+          "bytesInOutput": 51960
         },
         "../latest/apps/web/src/styles/workspace/design-files.css": {
-          "bytesInOutput": 25257
+          "bytesInOutput": 25331
         },
         "../latest/apps/web/src/styles/workspace/design-browser.css": {
           "bytesInOutput": 23241
@@ -16529,13 +16821,13 @@
           "bytesInOutput": 59337
         },
         "../latest/apps/web/src/styles/viewer/code.css": {
-          "bytesInOutput": 34338
+          "bytesInOutput": 34342
         },
         "../latest/apps/web/src/styles/viewer/tools.css": {
-          "bytesInOutput": 25298
+          "bytesInOutput": 25337
         },
         "../latest/apps/web/src/styles/viewer/composio.css": {
-          "bytesInOutput": 72423
+          "bytesInOutput": 71745
         },
         "../latest/apps/web/src/styles/viewer/theater.css": {
           "bytesInOutput": 33542
@@ -16544,31 +16836,31 @@
           "bytesInOutput": 24140
         },
         "../latest/apps/web/src/styles/viewer/library.css": {
-          "bytesInOutput": 49379
+          "bytesInOutput": 49497
         },
         "../latest/apps/web/src/styles/viewer/memory.css": {
           "bytesInOutput": 38846
         },
         "../latest/apps/web/src/styles/viewer/templates-plugins.css": {
-          "bytesInOutput": 44747
+          "bytesInOutput": 44755
         },
         "../latest/apps/web/src/styles/viewer/plugin-rail.css": {
-          "bytesInOutput": 12187
+          "bytesInOutput": 12167
         },
         "../latest/apps/web/src/styles/viewer/plugin-inputs.css": {
           "bytesInOutput": 5972
         },
         "../latest/apps/web/src/styles/viewer/routines.css": {
-          "bytesInOutput": 84985
+          "bytesInOutput": 85224
         },
         "../latest/apps/web/src/styles/modal-window-drag.css": {
-          "bytesInOutput": 765
+          "bytesInOutput": 821
         },
         "../latest/apps/web/src/styles/entrance.css": {
           "bytesInOutput": 5867
         },
         "../latest/apps/web/src/styles/home/plugin-marketplace-demo.css": {
-          "bytesInOutput": 32940
+          "bytesInOutput": 35193
         },
         "../latest/apps/web/src/index.css": {
           "bytesInOutput": 0
@@ -16577,7 +16869,7 @@
           "bytesInOutput": 903
         }
       },
-      "bytes": 1160148
+      "bytes": 1161920
     }
   }
 }

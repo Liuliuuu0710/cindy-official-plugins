@@ -1,100 +1,67 @@
-<!--
-Title format: <type>(<scope>): <short description>
-  scope is normally the plugin directory, e.g. fix(qq-mail): validate the move result
-  type: feat / fix / refactor / perf / chore / docs / test / revert / build / ci
-
-标题格式：<type>(<scope>): <简短描述>
-  scope 一般写插件目录名，例如 fix(qq-mail): 校验移动结果
+<!-- Title: <type>(<plugin-directory>): <short description>
+标题示例：fix(qq-mail): validate the move result
+Describe only applicable changes. CI checks versions, DCO, manifests, locales and
+packages; do not copy its output or tick unrelated checklists.
+只写适用内容。版本、DCO、清单、语言资源和包结构由 CI 检查，不必抄结果或勾无关清单。
 -->
 
-## What changed / 改了什么
+## What and why / 改了什么、为什么
 
-<!-- Plugin(s) touched, and what this PR does. / 涉及哪些插件，这个 PR 做了什么。 -->
+<!-- User-facing outcome, affected plugin(s), issue if any.
+用户可见结果、涉及插件；有 issue 请关联。 -->
 
-## Why / 为什么
+## Impact / 影响
 
-<!-- Link the issue if there is one. / 有 issue 请关联。 -->
-
-## Checklist
-
-<!--
-Quality & security items come from README → Review standards; the full
-review contract is .greptile/rules.md. 质量与安全项来自 README 审查标准，
-完整审查契约见 .greptile/rules.md。
--->
-
-- [ ] Reviewed the complete diff — no credentials, tokens, authorization codes,
-      real user data, unrelated generated files, or `node_modules`.
-      已 review 完整 diff —— 无凭证、令牌、授权码、真实用户数据、无关生成文件或 `node_modules`。
-- [ ] `ghost.json` declares only capabilities actually used (direct capability
-      fields / autonomous network hosts / secrets / Node runtime); any new
-      capability is justified in this PR description.
-      `ghost.json` 只声明实际用到的能力（直接能力字段 / 自主网络域名 / 密钥 / Node
-      Runtime）；新增能力已在 PR 描述中说明必要性。
-- [ ] Tools with irreversible external side effects (send / post / delete)
-      handle every failure path as "not executed / executed / unknown", and
-      never suggest a blind retry on "unknown".
-      有不可逆外发副作用的工具已在每条失败路径上区分「未执行 / 已执行 / 不确定」
-      三态，不确定态不提示盲目重试。
-- [ ] Every changed tool `description` still matches actual behavior; SKILL.md
-      and settings copy stay consistent with it.
-      改动过的 tool `description` 仍与实际行为一致；SKILL.md 与设置页文案同步。
-- [ ] Bumped `ghost.json` `version` for every plugin whose packaged content
-      changed; the new SemVer is greater than the version on `main`.
-      每个打包内容发生变化的插件都已 bump `ghost.json` 的 `version`，且新 SemVer
-      大于 `main` 上的当前版本。
-- [ ] **Cindy device verification / Cindy 实机验证** — Installed every
-      changed plugin's packaged `.cindy` on a real device running a stable production
-      or Beta Cindy build and verified its core functionality. When a plugin
-      declares `minCindyVersion`, the verified Cindy version was greater than or
-      equal to it. 已在运行正式稳定版或 Beta 版 Cindy 的实际设备上安装每个改动插件的真实
-      `.cindy` 包并验证核心功能；插件声明 `minCindyVersion` 时，验证所用 Cindy
-      版本不低于该最低版本。
-      Either channel is sufficient. Record the verified version and channel below;
-      Dev/local builds do not qualify.
-      任一渠道验收通过即可。请在下方记录验证版本和渠道；Dev/本地构建不能替代此项验证。
-- [ ] Lowering or removing `minCindyVersion` is explicitly called out for
-      maintainer review. 降低或删除 `minCindyVersion` 已明确标注交维护者人工 review。
-- [ ] For a new plugin, linked the acknowledged proposal issue and recorded the
-      `provisioning.json` audience decision below.
-      新插件已关联维护者确认过的提案 issue，并在下方记录 audience 决策。
-- [ ] Ran `node --test .tests/localization.test.mjs` if any `ghost.json` or
-      `locales/` changed. 改动过 `ghost.json` 或 `locales/` 的已跑本地化检查。
-- [ ] Rebuilt `node/worker.cjs` via `npm ci && npm run build` and committed the
-      artifact, if `src/` changed. 改过 `src/` 的已重新构建并提交产物。
-- [ ] Updated the plugin's `THIRD-PARTY-LICENSES.txt` if a bundled dependency was
-      added or upgraded. 内嵌依赖有增减或升级的已更新第三方许可证清单。
-- [ ] Every commit is signed off (`git commit -s`) — see [DCO](https://github.com/makecindy/cindy-official-plugins/blob/main/DCO).
-      每个 commit 都带 DCO 签名。
-
-## Tool declaration changes / 工具声明改动
-
-<!--
-If ghost.json tools[].description or parameters changed, describe the impact on
-Agent behaviour — that description is the manual the Agent reads.
-如改动了 ghost.json 的工具声明，请说明对 Agent 行为的影响 —— 那段描述就是 Agent
-读到的使用手册。Leave blank if not applicable. / 不涉及可留空。
--->
+<!-- Mention changed behavior or tool contracts, data destinations, fees,
+permissions (including Manifest-v3 direct capability fields), compatibility,
+dependencies or packaging ONLY when applicable.
+No such changes? Say "None / 无". Keep declarations/manuals/locales consistent.
+仅在涉及时说明行为/工具契约、数据去向、费用、权限（含 Manifest-v3 直接能力字段）、
+兼容性、依赖或打包变化。
+不涉及时写“无”；保持声明、手册与语言资源一致。 -->
 
 ## Verification / 验证
 
-<!--
-Commands actually run and their results. / 实际执行的命令和结果。
-For a changed plugin, record the verification artifact/run URL, buildCommit,
-package SHA-256, Cindy version/channel and exercised behavior. PR test packages
-are uploaded before the device-attestation gate; leave it unchecked until verified.
-改动插件时记录验证包/run 链接、buildCommit、包 SHA-256、Cindy 版本/渠道与验证项。
-PR 测试包在实机验证勾选检查前上传；完成真实验证后再勾选。
+<!-- Actual commands and results; runtime version/environment, exercised paths
+and remaining gaps. Link to existing comments/artifacts instead of copying hashes
+already provided by CI. Authors or maintainers can supply evidence.
+实际命令和结果；运行版本/环境、测试场景与未测项。可链接现有评论/产物，不必重复
+抄写 CI 已提供的哈希。作者或维护者均可提供验证。
+
+Existing evidence: identify the tested version and explain why changes since it
+leave the relevant paths unaffected. Do not claim the latest package was tested
+if it was not. Changed behavior still needs its applicable runtime verification.
+沿用证据时注明已测版本，以及此后完整差异为何不影响相应路径；旧包实测不等于
+新包已测。行为改动仍需对应的真实运行验证。无需固定的“实机已测”勾选项。
+
+Review contract: .greptile/rules.md → 运行验证与证据复用
 -->
 
-## Sensitive changes / 敏感变更
+## Third-party OAuth scopes / 第三方 OAuth 授权范围
 
-<!--
-Explicitly list any dependency/vendor/binary resource, OAuth/API scope,
-credential/auth boundary, direct network/secret/tool/Node capability,
-provisioning audience, minCindyVersion reduction/removal, or publishing/review
-policy change. Write "None / 无" only after checking the complete diff.
-明确列出依赖/vendor/二进制资源、OAuth/API scope、凭证/鉴权边界、
-直接 network/secret/tool/Node 能力、audience、minCindyVersion 降低/删除、发布或
-审查策略变更。完整检查 diff 后无此类改动才写 "None / 无"。
--->
+<!-- Tick one. Besides scopes this plugin requests, include any Cindy host
+authorization it uses or depends on. Name that grant, whether the platform has
+approved it, and whether a host release contains it. If the grant changed or
+is not ready, do not merge. Plan scopes that still need requesting together;
+do not request unused ones.
+勾一项。除插件自己申请的 scope 外，写上它用到或依赖的 Cindy 本体授权：哪一项、
+平台是否已批准、宿主是否已发布。本体授权有变化或未就绪先不合。需要申请的范围
+一起规划，用不上的不要申请。 -->
+
+- [ ] No change to scopes this plugin requests, and it does not use or depend on
+      a changed or unready Cindy host authorization.
+      插件自己申请的 scope 无变化，也不依赖有变化或未就绪的 Cindy 本体授权。
+- [ ] Applies. Scopes this plugin requests, plus each host grant, platform
+      approval, and host release:
+      有。插件自己的 scope，以及每项本体授权、平台是否已批准、宿主是否已发布：
+
+## Decisions, if applicable / 相关决定（适用时）
+
+<!-- For a new plugin or an audience change, state which tier applies:
+`all`, opt-in `{ "emails": [] }`, or not accepted. A match needs no maintainer
+approval. Link the maintainers' explicit decision only for a real boundary
+expansion: permission, credential, or publish-trust widening; undisclosed
+network access; renaming or deleting a published plugin.
+新增插件或改 audience 时写明落在哪一档：`all`、自选 `{ "emails": [] }`，或
+不予接受。符合标准不需要维护者批准。只有真实边界扩大才链接维护者的明确决定：
+权限、凭证或发布信任扩大，未声明的网络访问，以及重命名或删除已发布插件。 -->

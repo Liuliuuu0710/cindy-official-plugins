@@ -10,7 +10,7 @@
 // the socket down. The Mac side enumerates AVCaptureDevices and
 // pumps the chosen camera's BGRA frames into `/tmp/SimCam.bgra` — a
 // shared-memory ring buffer the VirtualCamera dylib reads inside the
-// simulator. See `docs/features/camera.md`.
+// simulator. See `docs/features/camera/README.md`.
 //
 // The source can also be an uploaded still image or a looping video
 // instead of a live webcam: pick image/video, choose a file (POSTed to
@@ -59,6 +59,7 @@
       this.fit = 'fit';
       this.mirror = false;
       this.lastError = null;
+      this.cleanupRequired = false;
       // Optional callback: `(phase) => void`. Set by callers that
       // want to surface the camera state outside the panel — e.g.
       // the focus-mode toolbar lights a streaming dot on its
@@ -127,6 +128,7 @@
       } else if (msg.type === 'camera_state') {
         const prevPhase = this.phase;
         this.phase = msg.phase || 'idle';
+        this.cleanupRequired = msg.cleanupRequired === true;
         this.fps = typeof msg.fps === 'number' ? msg.fps : 0;
         this.lastError = msg.ok === false ? (msg.error || 'unknown error') : null;
         // A refused start means the stream we asked for isn't coming.
@@ -300,7 +302,7 @@
       } else if (this.lastError) {
         status.style.color = 'var(--danger,#b91c1c)';
         status.textContent = this.lastError;
-        toggle.textContent = 'Start';
+        toggle.textContent = this.cleanupRequired ? 'Retry stop' : 'Start';
       } else {
         status.style.color = 'var(--text-muted,#94a3b8)';
         status.textContent = 'idle';
@@ -347,7 +349,7 @@
 
     /** Send `camera_start` for the current source if it's ready. */
     _startCurrent() {
-      if (!this._sourceReady()) return;
+      if (this.cleanupRequired || !this._sourceReady()) return;
       this._wantsStreaming = true;
       if (this.source === 'webcam') {
         this._send({
@@ -419,7 +421,7 @@
     }
 
     _onToggle() {
-      if (this.phase === 'streaming') {
+      if (this.phase === 'streaming' || this.cleanupRequired) {
         this._resumeOnReady = false;
         this._wantsStreaming = false;
         this._send({ type: 'camera_stop' });

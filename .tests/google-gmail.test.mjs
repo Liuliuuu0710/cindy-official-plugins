@@ -8,14 +8,16 @@ for (const [id, prefix] of Object.entries(plugins)) {
   test(`${id}: gog parameters are visible through the Cindy tool contract`, () => {
     const manifest = JSON.parse(readFileSync(new URL(`../${id}/ghost.json`, import.meta.url), 'utf8'));
     assert.equal(manifest.schemaVersion, 3);
-    assert.equal(manifest.minCindyVersion, '0.1.92');
+    // Cindy 0.1.112 is the first released client with the shared mail flow
+    // and native reader from makecindy/cindy#6404.
+    assert.equal(manifest.minCindyVersion, '0.1.112');
     assert.equal(Object.hasOwn(manifest, 'slots'), false);
     assert.equal(manifest.sessionContext, true);
     const secret = manifest.network.secrets.find(secret => secret.source === 'oauth');
     assert.equal(secret.oauth.clientId, '948713214926-onmd8lp4prlfl78qppbfjpl568mc504r.apps.googleusercontent.com');
     assert.equal(manifest.node.secretBindings[0].oauthSecret, secret.key);
     assert.deepEqual(secret.oauth.scopes, ['openid', 'https://www.googleapis.com/auth/userinfo.email',
-      ...(id === 'google-gmail' ? ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.compose']
+      ...(id === 'google-gmail' ? ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.compose', 'https://www.googleapis.com/auth/gmail.modify']
         : ['https://www.googleapis.com/auth/' + (id === 'google-calendar' ? 'calendar' : 'drive')])]);
     // ghost_info projects only name, description and parameters to the model.
     const tools = manifest.tools.map(({ name, description, parameters }) => ({ name, description, parameters }));
@@ -29,9 +31,15 @@ for (const [id, prefix] of Object.entries(plugins)) {
     for (const name of [`${prefix}_schema`, `${prefix}_run`]) {
       assert.equal(Object.hasOwn(manifest.tools.find(tool => tool.name === name), 'inputSchema'), false);
     }
-    assert.deepEqual(tools.map(tool => tool.name), [`${prefix}_schema`, `${prefix}_run`, `${prefix}_accounts`]);
+    assert.deepEqual(tools.map(tool => tool.name), [`${prefix}_read_message`, `${prefix}_schema`, `${prefix}_run`, `${prefix}_accounts`]);
+    const reader = tools.find(tool => tool.name === manifest.mailReader.tool);
+    assert.equal(reader.parameters.properties.url.type, 'string');
+    assert.deepEqual(reader.parameters.required, ['url']);
+    assert.equal(reader.parameters.additionalProperties, false);
     const main = readFileSync(new URL(`../${id}/main.js`, import.meta.url), 'utf8');
-    assert.doesNotMatch(main, /cindy\.fetch|async function api\(|https:\/\/.*googleapis\.com/);
+    // Host-managed attachment preview fetches are allowed; credentials remain
+    // Host-owned. The compose tests verify the selected authAccount at runtime.
+    assert.doesNotMatch(main, /gog_access_token|Bearer\s|Authorization\s*:/);
     assert.match(main, /cindy\.node\.request/);
     assert.match(run.parameters.properties.account.description, /Multiple accounts require an explicit choice/);
   });

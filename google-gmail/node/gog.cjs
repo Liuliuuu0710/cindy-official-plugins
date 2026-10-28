@@ -7,6 +7,7 @@ const os = require('node:os');
 const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
 const readline = require('node:readline');
+const { updateRichDraft, keyFor, isAttachmentPart, referencedContentIds, gmailJson, decodeMimeBody, draftBodyErrorMessage, loadMessageBodies, verifyDraftAttachmentBytes } = require('./mailMime.cjs');
 const SERVICE = 'gmail';
 const root = path.resolve(__dirname, '..');
 const binaries = require('../vendor/gog/binaries.json');
@@ -16,6 +17,23 @@ let runtime;
 let schemaPromise;
 
 function failure(message, execution = 'not_executed') { return { ok: false, execution, message }; }
+function commandFailure(error, state) {
+  return failure(draftBodyErrorMessage(error) || (error?.code === 'GOG_BINARY_MISSING' ? error.message
+    : 'Unable to execute command; check its schema and workspace paths'), state?.started ? 'unknown' : 'not_executed');
+}
+// Only the write phase may consume a transport execution receipt. A failed
+// pre-write GET, even with HTTP 200, does not mean the draft was saved.
+function draftWriteFailure(error, state) {
+  const outcome = !state.started ? 'not_executed'
+    : ['not_executed', 'executed', 'unknown'].includes(error?.execution) ? error.execution : 'unknown';
+  const message = {
+    not_executed: '草稿未保存，邮件尚未发送。请检查附件、正文和 Gmail 插件详情页中的账号授权后重试。',
+    executed: '草稿已保存但未发送：无法完整核对 Gmail 回执，请先重新读取或到 Gmail 检查，不要重复创建、保存或发送。',
+    unknown: '无法确认草稿保存结果，邮件尚未发送。请先核对 Gmail 草稿，不要重复创建或保存。',
+  }[outcome];
+  const detail = draftBodyErrorMessage(error);
+  return failure(detail ? (outcome === 'not_executed' ? detail : message + ' ' + detail) : message, outcome);
+}
 function cleanup(directory, result) {
   try { fs.rmSync(directory, { recursive: true, force: true }); }
   catch (_) {
@@ -36,7 +54,12 @@ function initialize() {
   const key = platform + '-' + arch;
   const expected = binaries[key];
   if (!expected) throw new Error('Unsupported operating system or architecture');
-  const bytes = fs.readFileSync(path.join(root, 'vendor/gog', key + (platform === 'windows' ? '.exe' : '')));
+  let bytes;
+  try { bytes = fs.readFileSync(path.join(root, 'vendor/gog', key + (platform === 'windows' ? '.exe' : ''))); }
+  catch (error) {
+    if (error.code === 'ENOENT') throw Object.assign(new Error('Gmail plugin package is missing its bundled gog executable. Install a complete plugin package; reloading cannot repair it.'), { code: 'GOG_BINARY_MISSING' });
+    throw error;
+  }
   if (digest(bytes) !== expected.sha256) throw new Error('Bundled gog executable checksum mismatch');
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'cindy-gog-'));
   fs.chmodSync(directory, 0o700);
@@ -107,6 +130,11 @@ function allowed(command) {
 const blockedOptions = new Set(['track', 'track-split', 'with-zoom', 'regenerate-zoom', 'location-search', 'place-id', 'include-passwords']);
 function cleanSchema(node, globals, command = []) {
   const result = { name: node.name, help: node.help, positionals: node.positionals || [], flags: (node.flags || []).filter((flag) => !globals.has(flag.name) && !blockedOptions.has(flag.name)) };
+  if (command.join(' ') === 'reply' || command.join(' ') === 'drafts reply') {
+    result.help = 'Reply to all by default. Use reply-mode=sender only when the user explicitly requests sender-only.';
+    result.flags.push({ name: 'reply-mode', type: 'string', help: 'all (default) or sender. Bcc is never copied.' });
+  }
+  if (command.join(' ') === 'drafts create') result.flags.push({ name: 'inline-images', type: 'strings', help: 'Granted chat image hashes in CID order: img1@cindy.local, img2@cindy.local. Save only; never sends. Supply body and body-html; to may be empty for preview.' });
   result.subcommands = (node.subcommands || []).filter((child) => allowed([...command, child.name])).map((child) => cleanSchema(child, globals, [...command, child.name]));
   return result;
 }
@@ -157,24 +185,171 @@ function draftReadBack(data, draftId) {
   if (!draft || draft.id !== draftId || !message || !message.id || !message.payload) throw new Error('Incomplete draft read-back');
   const header = (part, name) => (part.headers || []).filter(h => h.name.toLowerCase() === name).map(h => h.value).join('\n');
   const headers = {};
-  for (const name of ['from', 'to', 'cc', 'bcc', 'subject', 'message-id', 'in-reply-to', 'references']) headers[name] = header(message.payload, name);
+  for (const name of ['from', 'to', 'cc', 'bcc', 'subject', 'reply-to', 'message-id', 'in-reply-to', 'references']) headers[name] = header(message.payload, name);
   const bodies = { 'text/plain': [], 'text/html': [] };
   const attachments = [];
   function walk(part) {
     const body = part.body || {};
     const disposition = header(part, 'content-disposition');
     const contentId = header(part, 'content-id');
-    if (part.filename || /^(attachment|inline)\b/i.test(disposition) || contentId) {
-      attachments.push({ filename: part.filename || '', mimeType: part.mimeType, bytes: body.size,
-        attachmentId: body.attachmentId || null, disposition, contentId });
-    } else if (bodies[part.mimeType] && typeof body.data === 'string') {
-      bodies[part.mimeType].push(Buffer.from(body.data, 'base64url').toString('utf8'));
+    if (isAttachmentPart(part)) {
+      const bytes = typeof body.data === 'string' ? Buffer.from(body.data, 'base64url') : null;
+      attachments.push({ key: keyFor(part), filename: part.filename || '', mimeType: part.mimeType, bytes: body.size,
+        attachmentId: body.attachmentId || null, disposition, contentId,
+        ...(bytes ? { sha256: digest(bytes) } : {}),
+        // Small Gmail parts have no attachmentId. Carry bounded image bytes to
+        // the same media preview path used for downloaded attachments.
+        ...(bytes && /^image\/(png|jpeg|gif|webp)$/.test(part.mimeType) && bytes.length === body.size
+          && bytes.length <= 16 * 1024 * 1024 && body.data.length <= 4 * Math.ceil(16 * 1024 * 1024 / 3)
+          ? { inlineData: body.data } : {}) });
+      return;
+    } else if (bodies[part.mimeType]) {
+      if ((body.attachmentId || body.size > 0) && (!body.data && body.size !== 0)) throw new Error('无法完整读取草稿正文');
+      if (typeof body.data === 'string') bodies[part.mimeType].push(decodeMimeBody(part));
     }
     for (const child of part.parts || []) walk(child);
   }
   walk(message.payload);
-  return { status: 'read_back', draftId, messageId: message.id, threadId: message.threadId || null,
+  const result = { status: 'read_back', draftId, messageId: message.id, threadId: message.threadId || null,
     headers, bodyText: bodies['text/plain'].join('\n'), bodyHtml: bodies['text/html'].join('\n'), attachments };
+  // Gmail can rotate attachment download IDs on every read of an unchanged
+  // message. Keep fetch IDs and inline preview bytes out of the revision.
+  // messageId still changes when Gmail replaces the draft's underlying message.
+  result.fingerprint = digest(Buffer.from(JSON.stringify({ ...result,
+    attachments: attachments.map(({ attachmentId, inlineData, ...content }) => content) })));
+  result.editor = draftEditor(result);
+  return result;
+}
+
+async function readDraft(data, draftId, token) {
+  await loadMessageBodies(data?.draft?.message, token);
+  return draftReadBack(data, draftId);
+}
+
+function draftEditor(draft) {
+  // Only split the paired quote produced by the pinned gog runtime. Unknown
+  // layouts stay intact; never guess away part of an HTML-only message.
+  const htmlAt = draft.bodyHtml.indexOf('<br><br><div class="gmail_quote">');
+  const textMatch = /\r?\n\r?\n(?:[^\r\n]+ wrote:|Original message:)\r?\n> /.exec(draft.bodyText);
+  const split = htmlAt >= 0 && textMatch;
+  const body = split ? draft.bodyText.slice(0, textMatch.index) : draft.bodyText;
+  const html = split ? draft.bodyHtml.slice(0, htmlAt) : draft.bodyHtml;
+  return { format: !html || html === mailBodyHtml(body) ? 'text' : 'html', body: split ? draft.bodyText.slice(0, textMatch.index) : draft.bodyText,
+    quote: split ? draft.bodyText.slice(textMatch.index) : '',
+    bodyHtml: split ? draft.bodyHtml.slice(0, htmlAt) : draft.bodyHtml,
+    quoteHtml: split ? draft.bodyHtml.slice(htmlAt) : '',
+    editable: Boolean(draft.bodyText || !draft.bodyHtml) };
+}
+
+async function composeDraft(message, execution) {
+  const p = message.params || {};
+  const fields = p.fields;
+  const names = ['to', 'cc', 'bcc', 'subject', 'body', 'quote'];
+  const rich = fields && typeof fields.bodyHtml === 'string';
+  if (rich) names.push('bodyHtml', 'quoteHtml', 'attachmentItems');
+  if (typeof p.draftId !== 'string' || !p.draftId || p.draftId.startsWith('-') || /[\r\n\0]/.test(p.draftId)
+    || typeof p.fingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(p.fingerprint)
+    || !fields || typeof fields !== 'object' || Array.isArray(fields) || Object.keys(fields).length !== names.length
+    || names.some(name => typeof fields[name] !== 'string' || fields[name].length > (name.endsWith('Html') ? 64000 : 16000) || fields[name].includes('\0'))
+    || typeof p.send !== 'boolean') return failure('邮件尚未发送：草稿字段不完整，请重新打开草稿。');
+  const run = (command, options = {}, state = {}) => handle({ method: 'run', cindy: message.cindy,
+    params: { command, arguments: [p.draftId], options, readOnly: false, accountEmail: p.accountEmail } }, state);
+  const fetched = await run(['drafts', 'get']);
+  if (!fetched.ok || !fetched.data.readBack) return failure('邮件尚未发送：无法读取当前草稿，请先到 Gmail 核对。');
+  const before = fetched.data.readBack;
+  if (before.fingerprint !== p.fingerprint) return { ok: false, execution: 'not_executed', stale: before,
+    message: '草稿已在其他地方修改，请检查更新后的内容再发送。' };
+  try {
+    if (p.send && !fields.to.trim() && !fields.cc.trim() && !fields.bcc.trim()) throw new Error('recipient');
+    for (const name of ['to', 'cc', 'bcc']) if (fields[name].trim()) addressHeader(fields[name]);
+    encodeHeader(fields.subject);
+  } catch (_) { return { ...failure('邮件尚未发送：请检查收件人地址和主题，不能包含换行。'), readBack: before }; }
+  if (!rich && !before.editor.editable) return failure('邮件尚未发送：此草稿包含 HTML，请由 AI 更新 HTML 草稿后重新预览。');
+  const original = { to: before.headers.to, cc: before.headers.cc, bcc: before.headers.bcc, subject: before.headers.subject,
+    body: before.editor.body, quote: before.editor.quote,
+    ...(rich ? { bodyHtml: before.editor.bodyHtml || mailBodyHtml(before.editor.body), quoteHtml: before.editor.quoteHtml,
+      attachmentItems: JSON.stringify(before.attachments.map(a => ({ key: a.key, filename: a.filename, bytes: a.bytes, contentId: a.contentId || '' }))) } : {}) };
+  let saved = before;
+  let sameAttachments = true;
+  if (rich) {
+    try {
+      const wanted = JSON.parse(fields.attachmentItems);
+      if (!Array.isArray(wanted) || wanted.some(a => !a || typeof a.key !== 'string')) throw new Error('attachments');
+      // MIME bytes are identified by server part keys. Preview URLs/types are
+      // display metadata and must never cause a rewrite on every read/send.
+      const facts = items => JSON.stringify(items.map(a => {
+        const original = before.attachments.find(b => b.key === a.key);
+        return [a.key, (a.contentId ?? original?.contentId ?? '').replace(/^<|>$/g, ''), a.filename ?? original?.filename ?? ''];
+      }).sort());
+      sameAttachments = facts(wanted) === facts(before.attachments);
+    } catch (_) { return failure('附件清单无效，请重新读取草稿。'); }
+  }
+  if (names.some(name => name === 'attachmentItems' ? !sameAttachments : original[name] !== fields[name]) || p.attachments?.length) {
+    // The pinned CLI carries attachment bytes forward but does not retain CID
+    // metadata on update. Never damage an inline image while editing a reply.
+    if (!rich && before.attachments.some(item => item.contentId || /^inline\b/i.test(item.disposition)))
+      return { ...failure('草稿包含内嵌图片，当前编辑器无法完整保留图片引用。请在 Gmail 修改后重新读取；原草稿未更改。'), readBack: before };
+    const bodyHtml = rich && (before.editor.format === 'html' || fields.bodyHtml !== original.bodyHtml || fields.body === original.body) ? fields.bodyHtml
+      : fields.body === original.body ? before.editor.bodyHtml : mailBodyHtml(fields.body);
+    // The quote is a separately editable plain field, even in an HTML draft.
+    // Only an explicit HTML quote edit or unchanged plain quote keeps its HTML.
+    const quoteHtml = rich && (fields.quoteHtml !== original.quoteHtml || fields.quote === original.quote) ? fields.quoteHtml
+      : fields.quote === original.quote ? before.editor.quoteHtml : fields.quote
+      ? '<br><br><div class="gmail_quote"><blockquote style="margin:0 0 0 .8ex;border-left:1px #ccc solid;padding-left:1ex">' + mailBodyHtml(fields.quote) + '</blockquote></div>' : '';
+    const from = /<([^<>]+)>$/.exec(before.headers.from);
+    let richReceipt;
+    if (rich) {
+      try {
+        richReceipt = await updateRichDraft({ ...p, fields: { ...fields, bodyHtml, quoteHtml } }, message.cindy?.secrets?.gog_access_token, before,
+          { draftReadBack, addressHeader, encodeWords, encodeHeader, wrap }, execution);
+        if (!richReceipt.ok) return richReceipt;
+      } catch (error) { return draftWriteFailure(error, execution); }
+    }
+    const savedButUnverified = () => failure('草稿已保存但未发送：无法完整核对读回内容或附件，请先重新读取或到 Gmail 检查，不要重复保存或发送。', 'executed');
+    let updated;
+    try { updated = rich ? await run(['drafts', 'get']) : await run(['drafts', 'update'], { to: fields.to, cc: fields.cc, bcc: fields.bcc, subject: fields.subject,
+      ...(before.headers.from ? { from: from ? from[1] : before.headers.from } : {}),
+      ...(before.headers['reply-to'] ? { 'reply-to': before.headers['reply-to'] } : {}),
+      body: fields.body + fields.quote, 'body-html': bodyHtml + quoteHtml }, execution); }
+    catch (_) {
+      if (rich) return savedButUnverified(); // The preceding PUT has a successful receipt.
+      return failure('无法确认草稿保存结果，请先重新读取核对，邮件尚未发送。', execution.started ? 'unknown' : 'not_executed');
+    }
+    if (!updated.ok) return rich ? savedButUnverified() : updated;
+    saved = updated.data?.readBack;
+    if (!saved || saved.status !== 'read_back') return { ok: false, execution: 'executed',
+      message: '草稿已保存但未发送：无法读回确认，请先到 Gmail 检查。' };
+    // Verify the saved content before sending. Keep reply
+    // headers and attachments via gog update's existing preservation behavior.
+    try {
+      const normalized = text => text.replace(/\r\n?/g, '\n');
+      const addresses = text => text.trim() ? addressHeader(text).split(',\r\n ').map(value => {
+        const match = /<([^<>]+)>$/.exec(value);
+        return (match ? match[1] : value).toLowerCase();
+      }).sort().join(',') : '';
+      const attachmentFacts = items => JSON.stringify(items.map(a => [a.filename, a.mimeType, a.bytes, (a.contentId || '').replace(/^<|>$/g, '')]).sort());
+      if (normalized(saved.bodyText) !== normalized(fields.body + fields.quote) || normalized(saved.bodyHtml) !== normalized(bodyHtml + quoteHtml)
+        || ['to', 'cc', 'bcc'].some(name => addresses(saved.headers[name]) !== addresses(fields[name]))
+        || saved.headers.subject !== fields.subject.trim() || addresses(saved.headers.from) !== addresses(before.headers.from)
+        || addresses(saved.headers['reply-to']) !== addresses(before.headers['reply-to'])
+        || saved.threadId !== before.threadId || saved.headers['in-reply-to'] !== before.headers['in-reply-to']
+        || saved.headers.references !== before.headers.references || attachmentFacts(saved.attachments) !== attachmentFacts(richReceipt ? richReceipt.files : before.attachments))
+        return { ok: false, execution: 'executed', message: '草稿已保存但未发送：读回内容、收件人或附件不一致，请先到 Gmail 检查。' };
+      if (richReceipt && !await verifyDraftAttachmentBytes(message.cindy?.secrets?.gog_access_token, saved, richReceipt.files)) return savedButUnverified();
+    } catch (_) { return savedButUnverified(); }
+  }
+  if (!p.send) return { ok: true, execution: 'executed', data: { draftId: p.draftId, readBack: saved } };
+  const sent = await run(['drafts', 'send'], {}, execution);
+  if (!sent.ok) return sent;
+  return { ...sent, data: { ...sent.data, sent: true, draftId: p.draftId, readBack: saved } };
+}
+
+// Plain text is not Markdown. A Gmail-style HTML alternative keeps paragraph
+// breaks and the signature proportional, separate from the quoted history.
+function mailBodyHtml(text) {
+  const escaped = text.replace(/\r\n?/g, '\n').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return '<div dir="ltr" style="font-family:Arial,Helvetica,sans-serif;font-size:small">'
+    + escaped.split('\n').map(line => '<div>' + (line || '<br>') + '</div>').join('') + '</div>';
 }
 
 async function readSavedDraft(result, command, token, cwd) {
@@ -188,7 +363,7 @@ async function readSavedDraft(result, command, token, cwd) {
   try {
     if (typeof draftId === 'string' && draftId && !draftId.startsWith('-') && !draftId.includes('\0')) {
       const fetched = await execute([SERVICE, 'drafts', 'get', draftId, '--readonly'], token, cwd, MAX_OUTPUT, undefined, 10000);
-      if (fetched.ok) readBack = draftReadBack(fetched.data, draftId);
+      if (fetched.ok) readBack = await readDraft(fetched.data, draftId, token);
     }
   } catch (_) { /* The write already succeeded; retain its receipt. */ }
   return { ...result, data: { ...data, readBack } };
@@ -240,7 +415,7 @@ function addressHeader(value) {
   return addresses.join(',\r\n ');
 }
 function wrap(value) { const bytes = Buffer.isBuffer(value) ? value : Buffer.from(String(value), "utf8"); return bytes.toString("base64").replace(/(.{76})/g, "$1" + String.fromCharCode(13,10)); }
-function buildInlineMessage(options, cwd) {
+function buildInlineMessage(options, cwd, draft = false) {
   const images = options['inline-images'];
   if (!Array.isArray(images) || !images.length) return null;
   const supported = new Set(['inline-images', 'from', 'to', 'cc', 'bcc', 'reply-to', 'subject', 'body', 'body-html', 'in-reply-to', 'references', 'thread-id', 'attach']);
@@ -248,11 +423,11 @@ function buildInlineMessage(options, cwd) {
     if (!supported.has(key)) throw new Error('Unsupported inline-send option: ' + key);
   }
   const from = addressHeader(options.from);
-  const to = addressHeader(options.to);
+  const to = draft && !options.to ? '' : addressHeader(options.to);
   const subject = encodeWords(options.subject);
   const html = String(options['body-html'] || '');
   const body = String(options.body || '');
-  if (!from || !to || !subject || !html || !body) throw new Error('Inline send requires from, to, subject, body and body-html');
+  if (!from || (!draft && !to) || !subject || !html || !body) throw new Error('Inline mail requires from, subject, body and body-html; sending also requires to');
   const boundary = 'cindy-' + crypto.randomUUID();
   const lines = ['From: ' + from, 'To: ' + to];
   for (const [name, header] of [['cc', 'Cc'], ['bcc', 'Bcc'], ['reply-to', 'Reply-To']]) {
@@ -272,7 +447,7 @@ function buildInlineMessage(options, cwd) {
   images.forEach((image, index) => {
     if (!image || typeof image.path !== 'string' || typeof image.hash !== 'string') throw new Error('Invalid inline image');
     const cid = 'img' + (index + 1) + '@cindy.local';
-    if (!html.includes('cid:' + cid)) throw new Error('body-html must reference cid:' + cid + ' in inline-images order');
+    if (!referencedContentIds(html).has(cid)) throw new Error('body-html must reference cid:' + cid + ' in inline-images order');
     const file = localPath(image.path, cwd);
     const bytes = fs.readFileSync(file);
     if (digest(bytes) !== image.hash) throw new Error('Inline image changed before send');
@@ -292,10 +467,11 @@ function buildInlineMessage(options, cwd) {
 }
 
 async function handle(message, execution) {
+  if (message.method === 'compose') return composeDraft(message, execution);
   const params = message.params || {};
   const tree = await schema();
-  const command = params.command || [];
-  const node = locate(tree, command);
+  let command = params.command || [];
+  let node = locate(tree, command);
   if (message.method === 'schema') return { ok: true, data: node };
   if (message.method !== 'run') return failure('Unknown method');
   if (!command.length || node.subcommands.length) return failure('Select a concrete command');
@@ -305,12 +481,89 @@ async function handle(message, execution) {
   if (!Array.isArray(values) || values.length > 100 || values.some((value) => typeof value !== 'string' || value.startsWith('-') || value.includes('\0'))) return failure('Invalid positional arguments');
   let options = params.options || {};
   if (!options || typeof options !== 'object' || Array.isArray(options)) return failure('Invalid options');
+  options = { ...options };
+  if (command.join(' ') === 'reply' || command.join(' ') === 'drafts reply') {
+    const mode = options['reply-mode'] === undefined ? 'all' : options['reply-mode'];
+    if (!['all', 'sender'].includes(mode)) return failure('reply-mode must be all or sender');
+    delete options['reply-mode'];
+    if (mode === 'all') { command = [...command.slice(0, -1), 'reply-all']; node = locate(tree, command); }
+  }
   const cwd = typeof params.workdir === 'string' && path.isAbsolute(params.workdir) ? params.workdir : undefined;
+  if (command.join(' ') === 'drafts update' && params.readOnly === false && values[0]) {
+    const current = await execute([SERVICE, 'drafts', 'get', values[0], '--readonly'], token, undefined, MAX_OUTPUT, undefined, 10000);
+    if (!current.ok) return failure('无法核对草稿附件，草稿未修改。请重新读取后重试。');
+    const checked = await readDraft(current.data, values[0], token);
+    if (checked.attachments.some(a => a.contentId || /^inline\b/i.test(a.disposition))) {
+      // AI uses the same verified MIME writer as the card. The old CLI updater
+      // loses Content-ID; never send this draft through it.
+      const allowed = new Set(['to', 'cc', 'bcc', 'subject', 'body', 'body-file', 'body-html', 'body-html-file', 'attach', 'clear-attachments']);
+      if (values.length !== 1 || Object.keys(options).some(key => !allowed.has(key))) return failure('此 HTML 草稿仅支持更新收件人、主题、正文和附件，草稿未修改。');
+      const textOption = (key, fallback) => {
+        if (options[key] !== undefined && options[key + '-file'] !== undefined) throw new Error('Duplicate body input');
+        const value = options[key + '-file'] !== undefined ? fs.readFileSync(localPath(options[key + '-file'], cwd), 'utf8') : options[key] ?? fallback;
+        if (typeof value !== 'string') throw new Error('Invalid draft field');
+        return value;
+      };
+      const bodyChanged = options.body !== undefined || options['body-file'] !== undefined;
+      const htmlChanged = options['body-html'] !== undefined || options['body-html-file'] !== undefined;
+      if (bodyChanged !== htmlChanged) return failure('更新此图文草稿时，请同时提供 body 和 body-html（或对应文件），以保留图片和纯文本版本。');
+      const fields = Object.fromEntries(['to', 'cc', 'bcc', 'subject'].map(name => [name, textOption(name, checked.headers[name])]));
+      const html = textOption('body-html', checked.editor.bodyHtml) + checked.editor.quoteHtml;
+      const referenced = referencedContentIds(html);
+      // attach replaces ordinary files. Only inline parts still referenced by
+      // the replacement body survive implicitly; omission preserves all files.
+      const retained = options['clear-attachments'] === true ? [] : options.attach === undefined ? checked.attachments
+        : checked.attachments.filter(a => {
+          const cid = (a.contentId || '').replace(/^<|>$/g, '');
+          return cid && referenced.has(cid);
+        });
+      Object.assign(fields, { body: textOption('body', checked.editor.body), bodyHtml: textOption('body-html', checked.editor.bodyHtml),
+        quote: checked.editor.quote, quoteHtml: checked.editor.quoteHtml,
+        attachmentItems: JSON.stringify(retained.map(a => ({ key: a.key, filename: a.filename, bytes: a.bytes, contentId: a.contentId || '' }))) });
+      const inputs = options.attach === undefined ? [] : Array.isArray(options.attach) ? options.attach : [options.attach];
+      if (inputs.length > 20) return failure('附件过多，草稿未修改。');
+      const attachments = inputs.map(input => {
+        const filePath = localPath(input, cwd);
+        const fd = fs.openSync(filePath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+        try {
+          const stat = fs.fstatSync(fd);
+          if (!stat.isFile() || stat.size > 16 * 1024 * 1024) throw new Error('Invalid attachment');
+          const bytes = fs.readFileSync(fd);
+          return { path: filePath, filename: path.basename(filePath), bytes: bytes.length, sha256: digest(bytes) };
+        } finally { fs.closeSync(fd); }
+      });
+      return composeDraft({ method: 'compose', cindy: message.cindy, params: { draftId: values[0], fingerprint: checked.fingerprint,
+        accountEmail: params.accountEmail, fields, attachments, send: false } }, execution);
+    }
+  }
+  const compose = ['send', 'reply', 'reply-all', 'drafts create', 'drafts update', 'drafts reply', 'drafts reply-all'].includes(command.join(' '));
+  if (compose && options['body-html'] === undefined && options['body-html-file'] === undefined && options['raw-file'] === undefined) {
+    const body = typeof options.body === 'string' ? options.body : typeof options['body-file'] === 'string'
+      ? fs.readFileSync(localPath(options['body-file'], cwd), 'utf8') : undefined;
+    if (body !== undefined && node.flags.some(flag => flag.name === 'body-html')) options['body-html'] = mailBodyHtml(body);
+  }
   let inlineMessage;
   if (options['inline-images']) {
-    if (command.join(' ') !== 'send' || params.readOnly !== false) return failure('Inline images require an explicitly writable send');
-    inlineMessage = buildInlineMessage(options, cwd);
-    options = options['thread-id'] === undefined ? {} : { 'thread-id': options['thread-id'] };
+    if (command.join(' ') !== 'drafts create' || params.readOnly !== false) return failure('Inline images require a writable draft create; sending must use the common draft workflow');
+    for (const name of ['body', 'body-html']) if (options[name + '-file'] !== undefined) {
+      if (options[name] !== undefined) return failure('Duplicate body input');
+      options[name] = fs.readFileSync(localPath(options[name + '-file'], cwd), 'utf8');
+      delete options[name + '-file'];
+    }
+    inlineMessage = buildInlineMessage({ from: params.accountEmail, ...options }, cwd, true);
+    // The pinned CLI has no drafts create --raw-file. Use the same fixed Gmail
+    // API transport as rich draft updates, then read the exact saved draft back.
+    if (Buffer.byteLength(inlineMessage) > 35 * 1024 * 1024) return failure('邮件内容超过大小上限');
+    const requestBody = JSON.stringify({ message: {
+      raw: Buffer.from(inlineMessage).toString('base64url'),
+      ...(options['thread-id'] ? { threadId: encodeHeader(options['thread-id']) } : {}),
+    } });
+    try {
+      execution.started = true;
+      const created = await gmailJson(token, 'drafts', { method: 'POST', body: requestBody }, MAX_OUTPUT);
+      if (typeof created?.id !== 'string' || !created.id) throw Object.assign(new Error('Missing draft receipt'), { execution: 'executed' });
+      return readSavedDraft({ ok: true, execution: 'executed', data: { draftId: created.id } }, command, token, cwd);
+    } catch (error) { return draftWriteFailure(error, execution); }
   }
   const positionals = [...values];
   if ((SERVICE === 'drive' && command[0] === 'upload') || (SERVICE === 'gmail' && command[0] === 'import')) positionals[0] = localPath(positionals[0], cwd);
@@ -337,7 +590,7 @@ async function handle(message, execution) {
   // gog requires the selected mailbox identity for raw mail with direct tokens.
   // This comes from the same Host OAuth account used by authAccount, not From
   // or caller options (which cannot override account/global flags).
-  if (inlineMessage !== undefined || options['raw-file'] !== undefined) {
+  if (inlineMessage !== undefined || options['raw-file'] !== undefined || ['reply', 'reply-all'].includes(command.at(-1))) {
     if (typeof params.accountEmail !== 'string' || !/^[^\s<>@]+@[^\s<>@]+$/.test(params.accountEmail)) {
       return failure('Selected account email unavailable; reconnect this Gmail account');
     }
@@ -354,10 +607,13 @@ async function handle(message, execution) {
       argv.push('--raw-file=' + rawPath);
     }
     result = await execute(argv, token, cwd, MAX_OUTPUT, execution);
-  } catch (_) {
-    result = failure('Unable to execute command; check its schema and workspace paths', execution && execution.started ? 'unknown' : 'not_executed');
+  } catch (error) {
+    result = commandFailure(error, execution);
   } finally {
     if (temporaryDirectory) result = cleanup(temporaryDirectory, result);
+  }
+  if (result.ok && command.join(' ') === 'drafts get') {
+    return { ...result, data: { ...result.data, readBack: await readDraft(result.data, values[0], token) } };
   }
   return readSavedDraft(result, command, token, cwd);
 }
@@ -367,7 +623,7 @@ input.on('line', (line) => {
   try { message = JSON.parse(line); } catch (_) { return; }
   if (message.id === undefined) return;
   const execution = { started: false };
-  void handle(message, execution).catch(() => failure('Unable to execute command; check its schema and workspace paths', execution.started ? 'unknown' : 'not_executed')).then((result) => {
+  void handle(message, execution).catch((error) => commandFailure(error, execution)).then((result) => {
     process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }) + '\n');
   });
 });

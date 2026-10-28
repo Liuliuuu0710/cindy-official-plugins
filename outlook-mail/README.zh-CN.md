@@ -10,11 +10,11 @@
 
 ## 连接
 
-安装到 Cindy 0.1.75 或更新版本，在插件详情页选择邮箱所属区域并连接账号。设置页支持中文、英文、日文和韩文。发布者或企业 IT 需要为各服务区域配置已注册的公共微软应用 Client ID，无需客户端密钥。全球版已内置管理员提供的公共 Client ID，用户无需填写应用 ID 即可发起登录；中国区仍需单独注册并配置应用，未配置前连接按钮保持禁用。详见[应用配置](APPLICATION-SETUP.md)。普通用户通过已配置的应用授权自己的账号，无需自行申请应用；“管理员设置（可选）”仅供插件维护者或企业 IT 使用。
+安装到 Cindy 0.1.75 或更新版本，在插件详情页选择邮箱所属区域并连接账号。设置页和工具返回的提示跟随 Cindy 语言（中文、英文、日文或韩文），其他语言使用英文。发布者或企业 IT 需要为各服务区域配置已注册的公共微软应用 Client ID，无需客户端密钥。全球版已内置管理员提供的公共 Client ID，用户无需填写应用 ID 即可发起登录；中国区仍需单独注册并配置应用，未配置时直接显示 Client ID 必填表单，保存后才出现“添加邮箱”。详见[应用配置](APPLICATION-SETUP.md)。普通用户通过已配置的应用授权自己的账号，无需自行申请应用；自定义应用修改收在“更多设置 → 连接应用”，授权说明也默认折叠。服务下拉位于“连接邮箱”右侧：勾选代表当前查看的服务，“默认”标签代表已保存的默认服务。切换仅更新表单，点击“将当前服务设为默认”才保存默认值。
 
 全球版申请 User.Read、Mail.ReadWrite、Mail.Send、openid 和 offline_access；中国区使用对应中国区 Graph 资源权限。这些均为用户委托权限，不是全租户 Application 权限；租户策略可能要求管理员批准。连接、断开和默认账号管理全部交给 Host，插件 KV 仅保存默认服务区域。
 
-设置页同时按区域展示全部已连接账号，可以持续添加多个账号，不必退出已有账号；同一身份重新授权由 Host 作为重连处理。每行的重连、默认和断开操作绑定该账号自身的区域，不受上方新增账号服务选择影响。邮件调用传 `account` 时使用指定账号；只传 `cloud` 时使用该区域默认账号；都不传时使用保存的默认区域及其默认账号。断开一个账号不会退出其他账号或另一区域。中国区仍需配置独立应用。
+设置页在同一张卡片中展示全部已连接邮箱，底部提供连接另一个账户的入口；服务、状态、默认账号和断开操作收在该行“⋯”中，授权异常和重连入口直接显示。可以持续添加多个账号，不必退出已有账号；同一身份重新授权由 Host 作为重连处理。每行的重连、默认和断开操作绑定该账号自身的区域，不受上方新增账号服务选择影响。邮件调用传 `account` 时使用指定账号；只传 `cloud` 时使用该区域默认账号；都不传时使用保存的默认区域及其默认账号。断开一个账号不会退出其他账号或另一区域。中国区仍需配置独立应用。
 
 不带参数调用 `outlook_accounts` 只查看连接元数据，不请求 Graph。核对账号地址时，将返回的账号 ID 作为 `profile_account`：只读 Graph 资料返回 `mail`（SMTP 地址，可能为空）和 `user_principal_name`（登录名）。`mail` 为空时不得用登录名代替；地址查询不证明可发送或已送达。使用现有 User.Read 委托权限，不返回令牌。
 
@@ -28,6 +28,12 @@
 
 2.0.0 替换 SDK 授权路径，旧 SDK 会话与保存的账号元数据不再使用，需要通过 Host OAuth 重新连接。不会读取或清理其他微软工具的凭据缓存，也不会从旧 KV 自动恢复登录。
 
-运行 `node --test .tests/outlook-mail.test.mjs` 和仓库规定的契约、本地化、provisioning、发布流程检查。提交后使用 `.github/scripts/package-plugin.sh outlook-mail /tmp/outlook-mail-2.1.2.cindy` 打包。浏览器测试使用模拟 Host 接口与虚构账号，不作为真实 OAuth 证据；见 `.tests/outlook-mail/settings-browser.mjs`。
+运行 `node --test .tests/outlook-mail.test.mjs` 和仓库规定的契约、本地化、provisioning、发布流程检查。提交后使用 `.github/scripts/package-plugin.sh outlook-mail /tmp/outlook-mail.cindy` 打包。浏览器测试使用模拟 Host 接口与虚构账号，不作为真实 OAuth 证据；见 `.tests/outlook-mail/settings-browser.mjs`。
 
 管理员于 2026-09-09 提供了全球版公共应用 ID。已在 Cindy Beta 验证真实 Host OAuth 登录及单账号只读操作；确切包、客户端版本和当前覆盖范围记录于 PR。发送、草稿、标记和移动仍需获授权的真实邮箱验收；多账号与中国区保持未验证。早期 SDK 开发包结果不能替代本实现的验收。新插件准入和最终实机验收仍需维护者审查。provisioning 是空定向名单，不自动分发；测试及打包限制不作放宽。
+
+## 配置页开发
+
+配置页将 React 与 shadcn/ui 的 Radix DropdownMenu 组合随包编译；Button、Input、Collapsible 统一封装，遵循 Cindy 语义主题变量、胶囊控件和 12px 菜单容器。服务菜单与触发器等宽，并为宿主自动高度测量预留真实展开高度；窄卡片自然换行，不缩字号。外链按 Forge §4.8 使用普通同页 HTTPS 链接。不引入 CDN、宿主组件引用、运行时依赖下载或新的凭证路径。
+
+修改 `src/` 后运行 `cd outlook-mail && npm ci && npm run build`，同时提交 `settings.js`、锁文件和生成的 `THIRD-PARTY-LICENSES.txt`，不要直接修改构建产物。react-remove-scroll-bar 2.3.8 的 npm 包缺少许可文件，已从上游提交 `8ca9ba5ea52de03308fe8ced94f7b159a44d28ff` 留存到 `src/licenses/`。

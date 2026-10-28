@@ -1180,7 +1180,7 @@
       // A preview of a source you haven't trusted ends in one command,
       // not a button. Trusting is the decision that matters — after it,
       // this bakery joins the shelf above and its plugins install from
-      // there with a click. See `docs/features/plugins.md`.
+      // there with a click. See `docs/features/plugins/README.md`.
       const trustCommand = 'baguette bakery add ' + ref;
       const rows = (data.plugins || []).map((p) =>
         '<li class="plugin-offer">'

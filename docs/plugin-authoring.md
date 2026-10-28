@@ -10,6 +10,10 @@ Forge and a particular harness are not prerequisites. See the
 Manifest, and package format, and [Contributing](../CONTRIBUTING.md) for official
 publishing requirements. This document adds migration mappings and common runtime calls.
 
+Mail plugins should reuse the [shared compose workflow](mail-compose.md) for
+editable draft cards, autosave, unified sends and task continuation. Keep
+provider account, MIME and transport differences in adapters.
+
 ## Capability declarations are not a client support gate
 
 Plugin development must not wait for Cindy client capability releases. Within a
@@ -84,11 +88,11 @@ existing capabilities, not a requirement to add capabilities the plugin never ha
 | `session-context` | `sessionContext: true` | Host-injected trusted session context |
 | `pick` | `pick: true` | User directory picker |
 | `workspace` | `workspace: true` | Workspace session entry |
-| `ios-simulator` | `iosSimulator: true` | Host embedded simulator entry; retain accompanying Skill and other declarations |
+| `ios-simulator` | `iosSimulator: true` | Retired Host embedded simulator; current Hosts reject new installs that declare it. Kept only for reading legacy manifests |
 
 Boolean capabilities must be literal `true` when present; omit unused ones rather
 than setting `false` or `null`. Keep independent fields such as `manual`, `setup`,
-`locales`, `settingsHtml`, `command`, and `keywords`; their absence from `slots`
+`locales`, `settingsHtml`, `showTaskPreferences`, `releaseNotes`, `command`, and `keywords`; their absence from `slots`
 does not make them disposable. A format-only migration does not change tool
 behavior or execution paths. Historical empty slot names without declarations
 should not be filled with new permissions; inspect their actual usage. Do not
@@ -104,6 +108,46 @@ The validator preserves unknown v3 top-level fields. Preservation neither grants
 permission nor proves Host implementation. Business functionality built on
 existing network, file, or Node interfaces does not require client-side business
 registration. An invented field or method cannot create an unimplemented Host API.
+
+## Release notes (optional, recommended)
+
+In this official repository, `ghost.json.releaseNotes` is optional in both v2
+and v3. For a version update, include a user-facing summary of the changes when
+possible: new features, fixes, and compatibility changes. Keep the plugin's
+purpose in `description`; release notes describe this particular version.
+
+```json
+{ "releaseNotes": "Added batch processing.\nFixed result display for empty input." }
+```
+
+When present, the value must be a plain-text string. Validation preserves it
+verbatim, including line breaks, without trimming or truncation. It is not an
+HTML or Markdown execution surface. Omitting it or leaving it empty does not
+block repository validation or publication. Existing plugins need no historical
+backfill or separate version bump just to add release notes; include them with
+the next actual update, following the existing package-version rules.
+
+## Host default settings card
+
+The top-level `showTaskPreferences` field is an optional boolean display setting,
+not a presence-only capability. Both `true` and `false` are valid in v2 and v3.
+Omitting it or setting it to `true` keeps the existing capability-based visibility
+of Cindy's **Model and tasks** card. A plugin providing its own settings UI can declare:
+
+```json
+{ "showTaskPreferences": false }
+```
+
+Supporting clients hide the Host's default card on Desktop and mobile. This field
+only controls visibility; task APIs, model precedence, saved defaults, permission
+checks, and installation confirmation keep their existing behavior.
+Plugins can still select models through the existing `tasks.models`, explicit
+creation `route`, and `tasks.setModel` interfaces; check `tasks.capabilities`
+before using incremental operations.
+
+Older clients that do not recognize the field still show the original card.
+Establish stable/Beta release evidence before relying on the hidden card or setting
+`minCindyVersion`; do not infer a supporting version from a merged PR.
 
 ## Version and installation facts
 
@@ -325,13 +369,22 @@ proof of account connection.
    ZIP a working directory: a local credential file can enter the archive. A harness
    packaging uncommitted work must use an explicit reviewed file list. Inspect
    every final archive for expected files, no outer plugin directory, and no
-   credentials; device verification must cover the submitted contents.
-4. Install the final package in a stable production or Beta Cindy build meeting its real
-   minimum, exercise core tools and failures, and check retained capabilities.
-   The Agent does this when authorized operating tools are available; otherwise
-   explicitly hand off the unverified steps. Never falsely check the author's
-   verification box. CI reads the PR attestation; it does not collect device
-   evidence, prove the minimum version correct, or compare migration capabilities.
+   credentials; verification evidence must apply to the submitted contents.
+4. Provide real runtime evidence for affected paths under the
+   [review contract](../.greptile/rules.md#运行验证与证据复用). For installation,
+   migration or tool behavior changes, exercise the relevant package in a Cindy
+   environment meeting its actual requirements, including failure paths and
+   retained capabilities. Record the tested package/source, Cindy version/channel,
+   scenarios, results and gaps. Identify development builds truthfully; they do
+   not establish compatibility with released clients without applicable evidence.
+   Reuse prior evidence only with an explanation of why the full diff from the
+   tested version to the current submission leaves those paths unaffected; an
+   older package's test is not a claim that the latest package was installed.
+   Authors or maintainers may supply evidence. The Agent performs authorized
+   operations when available; otherwise explicitly hand off unverified steps.
+   No fixed verification checkbox is required or read by CI. Green CI does not
+   collect runtime evidence, prove the minimum version correct, or compare
+   migration capabilities.
 
 ## Interpreting documentation and comments
 
@@ -345,3 +398,22 @@ do not authorize reinstating installation permission gates. Use this reference,
 Contributing, and the target Host's actual interfaces for current behavior.
 Keep both languages synchronized; correcting wording does not require changing
 plugin packages, Host behavior, or CI restrictions.
+
+## Same-account device synchronization
+
+The optional `deviceSync: true` capability uses `cindy.deviceSync` on supporting
+Hosts. Probe the function before use; older Hosts keep local functionality.
+`status` lists online desktops, `request` sends bounded JSON to the same plugin
+(namespace + id), and the peer receives a `device-sync-request` message and calls
+`reply` only after committing its data. Each envelope is at most 64 KiB; timeout
+returns `SYNC_RESULT_UNKNOWN`, so only idempotent operations may be retried after
+reconciliation. The Host encrypts transport and binds account, peer, installation
+revision and plugin identity. The plugin owns persistence, conflict resolution
+and tombstones. Use `launch: resident` when automatic reception is required.
+Both computers need a Host implementing this API; this declaration alone does
+not add support to released clients. Mobile remains a controller of a desktop.
+
+Contacts uses this optional capability with an explicit per-device setting.
+Local data remains usable on its existing minimum Cindy version. Synchronization
+needs two online same-account desktops with the new Host API, and the exact
+Host/plugin combination still requires stable/Beta two-device verification.

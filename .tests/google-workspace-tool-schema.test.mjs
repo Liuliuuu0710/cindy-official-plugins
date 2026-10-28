@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const plugins = {
-  'google-gmail': 'gmail',
+  // Gmail has its own contract suite for the mail SDK, reader and modify scope.
   'google-drive': 'google_drive',
   'google-calendar': 'google_calendar',
   'google-sheets': 'google_sheets',

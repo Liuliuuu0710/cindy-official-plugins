@@ -107,6 +107,8 @@ export interface CollabPresenceLeaveResponse extends OkResponse {
  * `syncState` is the project sync state (see {@link ProjectSyncState}).
  */
 export interface CollabSyncStatusResponse {
+  /** Owner-device overwrite authorization; absent for read-only member mirrors. */
+  ownedContentUpdate?: OwnedProjectContentUpdate | null;
   publishedVersion: number | null;
   /**
    * The latest published version this daemon has durably materialized into the
@@ -170,6 +172,54 @@ export interface CollabProjectBootstrapResponse {
 export interface CollabPullResponse extends OkResponse {
   /** The actual hub version materialized by this pull, or null when unpublished. */
   version: number | null;
+}
+
+export type OwnedProjectContentUpdateState =
+  | 'up_to_date' | 'confirmation_required' | 'ignored' | 'suppressed' | 'downloading'
+  | 'busy' | 'failed' | 'unsupported';
+
+export interface OwnedProjectContentUpdate {
+  state: OwnedProjectContentUpdateState;
+  latestVersion: number | null;
+  localVersion: number | null;
+  /** Device-local reminder silence; never an authorization to replace content. */
+  promptSuppressedUntil: number | null;
+  updatedAt: number;
+  errorCode?: 'PROJECT_BUSY' | 'PROJECT_DIRECTORY_UNSUPPORTED' | 'PROJECT_SYNC_FAILED';
+}
+
+/** POST /api/projects/:id/collab/update: shared by web and od collab. */
+export interface OwnedProjectContentUpdateRequest {
+  action: 'check' | 'accept' | 'dismiss' | 'reset-preference';
+  /** Exact offered head. A stale acceptance cannot approve a newer snapshot. */
+  version?: number;
+  /** Silence future automatic prompts, including new heads; explicit acceptance remains required. */
+  dontPromptFor24h?: boolean;
+  /** Explicit manual checks can re-offer a previously dismissed version. */
+  manual?: boolean;
+}
+
+export interface OwnedProjectContentUpdateResponse {
+  update: OwnedProjectContentUpdate;
+}
+
+export function parseOwnedProjectContentUpdate(value: unknown): OwnedProjectContentUpdate | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  const states: readonly string[] = ['up_to_date', 'confirmation_required', 'ignored', 'suppressed', 'downloading', 'busy', 'failed', 'unsupported'];
+  if (typeof input.state !== 'string' || !states.includes(input.state)) return null;
+  const version = (v: unknown): v is number | null => v === null || (typeof v === 'number' && Number.isSafeInteger(v) && v >= 0);
+  if (!version(input.latestVersion) || !version(input.localVersion)
+    || (input.promptSuppressedUntil !== null && (typeof input.promptSuppressedUntil !== 'number' || !Number.isFinite(input.promptSuppressedUntil) || input.promptSuppressedUntil < 0))
+    || typeof input.updatedAt !== 'number' || !Number.isFinite(input.updatedAt)) return null;
+  const codes = ['PROJECT_BUSY', 'PROJECT_DIRECTORY_UNSUPPORTED', 'PROJECT_SYNC_FAILED'];
+  return {
+    state: input.state as OwnedProjectContentUpdateState,
+    latestVersion: input.latestVersion, localVersion: input.localVersion,
+    promptSuppressedUntil: input.promptSuppressedUntil as number | null, updatedAt: input.updatedAt,
+    ...(typeof input.errorCode === 'string' && codes.includes(input.errorCode)
+      ? { errorCode: input.errorCode as NonNullable<OwnedProjectContentUpdate['errorCode']> } : {}),
+  };
 }
 
 /** POST /api/projects/:id/collab/sync-intent response. */
@@ -886,6 +936,17 @@ export interface WorkspaceBillingSummary {
   /** Available balance in USD, as reported by vela (kept as a string to avoid
    *  float drift on money values). */
   balanceUsd: string;
+  /**
+   * Credits per US dollar, as Vela computes it. The Coding Plan quota panel is
+   * the only surface that turns a window's credit count into money, and this is
+   * the rate it must divide by — a client-side copy of a server-owned exchange
+   * rate goes wrong silently the day the backend changes it.
+   *
+   * Optional: absent when the installed Vela CLI / backend does not report it,
+   * or reports a rate that is not a positive number. Callers fall back to their
+   * own documented default rather than rendering nothing.
+   */
+  creditsPerUsd?: number;
   /** Subscription status, e.g. `active` / `canceled`. */
   subscriptionStatus: string;
   /** Actions the caller may take, e.g. `subscription_checkout` / `billing_portal`. */
@@ -899,6 +960,12 @@ export interface WorkspaceBillingSummary {
 }
 
 export interface WorkspaceBillingResponse {
+  /** Advisory funding/usage read. Absent on older CLIs; never infer exhausted. */
+  preflight?: WorkspaceBillingPreflight | null;
+  /** Exact-workspace upstream supports quota events and its producer is healthy.
+   * Wallet runtime freshness alone does not cover Coding Plan consumption.
+   * Missing/false requires the client to keep quota fallback reads. */
+  quotaRealtime?: { healthy: boolean };
   /** Account-scoped metadata; independently nullable from workspace money. */
   summary: WorkspaceBillingSummary | null;
   /**
@@ -922,6 +989,40 @@ export interface WorkspaceBillingResponse {
    * observed for the exact workspace/member in this response.
    */
   authoritativeWorkspaceRead?: WorkspaceBillingAuthoritativeRead;
+}
+
+export interface WorkspaceBillingPreflight {
+  schemaVersion: 1;
+  workspaceId: string;
+  workspaceMemberId: string;
+  modelId: string | null;
+  generatedAt: string;
+  balanceUsd: string;
+  modelCovered: boolean | null;
+  /** Link still checks model access, quotas, free models and auto recharge. */
+  funding: 'coding_plan' | 'wallet' | 'gateway';
+  /** Fresh read-only feedback. Never use this to cancel an already running task. */
+  fundingCheck?: 'available' | 'insufficient' | 'unknown';
+  codingPlan: {
+    workspaceId: string;
+    generatedAt: string;
+    eligible: boolean;
+    tier: 'go' | 'plus' | 'pro' | 'max' | null;
+    windows: Array<{
+      policyId: string;
+      durationSeconds: number;
+      resetMode: 'activity_triggered' | 'anchored_recurring';
+      usedCredits: string;
+      limitCredits: string;
+      remainingCredits: string;
+      windowStart: string | null;
+      resetsAt: string | null;
+    }>;
+  };
+}
+
+export interface WorkspaceBillingPreflightResponse {
+  preflight: WorkspaceBillingPreflight;
 }
 
 export type WorkspaceTeamBillingPlanId = 'team_plus' | 'team_pro' | 'team_max';

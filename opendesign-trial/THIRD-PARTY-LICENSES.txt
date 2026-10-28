@@ -1,4 +1,6 @@
 OpenDesign — Apache-2.0
+Viewer: open-design-v0.25.0 (de6d2c072a18dfef80ecad4a455b31f0d5aca090)
+Legacy SketchEditor: v0.1.0 (38bdb59d868831c5c98602da9522acc84cabd97e)
 https://github.com/nexu-io/open-design
                                  Apache License
                            Version 2.0, January 2004

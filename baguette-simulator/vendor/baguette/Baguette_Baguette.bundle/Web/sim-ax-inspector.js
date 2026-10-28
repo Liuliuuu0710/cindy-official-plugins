@@ -34,20 +34,19 @@
 
   // --- Pure helpers -------------------------------------------------
 
-  // Deepest descendant whose frame contains (x, y). Mirrors
-  // `AXNode.hitTest` in Domain so the JS overlay and the Swift
-  // CLI/programmatic API pick the same element. `hidden === true`
+  // Deepest descendant whose frame contains (x, y). Like
+  // `AXNode.hitTest`, containers do not clip descendant frames.
+  // Later siblings take priority. `hidden === true`
   // nodes are skipped entirely — they're not interactable from the
   // user's perspective.
   function hitTest(node, x, y) {
     if (!node || node.hidden === true) return null;
-    if (!nodeContains(node, x, y)) return null;
     const kids = node.children || [];
     for (let i = kids.length - 1; i >= 0; i--) {
       const m = hitTest(kids[i], x, y);
       if (m) return m;
     }
-    return node;
+    return nodeContains(node, x, y) ? node : null;
   }
 
   function nodeContains(n, x, y) {

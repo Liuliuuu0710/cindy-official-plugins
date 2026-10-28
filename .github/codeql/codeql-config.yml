@@ -1,0 +1,3 @@
+name: cindy-official-plugins-codeql
+paths-ignore:
+  - my-browser/extension/vendor/**

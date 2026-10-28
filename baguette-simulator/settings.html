@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark">
+<link rel="stylesheet" href="/pages.css"><link rel="stylesheet" href="/settings.css">
+<body><main>
+  <section class="card rows">
+    <div class="row"><div class="text"><div class="label" id="allow-label" data-i18n="allow"></div><div class="hint" data-i18n="allowHint"></div></div><input id="enabled" type="checkbox" role="switch" aria-labelledby="allow-label" disabled></div>
+    <div class="row"><div class="text"><div class="label" id="idle-label" data-i18n="idle"></div><div class="hint" data-i18n="idleHint"></div></div><select id="idle" aria-labelledby="idle-label" disabled><option value="15" data-i18n="m15"></option><option value="30" data-i18n="m30"></option><option value="60" data-i18n="m60"></option><option value="0" data-i18n="manual"></option></select></div>
+  </section>
+  <div class="section-head"><h3 data-i18n="devices"></h3><span class="grow"></span><button class="btn sm" id="add" data-i18n="add" hidden></button><button class="btn sm quiet" id="stop-all" data-i18n="stopAll" hidden></button><button class="btn sm quiet" id="refresh" data-i18n="refresh"></button></div>
+  <section class="card" id="devices" aria-live="polite"></section>
+  <p><button class="btn quiet" id="android-setup" type="button">Set up Android…</button></p>
+  <p id="message" class="status" role="status" aria-live="polite"></p>
+  <details class="more"><summary data-i18n="moreTitle"></summary><p data-i18n="moreViewer"></p><p data-i18n="moreStop"></p></details>
+</main><script src="/node/control-model.js"></script><script src="/pages.js"></script><script src="/settings.js"></script></body></html>

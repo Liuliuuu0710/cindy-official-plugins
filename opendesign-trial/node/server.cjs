@@ -385,6 +385,75 @@ async function start() {
 }
 const revision = (html) =>
   crypto.createHash("sha256").update(html).digest("hex");
+const uuid = (value) => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+function projectError(p, code, zh, en) {
+  return Object.assign(new Error(p.locale === "zh-CN" ? zh : en), { code });
+}
+async function projectRoot(p) {
+  if (typeof p.root !== "string" || !path.isAbsolute(p.root))
+    throw Error("Local directory required");
+  let root;
+  try { root = await fs.realpath(p.root); }
+  catch (e) {
+    if (e.code !== "ENOENT") throw e;
+    throw projectError(p, "PROJECT_MISSING",
+      "找不到这份稿件的原项目目录。请在保存稿件的电脑上打开，或将备份恢复到原位置；现有会话记录已保留。",
+      "The original project directory is unavailable. Open the draft on the computer where it was saved, or restore a backup to its original location. The session record is preserved.");
+  }
+  const d = p.registeredDraft;
+  // Only a persisted binding for this exact canonical root can recover a
+  // missing marker. Legacy discovery (which has no record) must fail closed.
+  if (d && (!uuid(d.id) || d.sessionId !== p.sessionId || d.root !== p.root))
+    throw projectError(p, "PROJECT_BINDING_MISMATCH",
+      "保存的稿件绑定与当前项目不一致。请从原电脑或备份恢复项目及会话绑定；未修改现有文件。",
+      "The stored draft binding does not match this project. Restore the project and session binding from the original computer or a backup. Existing files were not changed.");
+  for (const b of bindings.values()) {
+    if (b.root === root && b.sessionId !== p.sessionId)
+      throw Error("Project belongs to a different Cindy session");
+    if (b.sessionId === p.sessionId && b.root !== root)
+      throw Error("Session already bound elsewhere");
+  }
+  const markerPath = path.join(root, ".opendesign-project.json");
+  let marker, missingMarker = false;
+  try {
+    if ((await fs.lstat(markerPath)).isSymbolicLink())
+      throw Error("Unsafe project marker");
+    marker = JSON.parse(await fs.readFile(markerPath, "utf8"));
+  } catch (e) {
+    if (e.code !== "ENOENT") throw e;
+    // All generated projects have this shape. Do not turn an arbitrary
+    // workspace into a project merely because it contains an HTML file.
+    if (!d || p.root !== root || path.basename(path.dirname(root)) !== "opendesign-projects" || !uuid(path.basename(root)))
+      throw projectError(p, "PROJECT_BINDING_MISSING",
+        "稿件的归属文件缺失，且没有可核对的原会话绑定。请从原电脑或备份恢复项目；未修改现有文件。",
+        "The project ownership file is missing and no matching session binding is available. Restore the project from its original computer or a backup. Existing files were not changed.");
+    missingMarker = true;
+  }
+  if (!missingMarker && (!marker || typeof marker !== "object" || marker.version !== 1))
+    throw Error("Not an OpenDesign project; create a dedicated session first");
+  if (!missingMarker && marker.sessionId && marker.sessionId !== p.sessionId)
+    throw Error("Project belongs to a different Cindy session");
+  if (d) {
+    try {
+      if (!/\.html?$/i.test(d.file) || !(await fs.stat(await safe(root, d.file))).isFile())
+        throw projectError(p, "DRAFT_INVALID",
+          "记录中的稿件不是可打开的 HTML 文件。请从备份恢复原稿件和绑定；未修改现有文件。",
+          "The recorded draft is not an HTML file. Restore the original draft and binding from a backup. Existing files were not changed.");
+    } catch (e) {
+      if (e.code !== "ENOENT") throw e;
+      throw projectError(p, "DRAFT_MISSING",
+        "项目目录仍在，但稿件 HTML 文件已缺失。请从备份恢复稿件；未创建空稿件，也未覆盖会话记录。",
+        "The project directory exists, but its HTML draft is missing. Restore the draft from a backup. No empty draft was created and the session record was not replaced.");
+    }
+  }
+  if (missingMarker) {
+    // Never overwrite a marker created by another request/process meanwhile.
+    await fs.writeFile(markerPath, JSON.stringify({ version: 1, sessionId: p.sessionId }), { flag: "wx" });
+  } else if (!marker.sessionId) {
+    await fs.writeFile(markerPath, JSON.stringify({ version: 1, sessionId: p.sessionId }));
+  }
+  return root;
+}
 async function draftRead(b, file) {
   let html;
   try {
@@ -405,6 +474,7 @@ async function draftRead(b, file) {
   }
   return {
     html: html ?? "",
+    previewPath: html === null ? null : path.join(b.root, file),
     cardHtml: cardPreview(html ?? ""),
     revision: html === null ? null : revision(html),
     sketches,
@@ -452,25 +522,8 @@ async function invoke(method, p) {
   if (method === "bind") {
     if (!/^[0-9a-f-]{36}$/i.test(p.sessionId))
       throw Error("Trusted session required");
-    const root = await fs.realpath(p.root);
-    const markerPath = path.join(root, ".opendesign-project.json");
-    if ((await fs.lstat(markerPath)).isSymbolicLink())
-      throw Error("Unsafe project marker");
-    const marker = JSON.parse(await fs.readFile(markerPath, "utf8"));
-    if (marker.sessionId && marker.sessionId !== p.sessionId)
-      throw Error("Project belongs to a different Cindy session");
-    if (marker.version !== 1)
-      throw Error(
-        "Not an OpenDesign project; create a dedicated session first",
-      );
+    const root = await serializeWrite("bind:" + path.resolve(p.root), () => projectRoot(p));
     if (!path.isAbsolute(root)) throw Error("Local directory required");
-    if (bindings.has(p.sessionId) && bindings.get(p.sessionId).root !== root)
-      throw Error("Session already bound elsewhere");
-    if (!marker.sessionId)
-      await fs.writeFile(
-        markerPath,
-        JSON.stringify({ version: 1, sessionId: p.sessionId }),
-      );
     await start();
     let b = bindings.get(p.sessionId);
     if (!b) {

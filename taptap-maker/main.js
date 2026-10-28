@@ -37,11 +37,11 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function previewCardHtml(url) {
+function previewCardHtml(url, opened) {
   var safeUrl = escapeHtml(url);
   return [
     '<div style="padding:12px;border:1px solid var(--border-default);border-radius:10px;">',
-    '<div style="font-weight:600;">TapTap Maker 预览已在右侧打开</div>',
+    '<div style="font-weight:600;">' + (opened ? 'TapTap Maker 预览已在右侧打开' : 'TapTap Maker 预览地址') + '</div>',
     '<div style="margin-top:6px;color:var(--text-secondary);">如需在浏览器中打开：</div>',
     '<a href="' + safeUrl + '" style="display:block;margin-top:4px;word-break:break-all;">',
     safeUrl,
@@ -75,8 +75,8 @@ function parseAccountResult(result) {
   throw new Error('TapTap Maker 账号 Runtime 返回了无法识别的结果');
 }
 
-async function accountRequest(action, payload, longRunning) {
-  var args = Object.assign({ action: action }, payload || {});
+async function accountRequest(action, payload, longRunning, preserveFailure) {
+  var args = Object.assign({}, payload || {}, { action: action });
   var result = await nodeRequest({
     entry: ACCOUNT_ENTRY,
     method: 'tools/call',
@@ -84,11 +84,11 @@ async function accountRequest(action, payload, longRunning) {
       name: ACCOUNT_TOOL,
       arguments: args,
     },
-    timeoutMs: longRunning ? 60000 : 30000,
+    timeoutMs: longRunning ? 120000 : 30000,
     ...(longRunning ? { maxTotalMs: 900000 } : {}),
   });
   var parsed = parseAccountResult(result);
-  if (parsed.ok === false) {
+  if (parsed.ok === false && !preserveFailure) {
     var failure = new Error(parsed.message || 'TapTap Maker 账号操作失败');
     if (['not_executed', 'executed', 'unknown'].includes(parsed.execution_state)) {
       failure.execution_state = parsed.execution_state;
@@ -156,7 +156,7 @@ async function listMakerTools(workdir) {
   var result = await nodeRequest({
     method: 'cindy/tools-list',
     params: { target_dir: workdir },
-    timeoutMs: 60000,
+    timeoutMs: 120000,
   });
   var access = isObject(result) && isObject(result._meta) ? result._meta.maker_access : null;
   if (isObject(access) && access.code === 'BLACKLISTED') {
@@ -171,6 +171,24 @@ async function listMakerTools(workdir) {
   return tools.filter(function visible(tool) {
     return isObject(tool) && typeof tool.name === 'string' && !FIXED_MAKER_TOOLS[tool.name];
   });
+}
+
+// 返回 true / false；缺省视为开启，读取失败或值类型非法返回 null（不打开右侧预览，只返回链接）。
+async function readPreviewSetting() {
+  var controller = new AbortController();
+  var timer = setTimeout(function () { controller.abort(); }, 2000);
+  try {
+    var response = await fetch('/kv', { signal: controller.signal });
+    if (!response.ok) return null;
+    var preferences = await response.json();
+    if (!isObject(preferences)) return null;
+    if (!Object.prototype.hasOwnProperty.call(preferences, 'makerPreviewEnabled')) return true;
+    return typeof preferences.makerPreviewEnabled === 'boolean' ? preferences.makerPreviewEnabled : null;
+  } catch (_error) {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function callMakerTool(name, args, longRunning) {
@@ -215,7 +233,7 @@ async function callMakerTool(name, args, longRunning) {
       arguments: args,
       ...(progressToken ? { _meta: { progressToken: progressToken } } : {}),
     },
-    timeoutMs: longRunning ? 60000 : 30000,
+    timeoutMs: longRunning ? 120000 : 30000,
     ...(longRunning ? { maxTotalMs: 900000 } : {}),
   });
 }
@@ -357,6 +375,16 @@ function makerFailureDetails(message) {
     details.reason = 'INSUFFICIENT_BALANCE';
   }
   return details;
+}
+
+function makerBuildFailureResult(result) {
+  var sanitized = sanitizeMakerFailure(result);
+  if (!isObject(sanitized)) return sanitized;
+  var message = normalizeMakerPluginGuidance(makerResultText(sanitized));
+  var details = Object.assign({}, sanitized.structuredContent);
+  delete details.success;
+  delete details.message;
+  return makerErrorResult(message, details);
 }
 
 function makerDiagnosticPayload(text, label) {
@@ -510,6 +538,12 @@ function normalizeMakerPluginGuidance(value) {
         return '- 本地诊断环境未就绪；Cindy 插件暂不提供 Python 或 Lua LSP 自动安装入口，不影响远端构建。';
       }
       var normalized = line
+        .replace(/运行\s*\x60?taptap-maker git sync(?: --target-dir <项目目录>)?\x60?[^。；]*/g,
+          '如需同步，先取得用户授权后通过 Cindy 通用 Git 拉取并合并 origin/main；提交或构建使用 maker_build（会提交并推送）')
+        .replace(/或运行\s*\x60?taptap-maker git push\x60?/g,
+          '经用户明确要求提交或构建后调用 maker_build（会提交并推送）')
+        .replace(/(?:或)?运行\s*\x60?taptap-maker git cloud-status(?: --target-dir <项目目录>)?\x60?[^。；]*/g,
+          '通过 Maker 项目页面核对云端改动与提交记录，确认结果前不要重试提交或构建')
         .replace(/`?maker_status_lite`?/g, '`maker_status`')
         .replace(/`?maker_build_current_directory`?/g, '`maker_build`')
         .replace(/`?taptap-maker login`?/g, '`maker_login`')
@@ -525,6 +559,15 @@ function normalizeMakerPluginGuidance(value) {
     .trim();
 }
 
+function normalizeMakerGuidanceValue(value) {
+  if (typeof value === 'string') return normalizeMakerPluginGuidance(value);
+  if (Array.isArray(value)) return value.map(normalizeMakerGuidanceValue);
+  if (!isObject(value)) return value;
+  return Object.fromEntries(Object.entries(value).map(function (entry) {
+    return [entry[0], normalizeMakerGuidanceValue(entry[1])];
+  }));
+}
+
 function sanitizeMakerStatus(result) {
   if (!isObject(result) || !Array.isArray(result.content)) return result;
   return Object.assign({}, result, {
@@ -535,7 +578,7 @@ function sanitizeMakerStatus(result) {
       });
     }),
     ...(result.structuredContent !== undefined
-      ? { structuredContent: redactLocalPathsInValue(result.structuredContent) }
+      ? { structuredContent: normalizeMakerGuidanceValue(redactLocalPathsInValue(result.structuredContent)) }
       : {}),
   });
 }
@@ -664,6 +707,11 @@ function previewUrlFromResult(result) {
 
 async function handleTool(message) {
   var args = withoutSessionContext(message.args);
+  if (message.tool === 'maker_validate') {
+    var validationContext = requireWritableContext(requireLocalContext(message));
+    return publicAccountResult(await accountRequest('local_validate',
+      Object.assign({}, args, { workdir: validationContext.workdir }), true, true));
+  }
   if (message.tool === 'maker_console') {
     return openMakerConsole(requireWritableContext(requireLocalContext(message)));
   }
@@ -707,22 +755,35 @@ async function handleTool(message) {
       Object.assign({}, args, { target_dir: buildContext.workdir }),
       true,
     );
-    if (makerResultIsFailure(built)) return sanitizeMakerFailure(built);
+    if (makerResultIsFailure(built)) return makerBuildFailureResult(built);
     var previewUrl = previewUrlFromResult(built);
     if (!previewUrl) return built;
     var preview;
-    try {
-      preview = await cindy.preview({
-        url: previewUrl,
-        ...(typeof buildContext.session_id === 'string' ? { sessionId: buildContext.session_id } : {}),
-      });
-    } catch (error) {
-      preview = { ok: false, message: errorMessage(error) };
+    var previewSetting = await readPreviewSetting();
+    if (previewSetting !== true) {
+      // 用户关闭了右侧预览，或设置读不出来：构建已成功，只返回链接，不打开、不聚焦、不刷新右侧面板。
+      preview = {
+        ok: false,
+        skipped: true,
+        message: previewSetting === false
+          ? '已在插件设置中关闭构建后自动打开右侧预览，请用下面的链接在浏览器中打开'
+          : '右侧预览设置读取失败，本次未打开右侧预览，请用下面的链接在浏览器中打开',
+      };
+    } else {
+      try {
+        preview = await cindy.preview({
+          url: previewUrl,
+          ...(typeof buildContext.session_id === 'string' ? { sessionId: buildContext.session_id } : {}),
+        });
+      } catch (error) {
+        preview = { ok: false, message: errorMessage(error) };
+      }
     }
     return Object.assign({}, built, {
       preview: preview && preview.ok === true
         ? { ok: true, url: previewUrl }
-        : { ok: false, url: previewUrl, message: preview && preview.message ? preview.message : '右侧预览打开失败' },
+        : { ok: false, url: previewUrl, ...(preview && preview.skipped === true ? { skipped: true } : {}),
+          message: preview && preview.message ? preview.message : '右侧预览打开失败' },
       preview_url: previewUrl,
       user_facing_markdown: '[打开 TapTap Maker 预览](' + previewUrl + ')',
     });
@@ -774,7 +835,7 @@ async function sendToolResult(message) {
           callId: message.callId,
           v: 2,
           state: 'done',
-          html: previewCardHtml(result.preview_url),
+          html: previewCardHtml(result.preview_url, isObject(result.preview) && result.preview.ok === true),
         });
       } catch (_error) {
         // 卡片只是可点击地址的补充；右侧预览和构建结果不受影响。

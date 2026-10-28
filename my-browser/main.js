@@ -14,9 +14,9 @@ async function node(method, params = {}) {
   try {
     r = await cindy.node.request({method,params,timeoutMs:['act','setPolicy'].includes(method) ? 65000 : method === 'openInstallation' ? 45000 : 10000});
   } catch (e) {
-    return fail('NODE_UNAVAILABLE',e.message || 'Re-enable My Browser and check its connection.',reach);
+    return fail('NODE_UNAVAILABLE',e.message || 'Re-enable Cindy Chrome and check its connection.',reach);
   }
-  if (!r.ok) return fail('NODE_UNAVAILABLE', r.message || 'Re-enable My Browser and check its connection.', reach);
+  if (!r.ok) return fail('NODE_UNAVAILABLE', r.message || 'Re-enable Cindy Chrome and check its connection.', reach);
   return r.result;
 }
 async function load() {
@@ -34,9 +34,19 @@ function sync() {
   return serialize(async () => {
     const {cfg,policy} = await load();
     const paired = await node('setTrustedClients',{clients:cfg.pairedClients || []});
-    if (!paired?.ok) throw new Error('Cannot synchronize paired browsers.');
+    if (!paired?.ok) {
+      const error = new Error(paired.message || 'Cannot synchronize paired browsers.');
+      error.code = paired.error || 'SETTINGS_ERROR';
+      error.execution = paired.execution || 'not_executed';
+      throw error;
+    }
     const r = await node('setPolicy',{policy});
-    if (!r?.ok && !(r?.error === 'REVOCATION_UNCONFIRMED' && r.applied === true)) throw new Error(r?.message || 'Cannot apply site permissions. Re-enable the plugin.');
+    if (!r?.ok && !(r?.error === 'REVOCATION_UNCONFIRMED' && r.applied === true)) {
+      const error = new Error(r?.message || 'Cannot apply site permissions. Re-enable the plugin.');
+      error.code = r?.error || 'SETTINGS_ERROR';
+      error.execution = r?.execution || 'not_executed';
+      throw error;
+    }
     return policy;
   });
 }
@@ -85,17 +95,17 @@ async function handleTool(name,args) {
       return save(policy);
     });
   }
-  if (!['browser_status','browser_tabs','browser_read','browser_act'].includes(name)) return fail('UNKNOWN_TOOL','Use a declared My Browser tool.');
-  await sync(); // Every call: a restarted on-demand worker must not silently lose stored permissions.
+  if (!['browser_status','browser_tabs','browser_read','browser_act'].includes(name)) return fail('UNKNOWN_TOOL','Use a declared Cindy Chrome tool.');
+  await sync(); // Every call: a restarted worker must not silently lose stored permissions.
   if (name === 'browser_status') {
     const status=await node('status'), installation=await node('installation');
-    if (!status?.ok) return fail('STATUS_UNAVAILABLE','Cannot check browser connections. Re-enable My Browser and refresh its settings.');
+    if (!status?.ok) return status||fail('STATUS_UNAVAILABLE','Cannot check browser connections. Re-enable Cindy Chrome and refresh its settings.');
     // Tool output is an explicit projection. The settings channel below retains
     // policy, extension_dir and pairing identity details without sending them to AI.
-    return {ok:true,version:status.version,protocol:status.protocol,extension_connected:status.extension_connected,
-      clients:(status.clients || []).map(c=>({id:c.id,browser:c.browser,version:c.version,connected:c.connected,trusted:c.trusted})),
-      installation:{ok:!!installation?.ok,browsers:(installation?.browsers || []).map(b=>({browser:b.browser,supported:b.supported,installed:b.installed,published:b.published,zip:b.zip,bundled:b.bundled}))},
-      how_to_install:'Open My Browser plugin settings. Chrome/Edge: enable Developer mode in the extensions manager, then drop the bundled ZIP on that page (Chromium unpacks it there) or use Load unpacked on the bundled directory. A refusal of the dropped ZIP is normal on some builds; fall back to the directory. Wait for a live connection.'};
+    return {ok:true,version:status.version,protocol:status.protocol,extension_connected:status.extension_connected,nativeBinding:status.nativeBinding,
+      clients:(status.clients || []).map(c=>({id:c.id,browser:c.browser,version:c.version,protocolVersion:c.protocolVersion,connected:c.connected,trusted:c.trusted,identitySupported:c.identitySupported,nativeBindingRequired:c.nativeBindingRequired})),
+      installation:{ok:!!installation?.ok,browsers:(installation?.browsers || []).map(b=>({browser:b.browser,supported:b.supported,installed:b.installed,published:b.published,bundled:b.bundled}))},
+      how_to_install:'Open Cindy Chrome plugin settings and choose Install extension. Chrome uses the official Chrome Web Store listing; Edge uses the developer directory fallback until an Edge store route is published. Keep Cindy Chrome enabled after installation; updated official extensions connect automatically. If nativeBinding is unavailable, re-enable the plugin; new profiles need Chrome extension 0.4.16 or later. Directory loading is the only developer fallback included in this plugin package.'};
   }
   if (name === 'browser_tabs') return node('act',{action:'tabs',payload:P.validate('tabs',args)});
   if (name === 'browser_read') {
@@ -113,41 +123,57 @@ async function handleTool(name,args) {
   return result;
 }
 cindy.onHostMessage(async msg => {
-  if (msg.type !== 'tool-call') return;
+  if (msg.type !== 'tool-call') return handleLearningHostMessage(msg);
   let result;
   try { result = await handleTool(msg.tool,msg.args || {}); }
   catch (e) {
     // Throws here are local validation or orchestration failures. Worker transport
     // already maps in-flight act failures to unknown inside node(); do not upgrade a
     // pre-dispatch error into an unknown side effect.
-    result = fail('PLUGIN_ERROR',e.message || 'Reload My Browser settings and check the connection.','not_executed');
+    result = fail('PLUGIN_ERROR',e.message || 'Reload Cindy Chrome settings and check the connection.','not_executed');
   }
   // Business errors stay structured so an unknown side-effect outcome is never lost in prose.
   await cindy.send({type:'tool-result',callId:msg.callId,ok:true,result});
 });
 channel.onmessage = async ev => {
   const m = ev.data || {};
-  if (!['status-request','save-request','install-request','pair-request'].includes(m.type) || typeof m.id !== 'string') return;
+  if (!['status-request','save-request','install-request'].includes(m.type) || typeof m.id !== 'string') return;
   let result;
   try {
     if (m.type === 'save-request') result = await serialize(() => save(m.policy,m.base));
     else if (m.type === 'install-request') result = await node('openInstallation',{browser:m.browser,mode:m.mode});
-    else if (m.type === 'pair-request') result = await serialize(async () => {
-      const status=await node('status');
-      const client=status.clients?.find(c => c.id === m.clientId);
-      if (!client) return fail('BROWSER_DISCONNECTED','Reconnect the browser before pairing.');
-      const consent=await cindy.confirm({body:'Connect '+client.browser+' to Cindy?\n'+client.origin+'\nProfile: '+client.id,confirmText:'Connect',cancelText:'Cancel',danger:true});
-      if (!consent.ok || !consent.confirmed) return fail('PAIRING_CANCELLED','No browser was authorized.');
-      const current=(await node('status')).clients?.find(c => c.id === client.id && c.origin === client.origin && c.extensionId === client.extensionId);
-      if (!current) return fail('BROWSER_DISCONNECTED','The browser identity changed during confirmation.');
-      const {cfg}=await load();
-      const pairedClients=[...(cfg.pairedClients || []).filter(c => c.id !== client.id),{id:client.id,origin:client.origin,extensionId:client.extensionId}];
-      if (pairedClients.length>16) return fail('TOO_MANY_BROWSERS','At most 16 paired browser profiles are supported.');
-      const saved=await fetch('/kv',{method:'PUT',body:JSON.stringify({...cfg,pairedClients})});
-      if (!saved.ok) return fail('SAVE_FAILED','Browser authorization was not saved.');
-      return node('setTrustedClients',{clients:pairedClients});
-    });
     else { await sync(); result = {...await node('status'),installation:await node('installation')}; }
-  } catch (e) { result = fail('SETTINGS_ERROR',e.message || 'Reload plugin settings.'); }
+  } catch (e) { result = fail(e?.code || 'SETTINGS_ERROR',e.message || 'Reload plugin settings.',e?.execution || 'not_executed'); }
   channel.postMessage({type:'response',id:m.id,result});
 };
+
+// Browser-initiated learning requests are delivered by the paired local bridge.
+let learningService,hostLocale='en';
+async function getLearningService() {
+  if(!learningService)learningService=Promise.all([import('/extension/learning-core.js'),import('/learning-service.js'),import('/translation-task.js')]).then(([,module,adapter])=>module.createLearningService({
+    core:globalThis.CindyLearning,locale:()=>hostLocale,tasks:cindy.tasks,
+    model:adapter.createTranslationTask({tasks:cindy.tasks,locale:()=>hostLocale,
+      load:async()=>(await load()).cfg.translationTask,
+      save:binding=>serialize(async()=>{const {cfg}=await load();const r=await fetch('/kv',{method:'PUT',body:JSON.stringify({...cfg,translationTask:binding})});if(!r.ok)throw Error('SAVE_FAILED');})
+    }),
+    library:args=>cindy.send({type:'library-request',...args})
+  }));
+  return learningService;
+}
+async function handleLearningHostMessage(msg){
+  if(msg.type==='host-context-changed'){hostLocale=msg.context?.locale||hostLocale;return;}
+  if(msg.type!=='event'||msg.name!=='node-notification'||msg.method!=='learning-request')return;
+  const {id,clientId,request}=msg.params||{};
+  let result,stage='accepted';
+  try {
+    await sync();
+    const service=await getLearningService();
+    result=await service.handle(clientId,request,async()=> (await node('learningActive',{id})).active===true,progress=>{stage=progress.stage;return node('learningProgress',{id,progress});});
+  }catch(e){result={ok:false,error:e.message||'LEARNING_UNAVAILABLE',stage};}
+  await node('learningResult',{id,result});
+}
+// Resident logic establishes the bridge after saved permissions are loaded.
+if(typeof document!=='undefined') {
+  fetch('/app-context').then(r=>r.json()).then(r=>{hostLocale=r.context?.locale||'en';}).catch(()=>{});
+  sync().then(()=>node('status')).catch(()=>{});
+}

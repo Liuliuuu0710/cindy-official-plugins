@@ -39,3 +39,8 @@ Desktop.ini
 .vscode/
 *.swp
 *~
+
+# Android OCR build inputs fetched from SHA-pinned official archives
+/baguette-simulator/vendor/android/tesseract-core-lstm.wasm
+/baguette-simulator/vendor/android/eng.traineddata.gz
+/baguette-simulator/vendor/android/chi_sim.traineddata.gz
